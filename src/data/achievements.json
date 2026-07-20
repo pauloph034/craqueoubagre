@@ -1,0 +1,98 @@
+﻿[
+    {
+        "description":  "Conquiste sua primeira campanha.",
+        "name":  "Primeiro titulo",
+        "id":  "primeiro-titulo",
+        "tier":  "gold"
+    },
+    {
+        "description":  "Seja campeao sem perder.",
+        "name":  "Campeao invicto",
+        "id":  "campeao-invicto",
+        "tier":  "gold"
+    },
+    {
+        "description":  "Venca todas as partidas.",
+        "name":  "Sete vitorias",
+        "id":  "sete-vitorias",
+        "tier":  "gold"
+    },
+    {
+        "description":  "Sofra no maximo dois gols.",
+        "name":  "Defesa de ferro",
+        "id":  "defesa-de-ferro",
+        "tier":  "silver"
+    },
+    {
+        "description":  "Marque 20 ou mais gols.",
+        "name":  "Ataque historico",
+        "id":  "ataque-historico",
+        "tier":  "silver"
+    },
+    {
+        "description":  "Seja campeao com rating baixo.",
+        "name":  "Zebra europeia",
+        "id":  "zebra-europeia",
+        "tier":  "silver"
+    },
+    {
+        "description":  "Seja campeao sem jogadores lendarios.",
+        "name":  "Sem lendas",
+        "id":  "sem-lendas",
+        "tier":  "bronze"
+    },
+    {
+        "description":  "Seja campeao com cinco jogadores do mesmo clube.",
+        "name":  "Clube fiel",
+        "id":  "clube-fiel",
+        "tier":  "bronze"
+    },
+    {
+        "description":  "Seja campeao com dez nacionalidades.",
+        "name":  "Torre de Babel",
+        "id":  "torre-de-babel",
+        "tier":  "bronze"
+    },
+    {
+        "description":  "Seja campeao na maior dificuldade.",
+        "name":  "Modo Lenda",
+        "id":  "modo-lenda",
+        "tier":  "gold"
+    },
+    {
+        "description":  "Seja campeao sem rerolls ou trocas.",
+        "name":  "Sem mudancas",
+        "id":  "sem-mudancas",
+        "tier":  "silver"
+    },
+    {
+        "description":  "Venca duas disputas na campanha.",
+        "name":  "Rei dos penaltis",
+        "id":  "rei-dos-penaltis",
+        "tier":  "silver"
+    },
+    {
+        "description":  "Venca sete jogos, seja campeao e nao sofra gols.",
+        "name":  "Campanha Perfeita",
+        "id":  "campanha-perfeita",
+        "tier":  "special"
+    },
+    {
+        "description":  "Seja campeao marcando um gol decisivo na final depois dos 80 minutos.",
+        "name":  "Final dramatica",
+        "id":  "final-dramatica",
+        "tier":  "special"
+    },
+    {
+        "description":  "Tenha um jogador do seu time com oito ou mais gols na campanha.",
+        "name":  "Artilheiro lendario",
+        "id":  "artilheiro-lendario",
+        "tier":  "special"
+    },
+    {
+        "description":  "Seja campeao marcando 25 ou mais gols na campanha.",
+        "name":  "Rolo compressor",
+        "id":  "rolo-compressor",
+        "tier":  "special"
+    }
+]

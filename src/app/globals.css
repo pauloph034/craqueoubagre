@@ -1,0 +1,252 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background:
+    linear-gradient(180deg, rgba(3, 8, 24, 0.44), rgba(3, 7, 18, 0.88) 68%, #030711 100%),
+    url("/assets/stadium-blue-neon-bg.jpg") center top / cover fixed no-repeat,
+    #030711;
+  color: #eef6ff;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+body::before {
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(40, 184, 255, 0.18), transparent 34rem),
+    radial-gradient(ellipse at 50% 102%, rgba(13, 148, 136, 0.18), transparent 34rem);
+  opacity: 0.9;
+}
+
+body::after {
+  background:
+    linear-gradient(90deg, rgba(2, 6, 23, 0.42), transparent 18%, transparent 82%, rgba(2, 6, 23, 0.42)),
+    radial-gradient(ellipse at 50% 45%, transparent 36%, rgba(0, 0, 0, 0.42) 100%);
+  opacity: 0.86;
+}
+
+body.room-focus-mode .app-shell-header,
+body.room-focus-mode .app-shell-footer {
+  display: none;
+}
+
+button,
+a,
+input,
+select {
+  outline-offset: 3px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #28b8ff;
+}
+
+.stadium-texture {
+  position: relative;
+  isolation: isolate;
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.06), rgba(2, 6, 23, 0.42));
+}
+
+.stadium-texture::before {
+  content: "";
+  position: fixed;
+  inset: auto 0 0;
+  height: 42vh;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, transparent, rgba(5, 150, 105, 0.08) 35%, rgba(4, 120, 87, 0.14));
+  opacity: 0.72;
+}
+
+.field-lines {
+  background:
+    linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255,255,255,.08) 1px, transparent 1px),
+    linear-gradient(135deg, rgba(52,211,153,.2), rgba(9,20,47,.8));
+  background-size: 50% 100%, 100% 50%, 100% 100%;
+}
+
+.soccer-ball-3d {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  animation: soccer-spin 5.8s linear infinite;
+}
+
+.soccer-ball-core {
+  position: absolute;
+  inset: 18px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255,255,255,.95), rgba(228,238,248,.98) 36%, rgba(165,180,198,.96) 72%, rgba(71,85,105,.9) 100%);
+  box-shadow:
+    inset -28px -34px 44px rgba(2, 6, 23, .42),
+    inset 18px 18px 30px rgba(255,255,255,.55),
+    0 0 54px rgba(56, 189, 248, .2);
+}
+
+.soccer-pentagon {
+  position: absolute;
+  width: 52px;
+  height: 50px;
+  clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+  background: linear-gradient(145deg, #101827, #020617);
+  border: 2px solid rgba(15, 23, 42, .8);
+}
+
+.soccer-pentagon-center {
+  left: 50%;
+  top: 48%;
+  transform: translate(-50%, -50%) rotate(8deg);
+}
+
+.soccer-pentagon-top {
+  left: 50%;
+  top: 17%;
+  transform: translate(-50%, -50%) rotate(42deg) scale(.82);
+}
+
+.soccer-pentagon-right {
+  left: 75%;
+  top: 43%;
+  transform: translate(-50%, -50%) rotate(-20deg) scale(.9);
+}
+
+.soccer-pentagon-bottom {
+  left: 52%;
+  top: 77%;
+  transform: translate(-50%, -50%) rotate(22deg) scale(.82);
+}
+
+.soccer-pentagon-left {
+  left: 24%;
+  top: 48%;
+  transform: translate(-50%, -50%) rotate(-34deg) scale(.86);
+}
+
+.soccer-seam {
+  position: absolute;
+  height: 2px;
+  width: 170px;
+  background: rgba(15, 23, 42, .38);
+  transform-origin: center;
+}
+
+.soccer-seam-a {
+  left: 40px;
+  top: 96px;
+  transform: rotate(18deg);
+}
+
+.soccer-seam-b {
+  left: 44px;
+  top: 126px;
+  transform: rotate(-26deg);
+}
+
+.soccer-seam-c {
+  left: 42px;
+  top: 110px;
+  transform: rotate(78deg);
+}
+
+.soccer-highlight {
+  position: absolute;
+  left: 42px;
+  top: 34px;
+  width: 78px;
+  height: 38px;
+  border-radius: 9999px;
+  background: rgba(255,255,255,.45);
+  filter: blur(10px);
+  transform: rotate(-28deg);
+}
+
+@keyframes soccer-spin {
+  0% {
+    transform: rotateX(12deg) rotateY(0deg) rotateZ(-8deg) translateY(0);
+  }
+  50% {
+    transform: rotateX(22deg) rotateY(180deg) rotateZ(8deg) translateY(-10px);
+  }
+  100% {
+    transform: rotateX(12deg) rotateY(360deg) rotateZ(-8deg) translateY(0);
+  }
+}
+
+.real-soccer-ball-bounce {
+  position: absolute;
+  inset: 0;
+  animation: real-ball-bounce 2.4s ease-in-out infinite;
+  filter: drop-shadow(0 0 28px rgba(56, 189, 248, .26));
+}
+
+.ball-soft-shadow {
+  animation: ball-shadow-bounce 2.4s ease-in-out infinite;
+}
+
+@keyframes real-ball-bounce {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-18px) scale(1.015);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ball-shadow-bounce {
+  0% {
+    opacity: .55;
+    transform: translateX(-50%) scale(1);
+  }
+  50% {
+    opacity: .32;
+    transform: translateX(-50%) scale(.82);
+  }
+  100% {
+    opacity: .55;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
