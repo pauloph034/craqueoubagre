@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title desc">
+  <title id="title">Escudo generico</title>
+  <desc id="desc">Placeholder para clube sem escudo disponivel.</desc>
+  <defs>
+    <linearGradient id="bg" x1="12" x2="84" y1="8" y2="88" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0f2b55"/>
+      <stop offset=".58" stop-color="#052a33"/>
+      <stop offset="1" stop-color="#071832"/>
+    </linearGradient>
+    <linearGradient id="line" x1="24" x2="72" y1="22" y2="76" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#20f7b2"/>
+      <stop offset="1" stop-color="#f8c630"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#bg)" stroke="url(#line)" stroke-width="4" d="M48 7 80 18v28c0 21-13 34-32 43C29 80 16 67 16 46V18L48 7Z"/>
+  <path fill="none" stroke="#d8f1ff" stroke-opacity=".4" stroke-width="2" d="M28 28h40M28 68h40M48 18v60"/>
+  <circle cx="48" cy="48" r="13" fill="#071832" stroke="#20f7b2" stroke-width="3"/>
+  <text x="48" y="53" fill="#f8c630" font-family="Arial, sans-serif" font-size="14" font-weight="800" text-anchor="middle">CB</text>
+</svg>
