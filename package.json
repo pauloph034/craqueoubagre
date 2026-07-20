@@ -1,0 +1,55 @@
+{
+  "name": "craque-ou-bagre",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint . --ext .ts,.tsx",
+    "test": "tsx scripts/run-unit-tests.ts && tsx scripts/football-api-tests.ts && tsx scripts/friend-room-tests.ts",
+    "test:watch": "vitest",
+    "e2e": "tsx scripts/run-e2e.ts",
+    "format": "prettier --write .",
+    "validate:data": "tsx scripts/validate-data.ts",
+    "import:csv": "tsx scripts/import-csv.ts",
+    "report:duplicates": "tsx scripts/report-duplicates.ts"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^3.9.0",
+    "framer-motion": "^11.3.30",
+    "html-to-image": "^1.11.11",
+    "lucide-react": "^0.468.0",
+    "next": "^15.0.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-hook-form": "^7.52.2",
+    "seedrandom": "^3.0.5",
+    "zustand": "^4.5.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.46.1",
+    "@testing-library/jest-dom": "^6.4.8",
+    "@testing-library/react": "^16.0.0",
+    "@types/node": "^22.5.4",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/seedrandom": "^3.0.8",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^15.0.0",
+    "jsdom": "^24.1.1",
+    "postcss": "^8.4.41",
+    "prettier": "^3.3.3",
+    "tailwindcss": "^3.4.10",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
+
