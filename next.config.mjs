@@ -10,8 +10,7 @@ const nextConfig = {
         hostname: "media.api-sports.io"
       }
     ]
-  },
-  distDir: process.env.NODE_ENV === "production" ? ".next-build" : ".next"
+  }
 };
 
 export default nextConfig;
