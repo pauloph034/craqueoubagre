@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { GamePanel } from "@/components/ui/surface";
 import { useGameStore } from "@/stores/game-store";
 import { Lock, ShieldCheck, UserPlus, X } from "lucide-react";
 import Link from "next/link";
@@ -10,7 +11,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 
 export default function AccountPage() {
   return (
-    <Suspense fallback={<main className="mx-auto max-w-6xl px-4 py-10"><section className="rounded-lg border border-white/12 bg-white/[0.07] p-6 shadow-card">Carregando acesso...</section></main>}>
+    <Suspense fallback={<main className="mx-auto max-w-6xl px-4 py-10"><GamePanel className="p-6">Carregando acesso...</GamePanel></main>}>
       <AccountContent />
     </Suspense>
   );
@@ -107,12 +108,12 @@ function AccountContent() {
   const displayTeamName = currentUser ? currentUser.teamName?.trim() || `${displayPlayerName} FC` : "";
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10">
-      <section className="overflow-hidden rounded-lg border border-white/12 bg-[#06162d]/90 shadow-card">
+    <main className="mx-auto max-w-6xl px-4 py-8">
+      <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#06162d]/90 shadow-card">
         <div className="grid lg:grid-cols-[.9fr_1fr]">
-          <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(40,184,255,.22),_transparent_38%),linear-gradient(135deg,_rgba(7,24,50,.98),_rgba(3,8,24,.98))] p-8 lg:border-b-0 lg:border-r">
+          <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(40,184,255,.18),_transparent_38%),linear-gradient(135deg,_rgba(7,24,50,.98),_rgba(3,8,24,.98))] p-7 lg:border-b-0 lg:border-r">
             <p className="text-sm font-black uppercase tracking-[0.22em] text-gold">Acesso local</p>
-            <h1 className="mt-3 text-5xl font-black leading-tight">Sua conta no Craque ou Bagre</h1>
+            <h1 className="mt-3 font-display text-4xl leading-none md:text-5xl">Sua conta no Craque ou Bagre</h1>
             <p className="mt-4 max-w-xl text-slate-300">Entre para salvar campanhas, tacas e historico do seu clube neste navegador.</p>
             <div className="mt-8 grid gap-3">
               <Feature icon={<Lock size={18} />} text="Sem Google e sem cadastro externo." />
@@ -123,16 +124,16 @@ function AccountContent() {
 
           <div className="p-6 md:p-8">
             {currentUser ? (
-              <div className="rounded-md border border-gold/25 bg-night/70 p-5">
+              <div className="rounded-2xl border border-gold/25 bg-night/70 p-5">
                 <p className="text-sm text-slate-400">Logado como</p>
                 <h2 className="text-3xl font-black">{displayPlayerName}</h2>
                 <p className="mt-1 text-slate-300">Perfil: {currentUser.role === "admin" ? "Administrador" : "Jogador"}</p>
                 <p className="mt-1 text-slate-300">Time: <strong className="text-white">{displayTeamName}</strong></p>
-                <form className="mt-5 grid gap-4 rounded-md border border-white/10 bg-[#050b18]/70 p-4" onSubmit={submitProfile}>
+                <form className="mt-5 grid gap-4 rounded-2xl border border-white/10 bg-[#050b18]/70 p-4" onSubmit={submitProfile}>
                   <label className="grid gap-2 text-sm font-semibold text-slate-200">
                     Nome do jogador
                     <input
-                      className="w-full rounded bg-[#071225] p-3"
+                      className="min-h-12 w-full rounded-2xl border border-white/10 bg-[#071225] px-4"
                       value={profilePlayerName}
                       placeholder="ex: Jogador"
                       onChange={(event) => {
@@ -149,7 +150,7 @@ function AccountContent() {
                   <label className="grid gap-2 text-sm font-semibold text-slate-200">
                     Nome do time
                     <input
-                      className="w-full rounded bg-[#071225] p-3"
+                      className="min-h-12 w-full rounded-2xl border border-white/10 bg-[#071225] px-4"
                       value={profileTeamName}
                       placeholder="ex: Meu Clube FC"
                       onChange={(event) => {
@@ -187,23 +188,23 @@ function AccountContent() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-2 rounded-md border border-white/10 bg-night/70 p-2">
-                  <button className={mode === "login" ? "rounded bg-electric px-4 py-3 font-black text-night" : "rounded px-4 py-3 font-black text-slate-200 hover:bg-white/10"} onClick={() => setMode("login")}>
+                <div className="grid grid-cols-2 gap-2 rounded-full border border-white/10 bg-night/70 p-1.5">
+                  <button className={mode === "login" ? "rounded-full bg-electric px-4 py-3 font-black text-night" : "rounded-full px-4 py-3 font-black text-slate-200 hover:bg-white/10"} onClick={() => setMode("login")}>
                     Entrar
                   </button>
-                  <button className={mode === "register" ? "rounded bg-electric px-4 py-3 font-black text-night" : "rounded px-4 py-3 font-black text-slate-200 hover:bg-white/10"} onClick={() => setMode("register")}>
+                  <button className={mode === "register" ? "rounded-full bg-electric px-4 py-3 font-black text-night" : "rounded-full px-4 py-3 font-black text-slate-200 hover:bg-white/10"} onClick={() => setMode("register")}>
                     Criar conta
                   </button>
                 </div>
 
-                <form className="mt-5 rounded-md border border-white/10 bg-night/70 p-5" autoComplete="off" onSubmit={(event) => { event.preventDefault(); submit(); }}>
+                <form className="mt-5 rounded-2xl border border-white/10 bg-night/70 p-5" autoComplete="off" onSubmit={(event) => { event.preventDefault(); submit(); }}>
                   <input className="hidden" name="fake-user" type="text" autoComplete="off" tabIndex={-1} />
                   <input className="hidden" name="fake-pass" type="password" autoComplete="new-password" tabIndex={-1} />
                   <label className="grid gap-2 text-sm font-semibold text-slate-200">
                     Usuario
                     <input
                       ref={usernameRef}
-                      className="w-full rounded bg-[#050b18] p-3"
+                      className="min-h-12 w-full rounded-2xl border border-white/10 bg-[#050b18] px-4"
                       name="craque-ou-bagre-local-user"
                       value={username}
                       placeholder="ex: jogador01"
@@ -222,7 +223,7 @@ function AccountContent() {
                       Nome do time
                       <input
                         ref={teamNameRef}
-                        className="w-full rounded bg-[#050b18] p-3"
+                        className="min-h-12 w-full rounded-2xl border border-white/10 bg-[#050b18] px-4"
                         name="craque-ou-bagre-local-team"
                         value={teamName}
                         placeholder="ex: Meu Clube FC"
@@ -241,7 +242,7 @@ function AccountContent() {
                     Senha
                     <input
                       ref={passwordRef}
-                      className="w-full rounded bg-[#050b18] p-3"
+                      className="min-h-12 w-full rounded-2xl border border-white/10 bg-[#050b18] px-4"
                       name="craque-ou-bagre-local-secret"
                       type="password"
                       value={password}

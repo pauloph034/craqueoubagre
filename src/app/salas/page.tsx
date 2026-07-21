@@ -50,7 +50,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 const inputClass =
-  "min-h-11 w-full rounded-md border border-white/12 bg-night/70 px-3 py-2 text-sm font-semibold text-white placeholder:text-slate-500 focus:border-electric";
+  "min-h-11 w-full rounded-2xl border border-white/12 bg-night/70 px-4 py-2 text-sm font-semibold text-white placeholder:text-slate-500 focus:border-electric";
 
 const phases = [
   { name: "Oitavas de final", label: "Oitavas" },
@@ -371,14 +371,14 @@ export default function FriendRoomsPage() {
           onProgressRound={() => updateActiveRoom(progressRoomRound)}
           onResetLobby={() => updateActiveRoom(resetRoomToLobby)}
         />
-        {!gameStarted && <div className="mt-6"><AdBanner compact /></div>}
+        {!gameStarted && <div className="mt-6"><AdBanner variant="leaderboard" /></div>}
       </main>
     );
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
-      <section className="rounded-xl border border-emerald-300/20 bg-[radial-gradient(circle_at_80%_0%,rgba(17,255,184,.16),transparent_26rem),linear-gradient(135deg,rgba(4,18,43,.96),rgba(3,46,52,.78))] p-6 shadow-card">
+    <main className="mx-auto max-w-6xl px-4 py-7">
+      <section className="rounded-2xl border border-emerald-300/20 bg-[radial-gradient(circle_at_80%_0%,rgba(17,255,184,.12),transparent_26rem),linear-gradient(135deg,rgba(4,18,43,.96),rgba(3,46,52,.7))] p-6 shadow-card">
         <p className="text-xs font-black uppercase tracking-[0.24em] text-emerald-300">Jogar com amigos</p>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -391,7 +391,7 @@ export default function FriendRoomsPage() {
       </section>
 
       {message && (
-        <div className="mt-4 rounded-md border border-electric/30 bg-electric/10 px-4 py-3 text-sm font-bold text-sky-100">
+        <div className="mt-4 rounded-2xl border border-electric/30 bg-electric/10 px-4 py-3 text-sm font-bold text-sky-100">
           {message}
         </div>
       )}
@@ -418,7 +418,7 @@ export default function FriendRoomsPage() {
         </div>
       </section>
       <div className="mx-auto mt-6 max-w-3xl">
-        <AdBanner compact />
+        <AdBanner variant="leaderboard" />
       </div>
     </main>
   );
@@ -793,17 +793,49 @@ function DraftPanel({
   const batchRemaining = Math.max(1, batchLimit - room.picksInTurn);
   const turnText = batchLimit === 2 ? "Rodada final: escolha 2 jogadores" : "Escolha 3 jogadores nesta vez";
   const [isDrawing, setIsDrawing] = useState(false);
+  const [isRevealingDraw, setIsRevealingDraw] = useState(false);
   const [rollingIndex, setRollingIndex] = useState(0);
   const intervalRef = useRef<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
+  const revealTimeoutRef = useRef<number | null>(null);
+  const previousDrawKeyRef = useRef<string>("");
+  const skipNextRevealRef = useRef(false);
   const rollingClub = useMemo(() => clubSeasonData[rollingIndex % clubSeasonData.length], [rollingIndex]);
+  const drawKey = room.currentDraw ? `${turnPlayer?.id ?? "player"}:${turnPlayer?.squad.length ?? 0}:${room.picksInTurn}:${room.currentDraw.clubSeasonId}` : "";
 
   useEffect(() => {
     return () => {
       if (intervalRef.current) window.clearInterval(intervalRef.current);
       if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
+      if (revealTimeoutRef.current) window.clearTimeout(revealTimeoutRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!drawKey) {
+      previousDrawKeyRef.current = "";
+      setIsRevealingDraw(false);
+      return;
+    }
+    if (drawKey === previousDrawKeyRef.current) return;
+    previousDrawKeyRef.current = drawKey;
+    if (skipNextRevealRef.current) {
+      skipNextRevealRef.current = false;
+      setIsRevealingDraw(false);
+      return;
+    }
+    setIsRevealingDraw(true);
+    setRollingIndex((value) => value + 1);
+    if (intervalRef.current) window.clearInterval(intervalRef.current);
+    intervalRef.current = window.setInterval(() => {
+      setRollingIndex((value) => value + 1 + Math.floor(Math.random() * 3));
+    }, 115);
+    if (revealTimeoutRef.current) window.clearTimeout(revealTimeoutRef.current);
+    revealTimeoutRef.current = window.setTimeout(() => {
+      if (intervalRef.current) window.clearInterval(intervalRef.current);
+      setIsRevealingDraw(false);
+    }, 1000);
+  }, [drawKey]);
 
   function runDrawAnimation() {
     if (!currentPlayerId || isDrawing || !isMyTurn) return;
@@ -814,46 +846,44 @@ function DraftPanel({
     }, 115);
     timeoutRef.current = window.setTimeout(() => {
       if (intervalRef.current) window.clearInterval(intervalRef.current);
+      skipNextRevealRef.current = true;
       onDrawTeam(currentPlayerId);
       setIsDrawing(false);
     }, 1000);
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[.92fr_1.08fr]">
+    <div className="grid items-start gap-5 xl:grid-cols-[minmax(420px,.95fr)_minmax(380px,1.05fr)]">
       <RoomSquadField
         player={fieldPlayer}
         pendingPick={pendingPick}
         interactive={isMyTurn}
         onPlace={(slotId) => currentPlayerId && onPlacePick(currentPlayerId, slotId)}
       />
-      <aside className="space-y-4">
-        <div className="rounded-lg border border-white/12 bg-white/[0.07] p-4 shadow-card">
-          <div className="grid gap-3">
-            <div className="flex items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
-              <span>{fieldPlayer?.formation ?? "4-3-3"}</span>
-              <span>{room.difficulty === "almanaque" ? "De almanaque" : "Classico"}</span>
-            </div>
-            <div className="flex items-center justify-between gap-3 rounded border border-white/10 bg-night/60 px-3 py-2 text-xs text-slate-300">
-              <span>{turnText} - faltam {batchRemaining}</span>
+      <aside className="space-y-4 xl:sticky xl:top-20">
+        <div className="overflow-hidden rounded-2xl border border-white/12 bg-white/[0.065] shadow-card">
+          <div className="border-b border-white/10 bg-[linear-gradient(135deg,rgba(16,185,129,.16),rgba(7,24,50,.88))] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">Vez de escolher</p>
+                <h3 className="mt-1 truncate text-2xl font-black">{turnPlayer?.teamName ?? "Jogador"}</h3>
+              </div>
               <TimerPill seconds={turnRemaining ?? room.turnSeconds} icon={<Volume2 size={16} />} />
             </div>
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-lg border border-white/12 bg-white/[0.07] shadow-card">
-          <div className="border-b border-white/10 bg-[linear-gradient(135deg,rgba(16,185,129,.18),rgba(7,24,50,.88))] p-4">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">Vez de escolher</p>
-            <h3 className="mt-1 text-2xl font-black">{turnPlayer?.teamName ?? "Jogador"}</h3>
-            <p className="mt-1 text-sm text-slate-300">
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-[0.14em] text-slate-300">
+              <span className="rounded-full border border-white/10 bg-night/60 px-3 py-1.5">{fieldPlayer?.formation ?? "4-3-3"}</span>
+              <span className="rounded-full border border-white/10 bg-night/60 px-3 py-1.5">{room.difficulty === "almanaque" ? "De almanaque" : "Classico"}</span>
+              <span className="rounded-full border border-gold/25 bg-gold/10 px-3 py-1.5 text-gold">{turnText} - faltam {batchRemaining}</span>
+            </div>
+            <p className="mt-3 text-sm text-slate-300">
               {isMyTurn ? (pendingPick ? "Clique em uma posicao destacada no campo ou troque o jogador na lista." : "Sorteie um time, escolha um jogador e depois a posicao.") : "Aguardando esse jogador escolher."}
             </p>
           </div>
           <div className="p-4">
-            {isDrawing && rollingClub ? (
+            {(isDrawing || isRevealingDraw) && rollingClub ? (
               <RollingTeamCard club={rollingClub} />
             ) : !room.currentDraw ? (
-              <div className="rounded-md border border-dashed border-white/14 bg-white/[0.04] p-5 text-center">
+              <div className="rounded-2xl border border-dashed border-white/14 bg-white/[0.04] p-5 text-center">
                 <p className="text-sm font-semibold text-slate-300">{isMyTurn ? "Nenhum time sorteado para esta escolha." : "O jogador da vez ainda nao sorteou o time."}</p>
                 <Button className="mt-4 w-full" disabled={!isMyTurn || isDrawing} onClick={runDrawAnimation}>
                   <Dices size={18} /> Sortear time
@@ -861,7 +891,7 @@ function DraftPanel({
               </div>
             ) : (
               <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/10 bg-night/55 px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-night/55 px-3 py-2">
                   <span className="text-xs font-black uppercase tracking-[0.18em] text-slate-300">Rerolls: <strong className="text-gold">{rerollsLeft}</strong>/3</span>
                   <Button variant="secondary" disabled={!isMyTurn || isDrawing || rerollsLeft <= 0} onClick={runDrawAnimation}>
                     <Dices size={18} /> Sortear novamente
@@ -902,7 +932,7 @@ function DrawnTeamRoster({
     .slice()
     .sort((a, b) => Number(!isRoomPickEligible(player, a)) - Number(!isRoomPickEligible(player, b)) || roomPositionOrder(a.position) - roomPositionOrder(b.position) || (a.shirtNumber ?? 99) - (b.shirtNumber ?? 99));
   return (
-    <div className="overflow-hidden rounded-md border border-emerald-400/25 bg-emerald-950/25">
+    <div className="overflow-hidden rounded-2xl border border-emerald-400/25 bg-emerald-950/25">
       <div
         className="flex items-center gap-4 border-b border-emerald-400/20 px-4 py-4"
         style={{
@@ -916,7 +946,7 @@ function DrawnTeamRoster({
           <p className="text-sm text-slate-300">{draw.country}</p>
         </div>
       </div>
-      <div className="max-h-[430px] overflow-y-auto">
+      <div className="game-scrollbar max-h-[min(430px,calc(100vh-25rem))] overflow-y-auto">
       {orderedRoster.map((pick) => {
         const alreadyPicked = Boolean(player?.squad.some((item) => item.canonicalPlayerId === pick.canonicalPlayerId));
         const eligible = isRoomPickEligible(player, pick);
@@ -948,7 +978,7 @@ function DrawnTeamRoster({
 
 function RollingTeamCard({ club }: { club: (typeof clubSeasonData)[number] }) {
   return (
-    <div className="overflow-hidden rounded-md border border-gold/35 bg-white/[0.06] shadow-card">
+    <div className="overflow-hidden rounded-2xl border border-gold/35 bg-white/[0.06] shadow-card">
       <div
         className="flex min-h-28 items-center gap-4 p-4"
         style={{
@@ -987,14 +1017,14 @@ function RoomSquadField({
   const progress = Math.round(((player?.squad.length ?? 0) / 11) * 100);
 
   return (
-    <section className="rounded-lg border border-white/12 bg-emerald-950/35 p-3 shadow-card">
-      <div className="mb-3 rounded-md border border-white/10 bg-night/65 px-4 py-3 shadow-glow">
+    <section className="rounded-2xl border border-white/12 bg-emerald-950/30 p-3 shadow-card">
+      <div className="mb-3 rounded-2xl border border-white/10 bg-night/65 px-4 py-3 shadow-glow">
         <div className="grid items-center gap-4 sm:grid-cols-[auto_1fr_auto]">
-          <div className="flex items-baseline gap-3">
-            <span className="text-[10px] font-black uppercase tracking-[0.22em] text-gold">Rating</span>
-            <span className="font-mono text-4xl font-black leading-none text-white drop-shadow-[0_0_12px_rgba(247,201,72,.28)]">{rating}</span>
+          <div className="rounded-2xl border border-gold/20 bg-gold/10 px-3 py-2">
+            <span className="block text-[10px] font-black uppercase tracking-[0.18em] text-gold">Rating</span>
+            <span className="font-mono text-2xl font-black leading-none text-white">{rating}</span>
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center justify-between gap-3">
               <span className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Elenco</span>
               <span className="font-mono text-sm font-black text-white">{player?.squad.length ?? 0}/11</span>
@@ -1009,7 +1039,7 @@ function RoomSquadField({
           </div>
         </div>
       </div>
-      <div className="relative mx-auto aspect-[7/10] max-h-[680px] min-h-[480px] overflow-hidden rounded-md border border-white/20 field-lines">
+      <div className="relative mx-auto aspect-[7/10] max-h-[680px] min-h-[430px] overflow-hidden rounded-2xl border border-white/20 field-lines sm:min-h-[500px]">
         <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/20" />
         {slots.map((slot) => {
           const pick = assigned[slot.id];
@@ -1056,21 +1086,24 @@ function RoomSquadField({
           );
         })}
       </div>
-      <div className="mt-4">
-        <AdBanner compact />
-      </div>
     </section>
   );
 }
 
 function DraftProgress({ players, currentPlayerId }: { players: RoomPlayer[]; currentPlayerId?: string }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-night/55 p-4">
-      <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300">Jogadores</p>
-      <div className="mt-3 grid gap-2">
+    <div className="rounded-2xl border border-white/10 bg-night/50 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300">Jogadores</p>
+        <span className="text-xs font-bold text-slate-400">{players.length}/16</span>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
         {players.map((player) => (
-          <div key={player.id} className={cn("grid grid-cols-[1fr_auto] items-center gap-3 rounded-md border px-3 py-2 text-sm", player.id === currentPlayerId ? "border-gold bg-gold/10" : "border-white/10 bg-white/[0.035]")}>
-            <span className="truncate font-black text-white">{player.teamName}</span>
+          <div key={player.id} className={cn("grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border px-3 py-2 text-sm", player.id === currentPlayerId ? "border-gold bg-gold/10" : "border-white/10 bg-white/[0.035]")}>
+            <span className="min-w-0">
+              <span className="block truncate font-black text-white">{player.teamName}</span>
+              <span className="block truncate text-xs text-slate-400">{player.ready ? "Pronto" : "Montando elenco"}</span>
+            </span>
             <span className="font-mono text-xs font-black text-gold">{player.squad.length}/11</span>
           </div>
         ))}
@@ -1744,7 +1777,7 @@ function SegmentButton({ active, children, onClick }: { active: boolean; childre
   return (
     <button
       className={cn(
-        "min-h-10 rounded-md border px-3 py-2 text-sm font-black transition",
+        "min-h-10 rounded-full border px-3 py-2 text-sm font-black transition",
         active ? "border-danger bg-danger text-white shadow-[0_0_18px_rgba(239,68,68,.18)]" : "border-emerald-300/20 bg-night/70 text-white hover:border-electric"
       )}
       type="button"
@@ -1765,7 +1798,7 @@ function StatusPill({ status }: { status: FriendRoom["status"] }) {
 
 function tabButtonClass(active: boolean) {
   return cn(
-    "rounded-lg px-3 py-3 text-sm font-black transition",
+    "rounded-full px-3 py-3 text-sm font-black transition",
     active ? "bg-electric text-night" : "text-slate-200 hover:bg-white/10"
   );
 }

@@ -2,7 +2,6 @@ import clubsJson from "@/data/clubs.json";
 import type { FootballTeam } from "@/types/football";
 
 export const TEAM_PLACEHOLDER_LOGO = "/images/team-placeholder.svg";
-const API_LOGO_BASE_URL = "https://media.api-sports.io/football/teams";
 
 type ClubJson = {
   id: string;
@@ -66,7 +65,7 @@ const mappingEntries: Array<readonly [string, ClubApiMapping]> = clubApiMappings
 const mappingById = new Map<string, ClubApiMapping>(mappingEntries);
 
 export function getTeamLogo(apiId: number | null | undefined): string {
-  return apiId ? `${API_LOGO_BASE_URL}/${apiId}.png` : TEAM_PLACEHOLDER_LOGO;
+  return TEAM_PLACEHOLDER_LOGO;
 }
 
 export function getLocalFootballTeams(): FootballTeam[] {

@@ -33,7 +33,7 @@ export default function HistoryPage() {
               <p className="text-sm text-slate-400">{item.userName}</p>
               <h2 className="text-xl font-black">{item.teamName}</h2>
               <p className="mt-3 font-mono text-4xl font-black text-gold">{item.trophies}</p>
-              <p className="text-sm text-slate-300">Champions em {item.campaigns} campanha(s)</p>
+              <p className="text-sm text-slate-300">Liga dos Craques em {item.campaigns} campanha(s)</p>
             </article>
           ))}
           {gallery.length === 0 && <p className="text-slate-300">Nenhuma taca conquistada ainda.</p>}

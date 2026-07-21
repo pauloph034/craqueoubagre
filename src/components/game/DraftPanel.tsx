@@ -45,20 +45,20 @@ export function DraftPanel() {
   if (canConfirm) {
     return (
       <aside className="space-y-4">
-        <div className="rounded-lg border border-gold/30 bg-gold/10 p-5 shadow-card">
+        <div className="rounded-2xl border border-gold/30 bg-gold/10 p-5 shadow-card">
           <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">Elenco completo</p>
-          <p className="mt-2 text-sm text-slate-200">Os 11 jogadores ja foram escolhidos.</p>
+          <p className="mt-2 text-sm text-slate-200">Os 11 jogadores ja foram escolhidos. Agora escolha o tecnico para iniciar a campanha.</p>
         </div>
         <Button className="w-full" onClick={state.confirmSquad}>
-          Confirmar elenco
+          Escolher tecnico
         </Button>
       </aside>
     );
   }
 
   return (
-    <aside className="space-y-4">
-      <div className="rounded-lg border border-white/12 bg-white/[0.07] p-4 shadow-card">
+    <aside className="space-y-4 xl:sticky xl:top-20 xl:max-h-[calc(100vh-6rem)] xl:overflow-hidden">
+      <div className="rounded-2xl border border-white/12 bg-white/[0.06] p-4 shadow-card">
         <div className="grid gap-3">
           <div className="flex items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
             <span>{state.config.formation}</span>
@@ -91,7 +91,7 @@ export function DraftPanel() {
           </div>
         </div>
       ) : state.currentDraw ? (
-        <div className="overflow-hidden rounded-lg border border-white/12 bg-white/[0.07] shadow-card">
+        <div className="overflow-hidden rounded-2xl border border-white/12 bg-white/[0.07] shadow-card">
           <div
             className="flex items-center gap-4 border-b border-white/10 p-4"
             style={{
@@ -114,11 +114,11 @@ export function DraftPanel() {
               <p className="mt-1 truncate text-lg font-black text-white">{pendingPlayer.name}</p>
             </div>
           )}
-          <div className="m-4 rounded-md border border-emerald-400/25 bg-emerald-950/25">
+          <div className="m-4 rounded-2xl border border-emerald-400/25 bg-emerald-950/25">
             <div className="border-b border-emerald-400/20 px-4 py-3">
               <p className="text-xs font-black uppercase tracking-[0.24em] text-emerald-300">Elenco</p>
             </div>
-            <div className="max-h-[430px] overflow-y-auto">
+            <div className="game-scrollbar max-h-[min(430px,calc(100vh-25rem))] overflow-y-auto">
               {state.currentDraw.roster
                 .slice()
                 .sort((a, b) => Number(!state.currentDraw!.options.some((p) => p.id === a.id)) - Number(!state.currentDraw!.options.some((p) => p.id === b.id)) || positionOrder(a.primaryPosition) - positionOrder(b.primaryPosition) || (a.shirtNumber ?? 99) - (b.shirtNumber ?? 99))
@@ -137,14 +137,11 @@ export function DraftPanel() {
           </div>
         </div>
       ) : (
-        <div className="rounded-lg border border-white/12 bg-white/[0.05] p-6 text-slate-300">
+        <div className="rounded-2xl border border-white/12 bg-white/[0.05] p-6 text-slate-300">
           Nenhum time sorteado.
         </div>
       )}
 
-      <Button className="w-full" disabled={!canConfirm} onClick={state.confirmSquad}>
-        Confirmar elenco
-      </Button>
     </aside>
   );
 }

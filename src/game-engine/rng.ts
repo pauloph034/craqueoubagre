@@ -30,6 +30,6 @@ export function createRng(seed: string): Rng {
   };
 }
 
-export function createCampaignSeed(prefix = "champions"): string {
+export function createCampaignSeed(prefix = "liga-dos-craques"): string {
   return `${prefix}-${new Date().toISOString().slice(0, 10)}-${Math.random().toString(36).slice(2, 8)}`;
 }

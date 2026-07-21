@@ -211,7 +211,7 @@ export default function CampaignPage() {
 function ChampionCelebration({ teamName }: { teamName: string }) {
   return (
     <section className="mt-6 overflow-hidden rounded-lg border border-gold/40 bg-[radial-gradient(circle_at_top,_rgba(248,198,48,.28),_transparent_42%),rgba(255,255,255,.07)] p-8 text-center shadow-card">
-      <p className="text-sm font-black uppercase tracking-[0.3em] text-gold">Campeao da Champions</p>
+      <p className="text-sm font-black uppercase tracking-[0.3em] text-gold">Campeao da Liga dos Craques</p>
       <h2 className="mt-3 text-5xl font-black">{teamName}</h2>
       <div className="mx-auto mt-6 grid h-28 w-28 place-items-center rounded-full border border-gold bg-gold/20 text-6xl font-black text-gold shadow-[0_0_50px_rgba(248,198,48,.25)]">
         T
@@ -467,7 +467,7 @@ function LiveKnockoutBracket({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Mata-mata</p>
-          <h2 className="text-3xl font-black">Chaveamento da Champions</h2>
+          <h2 className="text-3xl font-black">Chaveamento da Liga dos Craques</h2>
         </div>
         <div className="rounded-full border border-gold/40 bg-gold/10 px-5 py-3 text-3xl text-gold shadow-[0_0_28px_rgba(248,198,48,.12)]">T</div>
       </div>
@@ -691,12 +691,12 @@ function GroupTable({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-sm font-black uppercase tracking-[0.2em] text-emerald-300">Fim da fase de grupos</p>
-          <h2 className="mt-2 text-3xl font-black">Classificados da Champions</h2>
+          <h2 className="mt-2 text-3xl font-black">Classificados da Liga dos Craques</h2>
           <p className={qualified ? "mt-2 font-bold text-emerald-300" : "mt-2 font-bold text-red-200"}>
             {qualified ? "Classificado para o mata-mata" : "Eliminado na fase de grupos"}
           </p>
         </div>
-        <Button onClick={onContinue}>{qualified ? "Prosseguir ao mata-mata" : "Ver campeao da Champions"}</Button>
+        <Button onClick={onContinue}>{qualified ? "Prosseguir ao mata-mata" : "Ver campeao da Liga dos Craques"}</Button>
       </div>
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {tables.map((group) => (

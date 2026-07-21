@@ -4,6 +4,21 @@
 
 :root {
   color-scheme: dark;
+  --bg-base: #030817;
+  --bg-elevated: rgba(8, 23, 48, 0.86);
+  --surface: rgba(10, 27, 55, 0.78);
+  --surface-strong: rgba(2, 9, 24, 0.92);
+  --border-subtle: rgba(190, 219, 255, 0.12);
+  --border-strong: rgba(125, 211, 252, 0.32);
+  --text-primary: #eef6ff;
+  --text-secondary: #a8b8cf;
+  --primary: #28b8ff;
+  --accent: #f7c948;
+  --success: #34d399;
+  --danger: #fb7185;
+  --radius-panel: 18px;
+  --font-display: "Arial Narrow", "Roboto Condensed", Impact, sans-serif;
+  --font-ui: Inter, Manrope, "Segoe UI", system-ui, sans-serif;
 }
 
 * {
@@ -17,10 +32,11 @@ html {
 body {
   margin: 0;
   background:
-    linear-gradient(180deg, rgba(3, 8, 24, 0.44), rgba(3, 7, 18, 0.88) 68%, #030711 100%),
+    linear-gradient(180deg, rgba(3, 8, 24, 0.78), rgba(3, 7, 18, 0.9) 58%, #030711 100%),
     url("/assets/stadium-blue-neon-bg.jpg") center top / cover fixed no-repeat,
     #030711;
   color: #eef6ff;
+  font-family: var(--font-ui), system-ui, sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
 }
@@ -36,16 +52,16 @@ body::after {
 
 body::before {
   background:
-    radial-gradient(ellipse at 50% 18%, rgba(40, 184, 255, 0.18), transparent 34rem),
-    radial-gradient(ellipse at 50% 102%, rgba(13, 148, 136, 0.18), transparent 34rem);
-  opacity: 0.9;
+    radial-gradient(ellipse at 50% 18%, rgba(40, 184, 255, 0.12), transparent 32rem),
+    radial-gradient(ellipse at 50% 102%, rgba(13, 148, 136, 0.12), transparent 34rem);
+  opacity: 0.75;
 }
 
 body::after {
   background:
-    linear-gradient(90deg, rgba(2, 6, 23, 0.42), transparent 18%, transparent 82%, rgba(2, 6, 23, 0.42)),
-    radial-gradient(ellipse at 50% 45%, transparent 36%, rgba(0, 0, 0, 0.42) 100%);
-  opacity: 0.86;
+    linear-gradient(90deg, rgba(2, 6, 23, 0.58), transparent 22%, transparent 78%, rgba(2, 6, 23, 0.58)),
+    radial-gradient(ellipse at 50% 45%, transparent 28%, rgba(0, 0, 0, 0.5) 100%);
+  opacity: 0.9;
 }
 
 body.room-focus-mode .app-shell-header,
@@ -87,10 +103,19 @@ select:focus-visible {
 
 .field-lines {
   background:
-    linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(255,255,255,.08) 1px, transparent 1px),
-    linear-gradient(135deg, rgba(52,211,153,.2), rgba(9,20,47,.8));
+    linear-gradient(90deg, rgba(255,255,255,.07) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255,255,255,.07) 1px, transparent 1px),
+    linear-gradient(135deg, rgba(9,93,75,.42), rgba(4,18,39,.86));
   background-size: 50% 100%, 100% 50%, 100% 100%;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.game-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(125, 211, 252, 0.5) rgba(255, 255, 255, 0.08);
 }
 
 .soccer-ball-3d {

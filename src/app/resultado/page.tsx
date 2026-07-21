@@ -38,15 +38,15 @@ export default function ResultPage() {
           <div>
             <h1 className="text-5xl font-black">{summary.champion ? "Campeao" : summary.stageReached}</h1>
             <p className="mt-2 text-slate-300">{summary.config.userName} comandou o {displayTeamName}</p>
-            {summary.champion && <p className="mt-2 text-xl font-black text-gold">Seu clube levantou a Champions.</p>}
+            {summary.champion && <p className="mt-2 text-xl font-black text-gold">Seu clube levantou a Liga dos Craques.</p>}
             {!summary.champion && summary.tournamentChampion && (
               <p className="mt-2 flex flex-wrap items-center gap-2 text-xl font-black text-gold">
-                <span>Campeao da Champions:</span><TeamNameWithCrest name={displayTournamentChampion ?? summary.tournamentChampion} size="sm" textClassName="font-black" />
+                <span>Campeao da Liga dos Craques:</span><TeamNameWithCrest name={displayTournamentChampion ?? summary.tournamentChampion} size="sm" textClassName="font-black" />
               </p>
             )}
           </div>
           <div className="rounded-md border border-gold/30 bg-gold/10 px-5 py-4 text-center">
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Tacas Champions</p>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Tacas da Liga</p>
             <p className="font-mono text-5xl font-black text-white">{stats.trophies}</p>
           </div>
         </div>
@@ -56,7 +56,7 @@ export default function ResultPage() {
           <Metric label="Gols marcados" value={stats.goalsFor} />
           <Metric label="Gols sofridos" value={stats.goalsAgainst} />
           <Metric label="Tecnico" value={summary.coach?.name ?? "Sem tecnico"} />
-          <Metric label="Campeao da Champions" value={displayTournamentChampion ?? (summary.champion ? displayTeamName : "A definir")} />
+          <Metric label="Campeao da Liga dos Craques" value={displayTournamentChampion ?? (summary.champion ? displayTeamName : "A definir")} />
           <Metric label={`Artilheiro ${displayTeamName}`} value={stats.teamTopScorer} />
           <Metric label="Melhor jogador" value={summary.matches.at(-1)?.bestPlayer ?? "Craque ou Bagre"} />
         </div>
@@ -64,7 +64,7 @@ export default function ResultPage() {
         <div className="mt-6 rounded-lg border border-white/10 bg-night/70 p-5">
           <h2 className="text-xl font-black">Galeria do clube</h2>
           <p className="mt-2 text-slate-300">
-            {displayTeamName} tem {stats.trophies} taca(s) da Champions no perfil de {summary.config.userName}.
+            {displayTeamName} tem {stats.trophies} taca(s) da Liga dos Craques no perfil de {summary.config.userName}.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {Array.from({ length: Math.max(1, stats.trophies) }).map((_, index) => (
@@ -128,7 +128,7 @@ function KnockoutBracket({ bracket, champion }: { bracket: BracketMatch[]; champ
     <section className="mt-6 overflow-hidden rounded-xl border border-emerald-300/20 bg-[radial-gradient(circle_at_86%_18%,rgba(17,255,184,.16),transparent_24%),radial-gradient(circle_at_12%_80%,rgba(40,184,255,.12),transparent_28%),linear-gradient(135deg,rgba(4,18,43,.98),rgba(3,46,52,.88)_58%,rgba(5,10,32,.98))] p-5 shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Chaveamento da Champions</p>
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Chaveamento da Liga dos Craques</p>
           <h2 className="mt-1 text-3xl font-black">Mata-mata ate o campeao</h2>
         </div>
         {champion && (

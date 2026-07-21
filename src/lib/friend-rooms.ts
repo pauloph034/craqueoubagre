@@ -38,7 +38,6 @@ export type RoomDraw = {
   primaryColor: string;
   secondaryColor: string;
   genericBadgeShape: "shield" | "round" | "diamond" | "crest";
-  badgeUrl?: string;
   rarity: string;
   roster: RoomPick[];
 };
@@ -63,6 +62,8 @@ export type RoomMatch = {
   awayName: string;
   homePlayerId?: string;
   awayPlayerId?: string;
+  homeStrength?: number;
+  awayStrength?: number;
   homeGoals?: number;
   awayGoals?: number;
   winnerName?: string;
@@ -598,7 +599,6 @@ function buildRoomDraw(seed: string, targetPlayer: RoomPlayer): RoomDraw {
     primaryColor: season.primaryColor,
     secondaryColor: season.secondaryColor,
     genericBadgeShape: season.genericBadgeShape,
-    badgeUrl: season.badgeUrl,
     rarity: season.rarity,
     roster
   };
@@ -679,6 +679,7 @@ function positionGroup(position: Position | string) {
 type RoomEntrant = {
   name: string;
   playerId?: string;
+  strength?: number;
 };
 
 export function playPlayerRoomMatch(room: FriendRoom, playerId: string) {
@@ -734,13 +735,13 @@ function createInitialRoomBracket(room: FriendRoom): FriendRoom {
   const rng = createRng(`${room.id}-bracket-${realPlayers.map((player) => player.teamName).join("|")}`);
   const entrants: RoomEntrant[] = uniqueNames(realPlayers.map((player) => player.teamName)).map((teamName) => {
     const player = realPlayers.find((item) => sameName(item.teamName, teamName));
-    return { name: teamName, playerId: player?.id };
+    return { name: teamName, playerId: player?.id, strength: player ? roomPlayerStrength(room, player) : undefined };
   });
   for (const historicTeam of randomHistoricTeams(room.id)) {
     if (entrants.length >= maxEntrants) break;
-    if (!entrants.some((entrant) => sameName(entrant.name, historicTeam))) entrants.push({ name: historicTeam });
+    if (!entrants.some((entrant) => sameName(entrant.name, historicTeam.name))) entrants.push(historicTeam);
   }
-  while (entrants.length < maxEntrants) entrants.push({ name: `Convidado ${entrants.length + 1}` });
+  while (entrants.length < maxEntrants) entrants.push({ name: `Convidado ${entrants.length + 1}`, strength: 76 });
   const shuffledEntrants = shuffle(entrants, rng);
 
   return {
@@ -799,6 +800,8 @@ function createRoundMatches(phase: string, entrants: RoomEntrant[], roundIndex: 
       awayName: away.name,
       homePlayerId: home.playerId,
       awayPlayerId: away.playerId,
+      homeStrength: home.strength,
+      awayStrength: away.strength,
       status: "pending"
     });
   }
@@ -817,16 +820,22 @@ function simulateRoomMatch(room: FriendRoom, matchId: string, seed: string) {
 
 function simulateSingleRoomMatch(match: RoomMatch, seed: string): RoomMatch {
   const rng = createRng(seed);
-  let homeGoals = rng.int(0, 4);
-  let awayGoals = rng.int(0, 4);
-  if (match.homePlayerId && !match.awayPlayerId) homeGoals += rng.next() > 0.38 ? 1 : 0;
-  if (match.awayPlayerId && !match.homePlayerId) awayGoals += rng.next() > 0.38 ? 1 : 0;
+  const homeStrength = match.homeStrength ?? (match.homePlayerId ? 84 : 80);
+  const awayStrength = match.awayStrength ?? (match.awayPlayerId ? 84 : 80);
+  const homeAdvantage = 1.5;
+  const homeExpected = expectedGoals(homeStrength + homeAdvantage, awayStrength);
+  const awayExpected = expectedGoals(awayStrength, homeStrength + homeAdvantage);
+  let homeGoals = roomPoisson(rng, homeExpected);
+  let awayGoals = roomPoisson(rng, awayExpected);
   if (homeGoals === awayGoals) {
-    if (rng.next() > 0.5) homeGoals += 1;
+    const homeTieBreakChance = Math.max(0.18, Math.min(0.82, 0.5 + ((homeStrength + homeAdvantage) - awayStrength) / 55));
+    if (rng.next() < homeTieBreakChance) homeGoals += 1;
     else awayGoals += 1;
   }
   return {
     ...match,
+    homeStrength: Math.round(homeStrength * 10) / 10,
+    awayStrength: Math.round(awayStrength * 10) / 10,
     homeGoals,
     awayGoals,
     winnerName: homeGoals > awayGoals ? match.homeName : match.awayName,
@@ -835,20 +844,59 @@ function simulateSingleRoomMatch(match: RoomMatch, seed: string): RoomMatch {
 }
 
 function winnerEntrant(match: RoomMatch): RoomEntrant {
-  if (match.winnerName === match.homeName) return { name: match.homeName, playerId: match.homePlayerId };
-  return { name: match.awayName, playerId: match.awayPlayerId };
+  if (match.winnerName === match.homeName) return { name: match.homeName, playerId: match.homePlayerId, strength: match.homeStrength };
+  return { name: match.awayName, playerId: match.awayPlayerId, strength: match.awayStrength };
 }
 
 function randomHistoricTeams(seed: string) {
   const seen = new Set<string>();
-  const labels = clubSeasons
-    .map((season) => teamSeasonLabel(season.clubName, season.season))
-    .filter((label) => {
-      if (seen.has(label)) return false;
-      seen.add(label);
+  const entrants = clubSeasons
+    .map((season) => ({
+      name: teamSeasonLabel(season.clubName, season.season),
+      strength: historicSeasonStrength(season.id)
+    }))
+    .filter((entrant) => {
+      if (seen.has(entrant.name)) return false;
+      seen.add(entrant.name);
       return true;
     });
-  return shuffle(labels, createRng(`${seed}-historic-teams`));
+  return shuffle(entrants, createRng(`${seed}-historic-teams`));
+}
+
+function expectedGoals(attackStrength: number, defenseStrength: number) {
+  const gap = attackStrength - defenseStrength;
+  return Math.max(0.35, Math.min(3.25, 1.35 + gap / 22));
+}
+
+function roomPoisson(rng: ReturnType<typeof createRng>, lambda: number) {
+  const cap = Math.max(0.25, Math.min(3.4, lambda));
+  const limit = Math.exp(-cap);
+  let product = 1;
+  let goals = 0;
+  do {
+    goals += 1;
+    product *= rng.next();
+  } while (product > limit);
+  return goals - 1;
+}
+
+function roomPlayerStrength(room: FriendRoom, player: RoomPlayer) {
+  const squadRating = player.squad.length
+    ? player.squad.reduce((sum, pick) => sum + (pick.effectiveRating ?? pick.overall), 0) / player.squad.length
+    : 78;
+  const coachId = room.selectedCoachByPlayer[player.id];
+  const coach = coachId ? coaches.find((item) => item.id === coachId) : undefined;
+  const coachBonus = coach ? (coach.rating - 82) * 0.16 : 0;
+  return Math.max(65, Math.min(99, squadRating + coachBonus));
+}
+
+function historicSeasonStrength(clubSeasonId: string) {
+  const season = clubSeasons.find((item) => item.id === clubSeasonId);
+  const roster = players.filter((player) => player.clubSeasonId === clubSeasonId && player.isActive);
+  const rosterRating = roster.length ? roster.reduce((sum, player) => sum + player.overall, 0) / roster.length : 78;
+  const stageBonus = season?.wasChampion ? 2.2 : season?.competitionStage.toLowerCase().includes("final") ? 1.3 : 0;
+  const rarityBonus = season?.rarity === "lendaria" ? 1.2 : season?.rarity === "epica" ? 0.6 : 0;
+  return Math.max(65, Math.min(99, rosterRating + stageBonus + rarityBonus));
 }
 
 function teamSeasonLabel(name: string, season: string) {
@@ -952,7 +1000,6 @@ function normalizeDraw(draw?: RoomDraw) {
     primaryColor: draw.primaryColor || season?.primaryColor || "#082f49",
     secondaryColor: draw.secondaryColor || season?.secondaryColor || "#22d3ee",
     genericBadgeShape: draw.genericBadgeShape || season?.genericBadgeShape || "shield",
-    badgeUrl: draw.badgeUrl || season?.badgeUrl,
     rarity: draw.rarity || season?.rarity || "comum",
     roster: (draw.roster ?? []).map(normalizePick)
   };

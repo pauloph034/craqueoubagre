@@ -1,6 +1,5 @@
 "use client";
 
-import { AdBanner } from "@/components/AdBanner";
 import { TeamCrest } from "@/components/game/TeamCrest";
 import { getFormationSlots } from "@/config/formations";
 import { getFootballTeamByClubId, getFootballTeamByName } from "@/data/football-clubs";
@@ -46,7 +45,7 @@ export function SquadField() {
           </div>
         </div>
       </div>
-      <div className="relative mx-auto aspect-[7/10] max-h-[680px] min-h-[480px] overflow-hidden rounded-md border border-white/20 field-lines">
+      <div className="relative mx-auto aspect-[7/10] max-h-[720px] min-h-[520px] overflow-hidden rounded-2xl border border-white/20 field-lines">
         <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/20" />
         {slots.map((slot) => {
           const pick = squad.find((item) => item.slotId === slot.id);
@@ -91,9 +90,6 @@ export function SquadField() {
             </button>
           );
         })}
-      </div>
-      <div className="mt-4">
-        <AdBanner compact />
       </div>
       <div className="mt-4 grid gap-2 md:hidden">
         {slots.map((slot) => {

@@ -105,8 +105,9 @@ export function simulateMatch(args: {
   const defensePower = (sectors.defense * 0.44 + sectors.goalkeeper * 0.38 + chemistry * 0.18) / 86;
   const opponent = adjustedOpponentStrength / 86;
   const qualityGap = (attackPower + defensePower) / 2 - opponent;
-  const userXgBase = 1.03 + attackPower * 0.95 + Math.min(0.35, qualityGap * 0.45) - opponent * 0.9;
-  const opponentXgBase = 0.92 + opponent * 1.05 - defensePower * 0.78 + Math.max(0, -qualityGap) * 0.9;
+  const favoriteEdge = Math.max(-0.55, Math.min(0.55, qualityGap));
+  const userXgBase = 1.02 + attackPower * 1.02 + Math.max(-0.32, favoriteEdge * 0.72) - opponent * 0.88;
+  const opponentXgBase = 0.88 + opponent * 1.02 - defensePower * 0.86 + Math.max(0, -favoriteEdge) * 1.05 - Math.max(0, favoriteEdge) * 0.58;
   const userXg = Math.min(3.9, Math.max(0.2, userXgBase * style.attack * style.tempo * difficulty.userXg));
   const opponentXg = Math.min(4.2, Math.max(0.25, opponentXgBase * (2 - style.defense) * (args.tacticalStyle === "ofensivo" ? 1.16 : 1) * difficulty.opponentXg * knockoutPressure));
   let userGoals = poisson(args.rng, userXg);

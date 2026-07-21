@@ -60,7 +60,6 @@ export type ClubSeason = {
   primaryColor: string;
   secondaryColor: string;
   genericBadgeShape: "shield" | "round" | "diamond" | "crest";
-  badgeUrl?: string;
   logo?: string;
   logoSource?: "api" | "cache" | "local";
   competitionStage: string;

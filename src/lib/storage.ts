@@ -1,8 +1,9 @@
 import type { CampaignSummary, SiteMetrics, UserAccount } from "@/types/game";
 
-const activeKey = "champions-xi:active:v1";
-const historyKey = "champions-xi:history:v1";
-const settingsKey = "champions-xi:settings:v1";
+const legacyHistoryKey = "champions-xi:history:v1";
+const activeKey = "craque-ou-bagre:active:v1";
+const historyKey = "craque-ou-bagre:history:v1";
+const settingsKey = "craque-ou-bagre:settings:v1";
 const usersKey = "craque-ou-bagre:users:v1";
 const sessionKey = "craque-ou-bagre:session:v1";
 const metricsKey = "craque-ou-bagre:metrics:v1";
@@ -15,6 +16,14 @@ export function safeLoad<T>(key: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function safeLoadWithLegacy<T>(key: string, legacyKey: string, fallback: T): T {
+  const current = safeLoad<T>(key, fallback);
+  if (current !== fallback) return current;
+  const legacy = safeLoad<T>(legacyKey, fallback);
+  if (legacy !== fallback) safeSave(key, legacy);
+  return legacy;
 }
 
 export function safeSave(key: string, value: unknown) {
@@ -42,7 +51,7 @@ export const storage = {
   usersKey,
   sessionKey,
   metricsKey,
-  loadHistory: () => safeLoad<CampaignSummary[]>(historyKey, []),
+  loadHistory: () => safeLoadWithLegacy<CampaignSummary[]>(historyKey, legacyHistoryKey, []),
   saveHistory: (history: CampaignSummary[]) => safeSave(historyKey, history.slice(0, 100)),
   loadUsers: () => safeLoad<UserAccount[]>(usersKey, []),
   saveUsers: (users: UserAccount[]) => safeSave(usersKey, users),

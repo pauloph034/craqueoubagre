@@ -124,7 +124,7 @@ export function normalizeTeam(item: ApiFootballTeamResponse): FootballTeam {
     shortName: local?.shortName ?? item.team.name,
     code: item.team.code ?? local?.code ?? "",
     country: item.team.country ?? local?.country ?? "",
-    logo: item.team.logo || getTeamLogo(apiId),
+    logo: getTeamLogo(apiId),
     fallbackLogo: TEAM_PLACEHOLDER_LOGO,
     source: "api"
   };

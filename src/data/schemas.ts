@@ -43,7 +43,6 @@ export const clubSeasonSchema = z.object({
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   genericBadgeShape: z.enum(["shield", "round", "diamond", "crest"]),
-  badgeUrl: z.string().min(2).optional(),
   logo: z.string().min(2).optional(),
   logoSource: z.enum(["api", "cache", "local"]).optional(),
   competitionStage: z.string().min(2),
