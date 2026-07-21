@@ -7,11 +7,16 @@ const config: Config = {
       colors: {
         night: "#050816",
         navy: "#09142f",
+        graphite: "#0b1b34",
         electric: "#28b8ff",
-        violet: "#6d3cff",
+        royal: "#3138e8",
         gold: "#f7c948",
         mint: "#34d399",
         danger: "#fb7185"
+      },
+      fontFamily: {
+        display: ["var(--font-display)", "Arial Narrow", "Arial", "sans-serif"],
+        sans: ["var(--font-ui)", "Inter", "system-ui", "sans-serif"]
       },
       boxShadow: {
         glow: "0 0 32px rgba(40,184,255,.22)",

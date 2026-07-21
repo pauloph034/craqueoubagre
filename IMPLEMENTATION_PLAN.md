@@ -1,4 +1,4 @@
-# Champions XI - Plano de Implementacao
+# Craque ou Bagre - Plano de Implementacao
 
 1. Criar projeto Next.js com TypeScript strict, Tailwind, estado global, testes e scripts.
 2. Definir modelos, schemas Zod e configuracoes de formacoes, taticas, raridades e dificuldade.

@@ -30,9 +30,9 @@ npm test
 npm run build
 ```
 
-## API-Football e escudos
+## API-Football e identidade visual
 
-O projeto possui uma integracao segura com a API-Football para escudos e dados basicos dos clubes.
+O projeto possui uma integracao segura com a API-Football para dados basicos dos clubes, mas a interface do jogo usa escudos genericos/editoriais para evitar uso visual de marcas oficiais.
 
 1. Crie uma conta em https://www.api-football.com/ ou no painel API-Sports.
 2. Copie sua chave da API-Football.
@@ -49,7 +49,7 @@ GET /api/football/teams?teamId=541
 GET /api/football/teams?local=1
 ```
 
-A chave nunca e enviada ao navegador. A resposta e normalizada para o formato do jogo e retorna somente campos necessarios como `apiId`, `name`, `code`, `country`, `logo`, `fallbackLogo` e `source`.
+A chave nunca e enviada ao navegador. A resposta e normalizada para o formato do jogo e retorna somente campos necessarios como `apiId`, `name`, `code`, `country`, `logo`, `fallbackLogo` e `source`; o `logo` visual e tratado como placeholder/generico no jogo.
 
 ### Cache
 
@@ -70,7 +70,7 @@ Para descobrir ou confirmar o ID de um time:
 1. entre como admin;
 2. abra `/admin/dados`;
 3. use a busca "API-Football";
-4. confira nome, pais, codigo, escudo e `apiId`;
+4. confira nome, pais, codigo, identidade generica e `apiId`;
 5. atualize o mapeamento local se necessario.
 
 ### Placeholder
@@ -90,7 +90,7 @@ Arquivos principais da integracao:
 
 ## Dados
 
-O dataset demonstrativo fica em `src/data`. Ele inclui clube-temporadas, jogadores gerados editorialmente, adversarios e conquistas. Os ratings e elencos editoriais continuam substituiveis. Os escudos oficiais sao carregados pela API-Football quando a chave estiver configurada; sem chave, o jogo usa o cadastro local e placeholder.
+O dataset demonstrativo fica em `src/data`. Ele inclui clube-temporadas, jogadores gerados editorialmente, adversarios e conquistas. Os ratings e elencos editoriais continuam substituiveis. A interface evita escudos oficiais e usa placeholders/brasoes genericos inspirados por cores.
 
 Para adicionar elencos, veja `docs/ADDING_CLUB_SEASONS.md`. Para alterar probabilidades, edite `src/config/game-balance.ts`.
 
@@ -100,4 +100,4 @@ O MVP funciona offline/local. Para ranking online, configure variaveis em `.env.
 
 ## Propriedade intelectual
 
-Champions XI e um projeto independente, nao afiliado a UEFA, clubes, competicoes ou atletas.
+Craque ou Bagre e um projeto independente da Liga dos Craques, nao afiliado a competicoes oficiais, clubes ou atletas.

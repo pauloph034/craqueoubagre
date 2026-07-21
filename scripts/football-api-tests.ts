@@ -12,8 +12,8 @@ async function testAsync(name: string, fn: () => Promise<void>) {
   console.log(`ok - ${name}`);
 }
 
-test("url de escudo e fallback local", () => {
-  assert.equal(getTeamLogo(541), "https://media.api-sports.io/football/teams/541.png");
+test("identidade visual generica e fallback local", () => {
+  assert.equal(getTeamLogo(541), TEAM_PLACEHOLDER_LOGO);
   assert.equal(getTeamLogo(null), TEAM_PLACEHOLDER_LOGO);
   assert.equal(getFootballTeamByName("Real Madrid 25/26")?.apiId, 541);
   assert.equal(getFootballTeamByName("Sampdoria 91/92")?.apiId, 498);

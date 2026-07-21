@@ -220,7 +220,7 @@ foreach ($season in $seasons) {
   }
   $clubSeasons += [ordered]@{
     id=$season[0]; clubId=$season[1]; clubName=$season[2]; shortName=$season[3]; country=$season[4]; season=$season[5];
-    primaryColor=$season[6]; secondaryColor=$season[7]; genericBadgeShape=$season[8]; badgeUrl="/club-badges/$($season[1]).png"; competitionStage=$season[9]; wasChampion=$season[10];
+    primaryColor=$season[6]; secondaryColor=$season[7]; genericBadgeShape=$season[8]; competitionStage=$season[9]; wasChampion=$season[10];
     rarity=$season[11]; description=$season[12]; players=$playerIds; isActive=$true; dataConfidence="demo"
   }
 }
