@@ -1,6 +1,7 @@
 import type { CampaignSummary, SiteMetrics, UserAccount } from "@/types/game";
 
 const legacyHistoryKey = "champions-xi:history:v1";
+const legacyActiveKey = "champions-xi:active:v1";
 const activeKey = "craque-ou-bagre:active:v1";
 const historyKey = "craque-ou-bagre:history:v1";
 const settingsKey = "craque-ou-bagre:settings:v1";
@@ -53,6 +54,12 @@ export const storage = {
   metricsKey,
   loadHistory: () => safeLoadWithLegacy<CampaignSummary[]>(historyKey, legacyHistoryKey, []),
   saveHistory: (history: CampaignSummary[]) => safeSave(historyKey, history.slice(0, 100)),
+  loadActive: <T>(fallback: T) => safeLoadWithLegacy<T>(activeKey, legacyActiveKey, fallback),
+  saveActive: (campaign: unknown) => safeSave(activeKey, campaign),
+  clearActive: () => {
+    safeRemove(activeKey);
+    safeRemove(legacyActiveKey);
+  },
   loadUsers: () => safeLoad<UserAccount[]>(usersKey, []),
   saveUsers: (users: UserAccount[]) => safeSave(usersKey, users),
   loadSession: () => safeLoad<string | undefined>(sessionKey, undefined),

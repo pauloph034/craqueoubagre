@@ -85,6 +85,7 @@ type GameState = {
   revealGroupTable: () => void;
   continueAfterGroup: () => void;
   reset: () => void;
+  loadActiveCampaign: () => void;
   loadAccount: () => Promise<void>;
   register: (username: string, password: string, teamName: string) => Promise<boolean>;
   login: (username: string, password: string) => Promise<boolean>;
@@ -125,6 +126,34 @@ function accountTeamName(user: UserAccount) {
 
 type ApiUserResponse = { user?: UserAccount | null; users?: UserAccount[]; password?: string; error?: string };
 
+type ActiveCampaignSnapshot = Pick<
+  GameState,
+  | "phase"
+  | "config"
+  | "selectedSlotId"
+  | "pendingPlayerId"
+  | "currentDraw"
+  | "coachDraw"
+  | "coachOptions"
+  | "coachDrawCount"
+  | "selectedCoach"
+  | "campaignSchedule"
+  | "campaignMatches"
+  | "campaignStep"
+  | "showGroupTable"
+  | "groupTables"
+  | "qualifiedTeams"
+  | "squad"
+  | "drawHistory"
+  | "rerollsLeft"
+  | "swapsLeft"
+  | "undoAvailable"
+  | "undoUsed"
+  | "swapsUsed"
+  | "rerollsUsed"
+  | "lastSummary"
+>;
+
 async function apiRequest<T extends ApiUserResponse>(url: string, init: RequestInit = {}) {
   const response = await fetch(url, {
     ...init,
@@ -152,6 +181,35 @@ function persistCampaign(summary: CampaignSummary) {
   }).catch(() => undefined);
 }
 
+function activeSnapshot(state: GameState): ActiveCampaignSnapshot {
+  return {
+    phase: state.phase,
+    config: state.config,
+    selectedSlotId: state.selectedSlotId,
+    pendingPlayerId: state.pendingPlayerId,
+    currentDraw: state.currentDraw,
+    coachDraw: state.coachDraw,
+    coachOptions: state.coachOptions,
+    coachDrawCount: state.coachDrawCount,
+    selectedCoach: state.selectedCoach,
+    campaignSchedule: state.campaignSchedule,
+    campaignMatches: state.campaignMatches,
+    campaignStep: state.campaignStep,
+    showGroupTable: state.showGroupTable,
+    groupTables: state.groupTables,
+    qualifiedTeams: state.qualifiedTeams,
+    squad: state.squad,
+    drawHistory: state.drawHistory,
+    rerollsLeft: state.rerollsLeft,
+    swapsLeft: state.swapsLeft,
+    undoAvailable: state.undoAvailable,
+    undoUsed: state.undoUsed,
+    swapsUsed: state.swapsUsed,
+    rerollsUsed: state.rerollsUsed,
+    lastSummary: state.lastSummary
+  };
+}
+
 export const useGameStore = create<GameState>((set, get) => ({
   phase: "setup",
   config: initialConfig,
@@ -177,6 +235,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   audioEnabled: false,
   volume: 0.5,
   startDraft: (partial) => {
+    storage.clearActive();
     const currentUser = get().currentUser;
     const accountConfig = currentUser
       ? { userName: currentUser.username, teamName: accountTeamName(currentUser) }
@@ -308,12 +367,16 @@ export const useGameStore = create<GameState>((set, get) => ({
     const nextCount = state.coachDrawCount + 1;
     const rng = createRng(`${state.config.seed}-coach-${state.squad.length}-${nextCount}`);
     const pool = [...coaches].sort(() => rng.next() - 0.5).slice(0, 3);
+    const next = { ...state, coachOptions: pool, coachDraw: pool[0], coachDrawCount: nextCount };
+    storage.saveActive(activeSnapshot(next));
     set({ coachOptions: pool, coachDraw: pool[0], coachDrawCount: nextCount });
   },
   confirmCoach: (coachId) => {
     const state = get();
     const coach = state.coachOptions.find((item) => item.id === coachId) ?? state.coachDraw;
     if (!coach) return;
+    const next = { ...state, selectedCoach: coach, coachDraw: coach, phase: "campaignReady" as GamePhase };
+    storage.saveActive(activeSnapshot(next));
     set({ selectedCoach: coach, coachDraw: coach, phase: "campaignReady" });
   },
   swapSlot: (slotId) => {
@@ -332,6 +395,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   confirmSquad: () => {
     const state = get();
     if (state.squad.length !== 11) return;
+    const next = { ...state, phase: "coachSelection" as GamePhase, coachDraw: undefined, coachOptions: [], coachDrawCount: 0 };
+    storage.saveActive(activeSnapshot(next));
     set({ phase: "coachSelection", coachDraw: undefined, coachOptions: [], coachDrawCount: 0 });
   },
   simulate: () => {
@@ -366,7 +431,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   startCampaign: () => {
     const state = get();
     if (state.squad.length !== 11 || !state.selectedCoach) return;
-    set({
+    const next = {
+      ...state,
       phase: "simulating",
       campaignSchedule: enrichSchedule(campaignOpponents(createRng(`${state.config.seed}-campaign`))),
       campaignMatches: [],
@@ -374,6 +440,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       showGroupTable: false,
       groupTables: [],
       qualifiedTeams: []
+    } as GameState;
+    storage.saveActive(activeSnapshot(next));
+    set({
+      phase: next.phase,
+      campaignSchedule: next.campaignSchedule,
+      campaignMatches: next.campaignMatches,
+      campaignStep: next.campaignStep,
+      showGroupTable: next.showGroupTable,
+      groupTables: next.groupTables,
+      qualifiedTeams: next.qualifiedTeams
     });
   },
   simulateNextMatch: () => {
@@ -393,6 +469,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const matches = [...state.campaignMatches, result];
     const nextStep = state.campaignStep + 1;
     if (nextStep === 3) {
+      storage.saveActive(activeSnapshot({ ...state, campaignMatches: matches, campaignStep: nextStep, showGroupTable: false }));
       set({ campaignMatches: matches, campaignStep: nextStep, showGroupTable: false });
       return;
     }
@@ -400,6 +477,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       const final = buildFinishedCampaign(get(), matches, `Eliminado em ${result.phase}`, false, undefined, simulateRemainingTournament(get(), matches, nextStep));
       storage.saveHistory(final.history);
       persistCampaign(final.summary);
+      const next = { ...state, phase: "campaignFinished" as GamePhase, campaignMatches: matches, lastSummary: final.summary, history: final.history };
+      storage.saveActive(activeSnapshot(next));
       set({ phase: "campaignFinished", campaignMatches: matches, lastSummary: final.summary, history: final.history });
       return;
     }
@@ -407,14 +486,18 @@ export const useGameStore = create<GameState>((set, get) => ({
       const final = buildFinishedCampaign(get(), matches, "Campeao", true);
       storage.saveHistory(final.history);
       persistCampaign(final.summary);
+      const next = { ...state, phase: "campaignFinished" as GamePhase, campaignMatches: matches, lastSummary: final.summary, history: final.history };
+      storage.saveActive(activeSnapshot(next));
       set({ phase: "campaignFinished", campaignMatches: matches, lastSummary: final.summary, history: final.history });
       return;
     }
+    storage.saveActive(activeSnapshot({ ...state, campaignMatches: matches, campaignStep: nextStep }));
     set({ campaignMatches: matches, campaignStep: nextStep });
   },
   revealGroupTable: () => {
     const state = get();
     const groups = buildGroupStage(state, state.campaignMatches.slice(0, 3));
+    storage.saveActive(activeSnapshot({ ...state, showGroupTable: true, groupTables: groups.groupTables, qualifiedTeams: groups.qualifiedTeams }));
     set({ showGroupTable: true, groupTables: groups.groupTables, qualifiedTeams: groups.qualifiedTeams });
   },
   continueAfterGroup: () => {
@@ -427,12 +510,23 @@ export const useGameStore = create<GameState>((set, get) => ({
       const final = buildFinishedCampaign({ ...state, campaignSchedule, qualifiedTeams: groups.qualifiedTeams }, state.campaignMatches, "Eliminado na fase de grupos", false, undefined, simulateRemainingTournament({ ...state, campaignSchedule, qualifiedTeams: groups.qualifiedTeams }, state.campaignMatches, 3));
       storage.saveHistory(final.history);
       persistCampaign(final.summary);
+      const next = { ...state, phase: "campaignFinished" as GamePhase, campaignSchedule, lastSummary: final.summary, history: final.history, showGroupTable: false, groupTables: groups.groupTables, qualifiedTeams: groups.qualifiedTeams };
+      storage.saveActive(activeSnapshot(next));
       set({ phase: "campaignFinished", campaignSchedule, lastSummary: final.summary, history: final.history, showGroupTable: false, groupTables: groups.groupTables, qualifiedTeams: groups.qualifiedTeams });
       return;
     }
+    storage.saveActive(activeSnapshot({ ...state, showGroupTable: false, campaignSchedule, campaignStep: 3, groupTables: groups.groupTables, qualifiedTeams: groups.qualifiedTeams }));
     set({ showGroupTable: false, campaignSchedule, campaignStep: 3, groupTables: groups.groupTables, qualifiedTeams: groups.qualifiedTeams });
   },
-  reset: () => set({ phase: "setup", config: { ...initialConfig, seed: createCampaignSeed() }, squad: [], currentDraw: undefined, coachDraw: undefined, coachOptions: [], coachDrawCount: 0, selectedCoach: undefined, campaignSchedule: [], campaignMatches: [], campaignStep: 0, showGroupTable: false, groupTables: [], qualifiedTeams: [], drawHistory: [], ...counters("classico") }),
+  reset: () => {
+    storage.clearActive();
+    set({ phase: "setup", config: { ...initialConfig, seed: createCampaignSeed() }, squad: [], currentDraw: undefined, coachDraw: undefined, coachOptions: [], coachDrawCount: 0, selectedCoach: undefined, campaignSchedule: [], campaignMatches: [], campaignStep: 0, showGroupTable: false, groupTables: [], qualifiedTeams: [], drawHistory: [], ...counters("classico") });
+  },
+  loadActiveCampaign: () => {
+    const snapshot = storage.loadActive<ActiveCampaignSnapshot | undefined>(undefined);
+    if (!snapshot?.phase || snapshot.phase === "setup") return;
+    set((state) => ({ ...state, ...snapshot }));
+  },
   loadAccount: async () => {
     try {
       const data = await apiRequest<ApiUserResponse>("/api/auth/session");

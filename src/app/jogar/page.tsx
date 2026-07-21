@@ -11,9 +11,15 @@ import { difficultyRules, tacticalStyles } from "@/config/game-balance";
 import { useGameStore } from "@/stores/game-store";
 import { useTeamMetrics } from "@/stores/game-store";
 import Link from "next/link";
+import { useEffect } from "react";
 
 export default function PlayPage() {
   const phase = useGameStore((state) => state.phase);
+  const loadActiveCampaign = useGameStore((state) => state.loadActiveCampaign);
+  useEffect(() => {
+    loadActiveCampaign();
+  }, [loadActiveCampaign]);
+
   if (phase === "setup") {
     return <main className="mx-auto max-w-6xl px-4 py-8"><SetupForm /><div className="mt-6"><AdBanner variant="leaderboard" /></div></main>;
   }

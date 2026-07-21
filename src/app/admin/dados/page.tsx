@@ -172,7 +172,9 @@ export default function AdminDataPage() {
             <h2 className="mt-2 text-2xl font-black">Saude do cadastro</h2>
             <div className="mt-4 grid gap-3">
               <Health label="Elencos ativos" value={activeSeasons.length} />
-              <Health label="Adversarios" value={opponents.length} />
+              <Health label="Jogadores cadastrados" value={players.length} />
+              <Health label="Adversarios possiveis" value={activeSeasons.length} />
+              <Health label="Lista legada de adversarios" value={opponents.length} />
               <Health label="Conquistas" value={achievements.length} />
               <Health label="Elencos sem goleiro" value={missingGk.length} warning={missingGk.length > 0} />
             </div>

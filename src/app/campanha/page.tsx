@@ -19,6 +19,7 @@ export default function CampaignPage() {
   const config = useGameStore((state) => state.config);
   const currentUser = useGameStore((state) => state.currentUser);
   const selectedCoach = useGameStore((state) => state.selectedCoach);
+  const loadActiveCampaign = useGameStore((state) => state.loadActiveCampaign);
   const startCampaign = useGameStore((state) => state.startCampaign);
   const simulateNextMatch = useGameStore((state) => state.simulateNextMatch);
   const revealGroupTable = useGameStore((state) => state.revealGroupTable);
@@ -32,6 +33,10 @@ export default function CampaignPage() {
   const phase = useGameStore((state) => state.phase);
   const [revealed, setRevealed] = useState(1);
   const [completedReplayIds, setCompletedReplayIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    loadActiveCampaign();
+  }, [loadActiveCampaign]);
 
   const rawDisplayMatches = phase === "campaignFinished" ? summary?.matches ?? matches : matches;
   const activeMatch = rawDisplayMatches.at(-1);

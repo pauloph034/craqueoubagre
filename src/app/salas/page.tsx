@@ -819,6 +819,11 @@ function DraftPanel({
     }
     if (drawKey === previousDrawKeyRef.current) return;
     previousDrawKeyRef.current = drawKey;
+    if (isMyTurn) {
+      skipNextRevealRef.current = false;
+      setIsRevealingDraw(false);
+      return;
+    }
     if (skipNextRevealRef.current) {
       skipNextRevealRef.current = false;
       setIsRevealingDraw(false);
@@ -835,7 +840,7 @@ function DraftPanel({
       if (intervalRef.current) window.clearInterval(intervalRef.current);
       setIsRevealingDraw(false);
     }, 1000);
-  }, [drawKey]);
+  }, [drawKey, isMyTurn]);
 
   function runDrawAnimation() {
     if (!currentPlayerId || isDrawing || !isMyTurn) return;
