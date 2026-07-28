@@ -102,6 +102,22 @@ function mergeRoomLists(primary: FriendRoom[], secondary: FriendRoom[]) {
   return Array.from(byId.values()).slice(0, 40);
 }
 
+function mergeLatestRooms(incoming: FriendRoom[], current: FriendRoom[]) {
+  const byId = new Map<string, FriendRoom>();
+  for (const room of current) byId.set(room.id, room);
+  for (const room of incoming) {
+    const existing = byId.get(room.id);
+    const existingTime = existing ? roomUpdatedTime(existing) : 0;
+    const incomingTime = roomUpdatedTime(room);
+    if (!existing || incomingTime >= existingTime) byId.set(room.id, room);
+  }
+  return Array.from(byId.values()).sort((a, b) => roomUpdatedTime(b) - roomUpdatedTime(a)).slice(0, 40);
+}
+
+function roomUpdatedTime(room: FriendRoom) {
+  return Date.parse(room.updatedAt ?? room.createdAt ?? "") || 0;
+}
+
 export default function FriendRoomsPage() {
   const currentUser = useGameStore((state) => state.currentUser);
   const loadAccount = useGameStore((state) => state.loadAccount);
@@ -146,9 +162,9 @@ export default function FriendRoomsPage() {
             nextRooms = await persistSharedRooms(mergeRoomLists(sharedRooms, missingLocalRooms));
           }
         }
-        applyRooms(nextRooms);
+        applyRooms(mergeLatestRooms(nextRooms, roomsRef.current));
       } catch {
-        applyRooms(loadFriendRooms());
+        applyRooms(mergeLatestRooms(loadFriendRooms(), roomsRef.current));
       }
     },
     [applyRooms]
@@ -187,14 +203,14 @@ export default function FriendRoomsPage() {
       const cleanRooms = nextRooms.slice(0, 40);
       applyRooms(cleanRooms, activeId);
       void persistSharedRooms(cleanRooms)
-        .then((sharedRooms) => applyRooms(sharedRooms, activeId))
+        .then((sharedRooms) => applyRooms(mergeLatestRooms(sharedRooms, roomsRef.current), activeId))
         .catch(() => setMessage("Sala salva neste navegador, mas ainda nao sincronizou com as outras abas."));
     },
     [applyRooms]
   );
 
   const commitRoom = useCallback((room: FriendRoom) => {
-    const touchedRoom = { ...room, updatedAt: new Date().toISOString() };
+    const touchedRoom = { ...room, revision: (room.revision ?? 0) + 1, updatedAt: new Date().toISOString() };
     const currentRooms = roomsRef.current;
     const nextRooms = currentRooms.some((item) => item.id === touchedRoom.id) ? currentRooms.map((item) => (item.id === touchedRoom.id ? touchedRoom : item)) : [touchedRoom, ...currentRooms];
     commitRooms(nextRooms, touchedRoom.id);
@@ -227,7 +243,8 @@ export default function FriendRoomsPage() {
     const room = createFriendRoom({
       ...form,
       hostName: currentUser.playerName?.trim() || currentUser.username,
-      hostTeamName: currentUser.teamName ?? `${currentUser.playerName?.trim() || currentUser.username} FC`
+      hostTeamName: currentUser.teamName ?? `${currentUser.playerName?.trim() || currentUser.username} FC`,
+      hostEmblemId: currentUser.emblemId
     });
     commitRooms([room, ...roomsRef.current], room.id);
     setRoomScreen("room");
@@ -245,7 +262,7 @@ export default function FriendRoomsPage() {
     }
     const userName = currentUser.playerName?.trim() || currentUser.username;
     const teamName = currentUser.teamName ?? `${userName} FC`;
-    commitRoom(joinRoom(room, userName, teamName));
+    commitRoom(joinRoom(room, userName, teamName, currentUser.emblemId));
     setRoomScreen("room");
     setMessage("Voce entrou na sala.");
   }
@@ -798,6 +815,7 @@ function DraftPanel({
   const intervalRef = useRef<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const revealTimeoutRef = useRef<number | null>(null);
+  const drawingLockRef = useRef(false);
   const previousDrawKeyRef = useRef<string>("");
   const skipNextRevealRef = useRef(false);
   const rollingClub = useMemo(() => clubSeasonData[rollingIndex % clubSeasonData.length], [rollingIndex]);
@@ -843,9 +861,13 @@ function DraftPanel({
   }, [drawKey, isMyTurn]);
 
   function runDrawAnimation() {
-    if (!currentPlayerId || isDrawing || !isMyTurn) return;
+    if (!currentPlayerId || isDrawing || drawingLockRef.current || !isMyTurn) return;
+    drawingLockRef.current = true;
     setIsDrawing(true);
     setRollingIndex((value) => value + 1);
+    if (intervalRef.current) window.clearInterval(intervalRef.current);
+    if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
+    if (revealTimeoutRef.current) window.clearTimeout(revealTimeoutRef.current);
     intervalRef.current = window.setInterval(() => {
       setRollingIndex((value) => value + 1 + Math.floor(Math.random() * 3));
     }, 115);
@@ -854,6 +876,7 @@ function DraftPanel({
       skipNextRevealRef.current = true;
       onDrawTeam(currentPlayerId);
       setIsDrawing(false);
+      drawingLockRef.current = false;
     }, 1000);
   }
 
@@ -1434,11 +1457,14 @@ function RoomBracket({
   const currentPhase = phases[room.bracketRound]?.label ?? "Mata-mata";
   const canProgressRound = room.status === "bracket" && !playerMatch && !pendingHumans;
   const [presentation, setPresentation] = useState<{ playerId: string; match: RoomMatch; events: RoomTimelineEvent[]; visible: number }>();
+  const [matchSpeed, setMatchSpeed] = useState<"normal" | "rapida" | "ultra">("normal");
   const onPlayMatchRef = useRef(onPlayMatch);
   const visibleEvents = presentation?.events.slice(0, presentation.visible) ?? [];
   const lastVisibleEvent = visibleEvents.at(-1);
   const presentationHomeGoals = lastVisibleEvent?.homeGoals ?? 0;
   const presentationAwayGoals = lastVisibleEvent?.awayGoals ?? 0;
+  const presentationMinute = presentation ? Math.max(1, lastVisibleEvent?.minute ?? 1) : 1;
+  const presentationProgress = Math.min(100, Math.round((presentationMinute / 90) * 100));
 
   useEffect(() => {
     if (!presentation) return;
@@ -1456,7 +1482,7 @@ function RoomBracket({
     if (presentation.visible < presentation.events.length) {
       const timer = window.setTimeout(() => {
         setPresentation((current) => (current ? { ...current, visible: current.visible + 1 } : current));
-      }, 1100);
+      }, matchSpeed === "normal" ? 1200 : matchSpeed === "rapida" ? 750 : 420);
       return () => window.clearTimeout(timer);
     }
     const finish = window.setTimeout(() => {
@@ -1464,7 +1490,7 @@ function RoomBracket({
       setPresentation(undefined);
     }, 900);
     return () => window.clearTimeout(finish);
-  }, [presentation]);
+  }, [matchSpeed, presentation]);
 
   function startMatchPresentation() {
     if (!currentPlayer || !playerMatch || presentation) return;
@@ -1477,11 +1503,11 @@ function RoomBracket({
   }
 
   return (
-    <div className="mt-6">
+    <div className="mt-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Chaveamento</p>
-          <h3 className="text-3xl font-black">Mata-mata da sala</h3>
+          <h3 className="text-2xl font-black">Mata-mata da sala</h3>
         </div>
         {room.champion && (
           <div className="flex flex-wrap items-center gap-3">
@@ -1494,23 +1520,28 @@ function RoomBracket({
         )}
       </div>
       {room.status === "bracket" && (
-        <div className="mt-4 rounded-lg border border-emerald-300/18 bg-[linear-gradient(135deg,rgba(4,18,43,.82),rgba(3,46,52,.5))] p-4">
+        <div className="mt-4 border border-sky-200/10 bg-black/25 p-4">
           <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300">Rodada atual: {currentPhase}</p>
           {presentation ? (
-            <div className="mt-4 overflow-hidden rounded-lg border border-electric/25 bg-night/70">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+            <div className="mt-3 overflow-hidden border border-electric/15 bg-night/45">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-xl font-black text-white">{presentation.match.homeName} x {presentation.match.awayName}</p>
+                  <p className="truncate text-lg font-black text-white">{presentation.match.homeName} x {presentation.match.awayName}</p>
                   <p className="mt-1 text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Simulando partida</p>
+                  <p className="mt-1 text-xs text-slate-400">{tacticalRoomSummary(presentation.match)}</p>
                 </div>
-                <span className="font-mono text-4xl font-black text-gold">{presentationHomeGoals} - {presentationAwayGoals}</span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <RoomSpeedControl speed={matchSpeed} onSpeedChange={setMatchSpeed} />
+                  <span className="rounded-md border border-emerald-300/20 bg-night/70 px-3 py-2 font-mono text-sm font-black text-emerald-200">{presentationMinute}&apos;</span>
+                  <span className="font-mono text-3xl font-black text-gold">{presentationHomeGoals} - {presentationAwayGoals}</span>
+                </div>
               </div>
               <div className="h-1.5 bg-white/10">
-                <div className="h-full rounded-r-full bg-gradient-to-r from-electric to-gold transition-all" style={{ width: `${Math.min(100, (visibleEvents.at(-1)?.minute ?? 0) / 90 * 100)}%` }} />
+                <div className="h-full rounded-r-full bg-gradient-to-r from-electric to-gold transition-all" style={{ width: `${presentationProgress}%` }} />
               </div>
-              <div className="grid gap-2 p-4">
+              <div className="grid max-h-[190px] overflow-y-auto p-3 game-scrollbar">
                 {visibleEvents.map((event, index) => (
-                  <div key={`${event.minute}-${index}`} className={cn("grid grid-cols-[3rem_1fr] items-center gap-3 rounded-md border px-3 py-2 text-sm", event.text.startsWith("Gol") ? "border-gold/45 bg-gold/12 text-white" : "border-white/10 bg-white/[0.04] text-slate-300")}>
+                  <div key={`${event.minute}-${index}`} className={cn("grid grid-cols-[3rem_1fr] items-center gap-3 border-b px-2 py-2 text-sm", event.text.startsWith("Gol") ? "border-gold/35 bg-gold/[0.07] text-white" : "border-white/[0.06] text-slate-300")}>
                     <span className="font-mono font-black text-sky-200">{event.minute}&apos;</span>
                     <span className="font-semibold">{event.text}</span>
                   </div>
@@ -1525,7 +1556,7 @@ function RoomBracket({
                 </p>
                 <p className="mt-1 text-sm text-slate-300">A partida vai rodar minuto a minuto. Quem terminar antes aguarda os outros jogadores da rodada.</p>
               </div>
-              <Button onClick={startMatchPresentation}>
+              <Button className="px-6" onClick={startMatchPresentation}>
                 <Play size={18} /> Iniciar partida
               </Button>
             </div>
@@ -1534,20 +1565,20 @@ function RoomBracket({
           ) : canProgressRound ? (
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm font-semibold text-slate-300">Todos os jogadores humanos terminaram. Prossiga para resolver os jogos restantes e abrir a proxima rodada.</p>
-              <Button onClick={onProgressRound}>Prosseguir rodada</Button>
+              <Button className="px-6" onClick={onProgressRound}>Prosseguir rodada</Button>
             </div>
           ) : null}
         </div>
       )}
       <div className="mt-5 overflow-x-auto pb-2">
-        <div className="grid min-w-[980px] grid-cols-[1.15fr_.95fr_.85fr_.72fr] gap-4">
+        <div className="grid min-w-[900px] grid-cols-[1.1fr_.95fr_.85fr_.72fr] gap-3">
           {phases.map((phase) => (
-            <div key={phase.name} className="rounded-lg border border-emerald-300/10 bg-night/55 p-3">
+            <div key={phase.name} className="border border-emerald-300/[0.08] bg-night/35 p-3">
               <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-sky-200">{phase.label}</p>
-              <div className="grid min-h-[660px]" style={{ gridTemplateRows: "repeat(16, minmax(0, 1fr))" }}>
+              <div className="grid min-h-[560px]" style={{ gridTemplateRows: "repeat(16, minmax(0, 1fr))" }}>
                 {room.bracket.filter((match) => match.phase === phase.name).map((match, index) => (
                   <div key={match.id} style={{ gridRow: `${bracketRowStart(phase.name, index)} / span 2` }}>
-                    <RoomBracketMatch match={match} />
+                    <RoomBracketMatch match={match} room={room} />
                   </div>
                 ))}
                 {room.bracket.filter((match) => match.phase === phase.name).length === 0 && (
@@ -1564,20 +1595,42 @@ function RoomBracket({
   );
 }
 
-function RoomBracketMatch({ match }: { match: RoomMatch }) {
+function RoomBracketMatch({ match, room }: { match: RoomMatch; room: FriendRoom }) {
   const done = match.status === "done";
+  const homeEmblemId = room.players.find((player) => player.id === match.homePlayerId || sameText(player.teamName, match.homeName))?.emblemId;
+  const awayEmblemId = room.players.find((player) => player.id === match.awayPlayerId || sameText(player.teamName, match.awayName))?.emblemId;
   return (
     <article className={cn("rounded-md border px-3 py-2 text-sm", done ? "border-emerald-300/16 bg-white/[0.055]" : "border-gold/25 bg-gold/[0.06]")}>
-      <BracketTeam name={match.homeName} goals={match.homeGoals} winner={done && match.winnerName === match.homeName} />
-      <BracketTeam name={match.awayName} goals={match.awayGoals} winner={done && match.winnerName === match.awayName} last />
+      <BracketTeam name={match.homeName} emblemId={homeEmblemId} goals={match.homeGoals} winner={done && match.winnerName === match.homeName} />
+      <BracketTeam name={match.awayName} emblemId={awayEmblemId} goals={match.awayGoals} winner={done && match.winnerName === match.awayName} last />
     </article>
   );
 }
 
-function BracketTeam({ name, goals, winner, last = false }: { name: string; goals?: number; winner: boolean; last?: boolean }) {
+function RoomSpeedControl({ speed, onSpeedChange }: { speed: "normal" | "rapida" | "ultra"; onSpeedChange: (speed: "normal" | "rapida" | "ultra") => void }) {
+  return (
+    <div className="flex border border-white/10 bg-night/70 p-1">
+      {(["normal", "rapida", "ultra"] as const).map((item) => (
+        <button
+          key={item}
+          type="button"
+          className={cn(
+            "rounded-sm px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] transition",
+            speed === item ? "bg-electric text-night" : "text-slate-300 hover:bg-white/10"
+          )}
+          onClick={() => onSpeedChange(item)}
+        >
+          {item === "normal" ? "1x" : item === "rapida" ? "2x" : "3x"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function BracketTeam({ name, emblemId, goals, winner, last = false }: { name: string; emblemId?: string; goals?: number; winner: boolean; last?: boolean }) {
   return (
     <div className={cn("grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2", !last && "border-b border-white/10 pb-1.5", last && "pt-1.5", winner ? "text-white" : "text-slate-400")}>
-      <TeamNameWithCrest name={name} size="sm" textClassName="font-black" showUnknown />
+      <TeamNameWithCrest name={name} emblemId={emblemId} size="sm" textClassName="font-black" showUnknown />
       <span className="text-right font-mono font-black text-gold">{typeof goals === "number" ? goals : "-"}</span>
     </div>
   );
@@ -1585,7 +1638,7 @@ function BracketTeam({ name, goals, winner, last = false }: { name: string; goal
 
 function buildRoomMatchTimeline(room: FriendRoom, match: RoomMatch): RoomTimelineEvent[] {
   const timelineItems: Array<{ minute: number; teamName: string; text: string; side?: "home" | "away" }> = [
-    { minute: 0, teamName: "", text: "Bola rolando" }
+    { minute: 1, teamName: "", text: "Bola rolando" }
   ];
   let homeGoals = 0;
   let awayGoals = 0;
@@ -1635,6 +1688,11 @@ function roomGoalScorer(room: FriendRoom, match: RoomMatch, side: "home" | "away
     .filter((player) => player.isActive && player.clubSeasonId === season?.id && player.primaryPosition !== "GK")
     .sort((a, b) => scorerWeight(b.primaryPosition) - scorerWeight(a.primaryPosition) || b.overall - a.overall);
   return seasonPool[goalIndex % Math.max(1, seasonPool.length)]?.name ?? "Coletivo";
+}
+
+function tacticalRoomSummary(match: RoomMatch) {
+  const labels = { ofensivo: "Ofensivo", equilibrado: "Equilibrado", defensivo: "Defensivo", pressao: "Pressao alta" };
+  return `${labels[match.homeStyle ?? "equilibrado"]} x ${labels[match.awayStyle ?? "equilibrado"]} · forca ${Math.round(match.homeStrength ?? 80)} x ${Math.round(match.awayStrength ?? 80)}`;
 }
 
 function scorerWeight(position: string) {

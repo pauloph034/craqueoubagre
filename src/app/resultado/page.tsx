@@ -31,12 +31,12 @@ export default function ResultPage() {
   }));
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
-      <section className="rounded-lg border border-white/12 bg-white/[0.07] p-6 shadow-card">
+    <main className="mx-auto max-w-5xl px-4 py-7">
+      <section className="border-b border-white/[0.09] pb-5">
         <p className="text-sm uppercase text-gold">Resultado final</p>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-5xl font-black">{summary.champion ? "Campeao" : summary.stageReached}</h1>
+            <h1 className="text-4xl font-black">{summary.champion ? "Campeao" : summary.stageReached}</h1>
             <p className="mt-2 text-slate-300">{summary.config.userName} comandou o {displayTeamName}</p>
             {summary.champion && <p className="mt-2 text-xl font-black text-gold">Seu clube levantou a Liga dos Craques.</p>}
             {!summary.champion && summary.tournamentChampion && (
@@ -45,13 +45,13 @@ export default function ResultPage() {
               </p>
             )}
           </div>
-          <div className="rounded-md border border-gold/30 bg-gold/10 px-5 py-4 text-center">
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Tacas da Liga</p>
+          <div className="border-l border-gold/30 px-5 py-2 text-center">
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Taças da Liga</p>
             <p className="font-mono text-5xl font-black text-white">{stats.trophies}</p>
           </div>
         </div>
 
-        <div className="mt-6 grid gap-3 md:grid-cols-4">
+        <div className="mt-6 grid grid-cols-2 gap-px overflow-hidden border border-white/[0.08] bg-white/[0.08] md:grid-cols-4">
           <Metric label="Campanha" value={`${stats.wins}V ${stats.draws}E ${stats.losses}D`} />
           <Metric label="Gols marcados" value={stats.goalsFor} />
           <Metric label="Gols sofridos" value={stats.goalsAgainst} />
@@ -61,7 +61,7 @@ export default function ResultPage() {
           <Metric label="Melhor jogador" value={summary.matches.at(-1)?.bestPlayer ?? "Craque ou Bagre"} />
         </div>
 
-        <div className="mt-6 rounded-lg border border-white/10 bg-night/70 p-5">
+        <div className="mt-5 border-t border-white/[0.08] pt-4">
           <h2 className="text-xl font-black">Galeria do clube</h2>
           <p className="mt-2 text-slate-300">
             {displayTeamName} tem {stats.trophies} taca(s) da Liga dos Craques no perfil de {summary.config.userName}.
@@ -84,12 +84,12 @@ export default function ResultPage() {
         </div>
       </section>
 
-      <section className="mt-6 grid gap-3 md:grid-cols-3">
-        {unlocked.map((item) => <article key={item.id} className="rounded-lg border border-white/12 bg-white/[0.06] p-4"><h3 className="font-black text-gold">{item.name}</h3><p className="mt-1 text-sm text-slate-300">{item.description}</p></article>)}
+      <section className="mt-5 grid gap-px overflow-hidden border border-white/[0.08] bg-white/[0.08] md:grid-cols-3">
+        {unlocked.map((item) => <article key={item.id} className="bg-night/90 p-4"><h3 className="font-black text-gold">{item.name}</h3><p className="mt-1 text-sm text-slate-300">{item.description}</p></article>)}
       </section>
 
       {displayBracket && displayBracket.length > 0 && (
-        <KnockoutBracket bracket={displayBracket} champion={displayTournamentChampion} />
+        <KnockoutBracket bracket={displayBracket} champion={displayTournamentChampion} customTeamName={displayTeamName} emblemId={currentUser?.emblemId} />
       )}
 
       <section className="mt-6 rounded-lg border border-white/12 bg-white/[0.06] p-5 shadow-card">
@@ -117,7 +117,7 @@ export default function ResultPage() {
   );
 }
 
-function KnockoutBracket({ bracket, champion }: { bracket: BracketMatch[]; champion?: string }) {
+function KnockoutBracket({ bracket, champion, customTeamName, emblemId }: { bracket: BracketMatch[]; champion?: string; customTeamName: string; emblemId?: string }) {
   const phases = [
     { name: "Oitavas de final", label: "Oitavas" },
     { name: "Quartas de final", label: "Quartas" },
@@ -134,7 +134,7 @@ function KnockoutBracket({ bracket, champion }: { bracket: BracketMatch[]; champ
         {champion && (
           <div className="rounded-lg border border-gold/35 bg-gold/10 px-4 py-3 shadow-[0_0_24px_rgba(248,198,48,.12)]">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gold">Campeao</p>
-            <p className="max-w-[220px] truncate font-black"><TeamNameWithCrest name={champion} size="sm" /></p>
+            <p className="max-w-[220px] truncate font-black"><TeamNameWithCrest name={champion} emblemId={champion === customTeamName ? emblemId : undefined} size="sm" showUnknown /></p>
           </div>
         )}
       </div>
@@ -146,7 +146,7 @@ function KnockoutBracket({ bracket, champion }: { bracket: BracketMatch[]; champ
               <div className="grid min-h-[650px]" style={{ gridTemplateRows: "repeat(16, minmax(0, 1fr))" }}>
                 {bracket.filter((match) => match.phase === phase.name).map((match, index) => (
                   <div key={match.id} style={{ gridRow: `${bracketRowStart(phase.name, index)} / span 2` }}>
-                    <FinalBracketMatch match={match} />
+                    <FinalBracketMatch match={match} customTeamName={customTeamName} emblemId={emblemId} />
                   </div>
                 ))}
               </div>
@@ -165,15 +165,15 @@ function bracketRowStart(phase: string, index: number) {
   return 8;
 }
 
-function FinalBracketMatch({ match }: { match: BracketMatch }) {
+function FinalBracketMatch({ match, customTeamName, emblemId }: { match: BracketMatch; customTeamName: string; emblemId?: string }) {
   return (
     <article className="rounded-md border border-emerald-300/14 bg-white/[0.055] px-3 py-2 text-sm shadow-[0_0_18px_rgba(17,255,184,.08)]">
       <div className={`grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2 border-b border-white/10 pb-1.5 ${match.winnerName === match.homeName ? "text-white" : "text-slate-400"}`}>
-        <TeamNameWithCrest name={match.homeName} size="sm" textClassName="font-black" />
+        <TeamNameWithCrest name={match.homeName} emblemId={match.homeName === customTeamName ? emblemId : undefined} size="sm" textClassName="font-black" showUnknown />
         <span className="text-right font-mono font-black text-gold">{match.homeGoals}</span>
       </div>
       <div className={`grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2 pt-1.5 ${match.winnerName === match.awayName ? "text-white" : "text-slate-400"}`}>
-        <TeamNameWithCrest name={match.awayName} size="sm" textClassName="font-black" />
+        <TeamNameWithCrest name={match.awayName} emblemId={match.awayName === customTeamName ? emblemId : undefined} size="sm" textClassName="font-black" showUnknown />
         <span className="text-right font-mono font-black text-gold">{match.awayGoals}</span>
       </div>
     </article>
@@ -218,5 +218,5 @@ function displayTeamAlias(name: string | undefined, storedTeamName: string, disp
 }
 
 function Metric({ label, value }: { label: string; value: string | number }) {
-  return <div className="rounded bg-night/75 p-4"><p className="break-words text-2xl font-black">{value}</p><p className="text-sm text-slate-400">{label}</p></div>;
+  return <div className="bg-night/90 p-4"><p className="break-words text-xl font-black">{value}</p><p className="mt-1 text-xs text-slate-400">{label}</p></div>;
 }

@@ -7,6 +7,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Craque ou Bagre",
   description: "Monte um time histórico com jogadores de diferentes clubes e temporadas, dispute sete partidas e tente conquistar a campanha perfeita.",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg"
+  },
   manifest: "/manifest.webmanifest",
   openGraph: {
     title: "Craque ou Bagre",

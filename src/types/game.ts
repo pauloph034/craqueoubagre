@@ -147,6 +147,14 @@ export type MatchResult = {
     opponentCorners: number;
   };
   bestPlayer: string;
+  tacticalContext?: {
+    userStyle: TacticalStyle;
+    opponentStyle: TacticalStyle;
+    userStrength: number;
+    opponentStrength: number;
+    tacticalAdjustment: number;
+    summary: string;
+  };
 };
 
 export type BracketMatch = {
@@ -198,9 +206,32 @@ export type UserAccount = {
   username: string;
   playerName?: string;
   teamName?: string;
+  emblemId?: string;
   password: string;
   role: "admin" | "player";
   createdAt: string;
+};
+
+export type PlayerProgression = {
+  xp: number;
+  level: number;
+  levelName: string;
+  nextLevelXp: number;
+  trophies: number;
+  campaigns: number;
+  matches: number;
+  wins: number;
+  goalsFor: number;
+  winRate: number;
+  competitiveRating: number;
+};
+
+export type RankingEntry = {
+  username: string;
+  playerName: string;
+  teamName: string;
+  emblemId?: string;
+  progression: PlayerProgression;
 };
 
 export type SiteMetrics = {

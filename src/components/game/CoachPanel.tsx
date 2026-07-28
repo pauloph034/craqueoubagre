@@ -14,32 +14,32 @@ export function CoachPanel() {
   const hasOptions = options.length > 0;
 
   return (
-    <section className="rounded-lg border border-white/12 bg-white/[0.07] p-6 shadow-card">
+    <section className="border border-sky-300/12 bg-black/30 p-4 sm:p-5">
       <p className="text-sm font-black uppercase tracking-[0.2em] text-gold">Ultima escolha</p>
-      <h1 className="mt-2 text-3xl font-black">Escolha o tecnico</h1>
+      <h1 className="mt-1 text-2xl font-black">Escolha o tecnico</h1>
       <p className="mt-2 text-slate-300">Sorteie uma vez e escolha 1 entre 3 tecnicos historicos.</p>
 
       {hasOptions ? (
-        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+        <div className="mt-5 grid gap-3 lg:grid-cols-3">
           {options.map((coach) => (
-            <article key={coach.id} className="flex min-h-[278px] flex-col rounded-lg border border-gold/25 bg-night/70 p-5 shadow-card">
+            <article key={coach.id} className="flex min-h-[250px] flex-col border border-white/[0.09] bg-white/[0.025] p-4 transition hover:border-gold/35">
               <div className="flex items-center justify-between gap-4">
                 <TeamCrest src={getFootballTeamByName(coach.clubName)?.logo} teamName={coach.clubName} pixelSize={44} />
-                <div className="grid h-12 min-w-12 shrink-0 place-items-center rounded-xl border border-gold/45 bg-gold/15 px-3 font-mono text-xl font-black text-gold">{coach.rating}</div>
+                <div className="grid h-10 min-w-10 shrink-0 place-items-center border border-gold/35 bg-gold/10 px-2 font-mono text-lg font-black text-gold">{coach.rating}</div>
               </div>
               <div className="mt-4 min-w-0">
-                <h2 className="text-2xl font-black leading-tight text-white">{coach.name}</h2>
+                <h2 className="text-xl font-black leading-tight text-white">{coach.name}</h2>
                 <p className="mt-2 text-sm leading-relaxed text-slate-300">{coach.clubName} {coach.season}</p>
               </div>
               <p className="mt-4 text-sm leading-relaxed text-slate-300">{coach.description}</p>
-              <Button className="mt-auto w-full" onClick={() => confirmCoach(coach.id)}>
+              <Button className="mt-auto min-h-11 w-full" onClick={() => confirmCoach(coach.id)}>
                 <UserCheck size={18} /> Escolher tecnico
               </Button>
             </article>
           ))}
         </div>
       ) : (
-        <div className="mt-5 rounded-md border border-dashed border-white/15 p-5 text-slate-300">
+        <div className="mt-5 border border-dashed border-white/15 p-5 text-slate-300">
           Nenhum tecnico sorteado ainda.
         </div>
       )}

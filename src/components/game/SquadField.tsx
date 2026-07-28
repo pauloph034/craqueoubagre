@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { calculatePositionFit } from "@/game-engine/position-fit";
 import { positionLabel } from "@/game-engine/position-labels";
 
-export function SquadField() {
+export function SquadField({ showMetrics = true }: { showMetrics?: boolean }) {
   const formation = useGameStore((state) => state.config.formation);
   const tacticalStyle = useGameStore((state) => state.config.tacticalStyle);
   const squad = useGameStore((state) => state.squad);
@@ -23,8 +23,8 @@ export function SquadField() {
   const ratingValue = hidden && squad.length < 11 ? "--" : metrics.rating;
   const slots = getFormationSlots(formation, tacticalStyle);
   return (
-    <section className="rounded-lg border border-white/12 bg-emerald-950/35 p-3 shadow-card">
-      <div className="mb-3 rounded-md border border-white/10 bg-night/65 px-4 py-3 shadow-glow">
+    <section className="border border-sky-300/18 bg-black/45 p-3 shadow-[0_14px_34px_rgba(0,0,0,.22)]">
+      {showMetrics && <div className="mb-3 border border-white/10 bg-night/80 px-4 py-3">
         <div className="grid items-center gap-4 sm:grid-cols-[auto_1fr_auto]">
           <div className="flex items-baseline gap-3">
             <span className="text-[10px] font-black uppercase tracking-[0.22em] text-gold">Rating</span>
@@ -39,13 +39,13 @@ export function SquadField() {
               <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-electric to-gold transition-all" style={{ width: `${metrics.chemistry}%` }} />
             </div>
           </div>
-          <div className="flex items-center justify-between gap-3 rounded-full border border-electric/25 bg-electric/10 px-3 py-2">
+          <div className="flex items-center justify-between gap-3 border border-electric/25 bg-electric/10 px-3 py-2">
             <span className="text-[10px] font-black uppercase tracking-[0.18em] text-electric">Elenco</span>
             <span className="font-mono text-xl font-black text-white">{squad.length}<span className="text-sm text-slate-400">/11</span></span>
           </div>
         </div>
-      </div>
-      <div className="relative mx-auto aspect-[7/10] max-h-[720px] min-h-[520px] overflow-hidden rounded-2xl border border-white/20 field-lines">
+      </div>}
+      <div className="relative mx-auto aspect-[7/10] max-h-[720px] min-h-[410px] overflow-hidden border border-sky-300/22 field-lines sm:min-h-[520px]">
         <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/20" />
         {slots.map((slot) => {
           const pick = squad.find((item) => item.slotId === slot.id);
@@ -59,7 +59,7 @@ export function SquadField() {
               type="button"
               className={cn(
                 "absolute -translate-x-1/2 -translate-y-1/2 border text-center text-[11px] font-bold shadow-card transition",
-                pick ? "grid h-[4.5rem] w-[4.5rem] place-items-center rounded-full border-electric bg-night/95 px-2 text-white ring-1 ring-electric/35" : "grid h-12 w-16 place-items-center rounded-md border-dashed border-white/40 bg-white/10 px-2 text-slate-200",
+                pick ? "grid h-[4.7rem] w-[4.7rem] place-items-center rounded-full border-electric bg-night/95 px-2 text-white ring-1 ring-electric/45" : "grid h-12 w-16 place-items-center rounded-sm border-dashed border-white/38 bg-white/[0.08] px-2 text-slate-200",
                 canPlacePending && "border-gold bg-gold/20 text-white ring-2 ring-gold hover:bg-gold/30",
                 pendingPlayer && !canPlacePending && !pick && "opacity-35",
                 selectedSlotId === slot.id && "ring-2 ring-gold"

@@ -1,5 +1,7 @@
 import { normalizeFriendRoom, normalizeFriendRooms, type FriendRoom, type RoomMatch, type RoomPlayer, type RoomStatus } from "@/lib/friend-rooms";
 import { hasSupabaseConfig, listSharedFriendRooms, saveSharedFriendRooms } from "@/server/db";
+import { validatePublicName } from "@/server/name-policy";
+import { getCurrentUser } from "@/server/session";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -52,11 +54,14 @@ function mergeRoomState(incoming: FriendRoom, current: FriendRoom) {
     incoming.bracket.length === 0 &&
     incoming.players.every((player) => player.squad.length === 0) &&
     Date.parse(incoming.createdAt) >= Date.parse(current.createdAt);
-  if (incomingReset) return normalizeFriendRoom(incoming);
+  if (incomingReset) return normalizeFriendRoom({ ...incoming, revision: Math.max(incoming.revision ?? 0, current.revision ?? 0) + 1 });
 
   const incomingRank = statusRank(incoming.status);
   const currentRank = statusRank(current.status);
-  const base = incomingRank >= currentRank ? incoming : current;
+  const incomingRevision = incoming.revision ?? 0;
+  const currentRevision = current.revision ?? 0;
+  const incomingIsCurrent = incomingRevision >= currentRevision;
+  const base = incomingIsCurrent && incomingRank >= currentRank ? incoming : current;
   const status = incoming.status === "finished" || current.status === "finished" ? "finished" : incomingRank >= currentRank ? incoming.status : current.status;
   return normalizeFriendRoom({
     ...base,
@@ -76,6 +81,7 @@ function mergeRoomState(incoming: FriendRoom, current: FriendRoom) {
     bracket: mergeMatches(incoming.bracket, current.bracket),
     bracketRound: Math.max(incoming.bracketRound ?? 0, current.bracketRound ?? 0),
     champion: incoming.champion ?? current.champion,
+    revision: Math.max(incomingRevision, currentRevision) + 1,
     updatedAt: latestDate(incoming.updatedAt || incoming.createdAt, current.updatedAt || current.createdAt)
   });
 }
@@ -136,9 +142,24 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return Response.json({ error: "Nao autenticado." }, { status: 401 });
   const current = await readRooms();
   const payload = (await request.json().catch(() => ({}))) as { rooms?: FriendRoom[] };
-  const rooms = mergeRooms(Array.isArray(payload.rooms) ? payload.rooms : [], current);
+  const playerName = currentUser.playerName?.trim() || currentUser.username;
+  const teamName = currentUser.teamName?.trim() || `${playerName} FC`;
+  const incomingRooms = (Array.isArray(payload.rooms) ? payload.rooms : []).map((room) => {
+    const participant = room.players.some((player) =>
+      player.userName.trim().toLowerCase() === playerName.toLowerCase() &&
+      player.teamName.trim().toLowerCase() === teamName.toLowerCase()
+    );
+    const saved = current.find((item) => item.id === room.id);
+    if (!participant) return saved;
+    const namesAllowed = validatePublicName(room.name).allowed &&
+      room.players.every((player) => validatePublicName(player.userName).allowed && validatePublicName(player.teamName).allowed);
+    return namesAllowed ? room : saved;
+  }).filter((room): room is FriendRoom => Boolean(room));
+  const rooms = mergeRooms(incomingRooms, current);
   await writeRooms(rooms);
   return Response.json({ rooms });
 }

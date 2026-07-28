@@ -3,6 +3,7 @@ import { clubSeasons, players } from "@/data/loaders";
 import { getFormationSlots } from "@/config/formations";
 import { calculatePositionFit } from "@/game-engine/position-fit";
 import { createRng } from "@/game-engine/rng";
+import { inferredOpponentStyle, tacticalMatchup } from "@/game-engine/tactics";
 import { safeLoad, safeSave } from "@/lib/storage";
 import type { Coach, Position, TacticalStyle } from "@/types/game";
 
@@ -48,6 +49,7 @@ export type RoomPlayer = {
   id: string;
   userName: string;
   teamName: string;
+  emblemId?: string;
   isBot?: boolean;
   formation: string;
   tacticalStyle: TacticalStyle;
@@ -64,6 +66,8 @@ export type RoomMatch = {
   awayPlayerId?: string;
   homeStrength?: number;
   awayStrength?: number;
+  homeStyle?: TacticalStyle;
+  awayStyle?: TacticalStyle;
   homeGoals?: number;
   awayGoals?: number;
   winnerName?: string;
@@ -83,6 +87,7 @@ export type FriendRoom = {
   status: RoomStatus;
   createdAt: string;
   updatedAt?: string;
+  revision: number;
   lastSeenAt?: Record<string, number>;
   players: RoomPlayer[];
   turnIndex: number;
@@ -105,6 +110,7 @@ export type CreateRoomInput = {
   name: string;
   hostName: string;
   hostTeamName: string;
+  hostEmblemId?: string;
   visibility: RoomVisibility;
   password?: string;
   difficulty: "classico" | "almanaque";
@@ -135,7 +141,7 @@ export function normalizeFriendRooms(rooms: FriendRoom[]) {
 
 export function createFriendRoom(input: CreateRoomInput): FriendRoom {
   const id = `sala-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-  const hostPlayer = createRoomPlayer(input.hostName, input.hostTeamName);
+  const hostPlayer = createRoomPlayer(input.hostName, input.hostTeamName, false, input.hostEmblemId);
   return {
     id,
     name: input.name.trim() || "Final de Copa",
@@ -149,6 +155,7 @@ export function createFriendRoom(input: CreateRoomInput): FriendRoom {
     status: "lobby",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    revision: 0,
     lastSeenAt: { [hostPlayer.id]: Date.now() },
     players: [hostPlayer],
     turnIndex: 0,
@@ -165,13 +172,14 @@ export function createFriendRoom(input: CreateRoomInput): FriendRoom {
   };
 }
 
-export function createRoomPlayer(userName: string, teamName?: string, isBot = false): RoomPlayer {
+export function createRoomPlayer(userName: string, teamName?: string, isBot = false, emblemId?: string): RoomPlayer {
   const cleanUser = userName.trim() || "Jogador";
   const cleanTeam = teamName?.trim() || `${cleanUser} FC`;
   return {
     id: `${isBot ? "bot" : "player"}-${cleanUser.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Math.random().toString(36).slice(2, 6)}`,
     userName: cleanUser,
     teamName: cleanTeam,
+    emblemId,
     isBot,
     formation: defaultFormation,
     tacticalStyle: defaultTacticalStyle,
@@ -506,10 +514,10 @@ export function addRoomBot(room: FriendRoom) {
   return normalizeRoom(room);
 }
 
-export function joinRoom(room: FriendRoom, userName: string, teamName: string) {
+export function joinRoom(room: FriendRoom, userName: string, teamName: string, emblemId?: string) {
   if (room.status !== "lobby") return room;
   if (room.players.some((player) => player.userName.toLowerCase() === userName.trim().toLowerCase())) return room;
-  const player = createRoomPlayer(userName, teamName);
+  const player = createRoomPlayer(userName, teamName, false, emblemId);
   return {
     ...room,
     updatedAt: new Date().toISOString(),
@@ -680,6 +688,7 @@ type RoomEntrant = {
   name: string;
   playerId?: string;
   strength?: number;
+  style?: TacticalStyle;
 };
 
 export function playPlayerRoomMatch(room: FriendRoom, playerId: string) {
@@ -735,7 +744,7 @@ function createInitialRoomBracket(room: FriendRoom): FriendRoom {
   const rng = createRng(`${room.id}-bracket-${realPlayers.map((player) => player.teamName).join("|")}`);
   const entrants: RoomEntrant[] = uniqueNames(realPlayers.map((player) => player.teamName)).map((teamName) => {
     const player = realPlayers.find((item) => sameName(item.teamName, teamName));
-    return { name: teamName, playerId: player?.id, strength: player ? roomPlayerStrength(room, player) : undefined };
+    return { name: teamName, playerId: player?.id, strength: player ? roomPlayerStrength(room, player) : undefined, style: player?.tacticalStyle };
   });
   for (const historicTeam of randomHistoricTeams(room.id)) {
     if (entrants.length >= maxEntrants) break;
@@ -802,6 +811,8 @@ function createRoundMatches(phase: string, entrants: RoomEntrant[], roundIndex: 
       awayPlayerId: away.playerId,
       homeStrength: home.strength,
       awayStrength: away.strength,
+      homeStyle: home.style ?? inferredOpponentStyle(home.name),
+      awayStyle: away.style ?? inferredOpponentStyle(away.name),
       status: "pending"
     });
   }
@@ -822,11 +833,18 @@ function simulateSingleRoomMatch(match: RoomMatch, seed: string): RoomMatch {
   const rng = createRng(seed);
   const homeStrength = match.homeStrength ?? (match.homePlayerId ? 84 : 80);
   const awayStrength = match.awayStrength ?? (match.awayPlayerId ? 84 : 80);
+  const homeStyle = match.homeStyle ?? inferredOpponentStyle(match.homeName);
+  const awayStyle = match.awayStyle ?? inferredOpponentStyle(match.awayName);
+  const tactical = tacticalMatchup(homeStyle, awayStyle);
   const homeAdvantage = 1.5;
-  const homeExpected = expectedGoals(homeStrength + homeAdvantage, awayStrength);
-  const awayExpected = expectedGoals(awayStrength, homeStrength + homeAdvantage);
+  const effectiveHomeStrength = homeStrength + homeAdvantage + tactical.adjustment;
+  const effectiveAwayStrength = awayStrength;
+  const strengthGap = effectiveHomeStrength - effectiveAwayStrength;
+  const homeExpected = expectedGoals(effectiveHomeStrength, effectiveAwayStrength);
+  const awayExpected = expectedGoals(effectiveAwayStrength, effectiveHomeStrength);
   let homeGoals = roomPoisson(rng, homeExpected);
   let awayGoals = roomPoisson(rng, awayExpected);
+  ({ homeGoals, awayGoals } = protectRoomFavorite(homeGoals, awayGoals, strengthGap));
   if (homeGoals === awayGoals) {
     const homeTieBreakChance = Math.max(0.18, Math.min(0.82, 0.5 + ((homeStrength + homeAdvantage) - awayStrength) / 55));
     if (rng.next() < homeTieBreakChance) homeGoals += 1;
@@ -836,6 +854,8 @@ function simulateSingleRoomMatch(match: RoomMatch, seed: string): RoomMatch {
     ...match,
     homeStrength: Math.round(homeStrength * 10) / 10,
     awayStrength: Math.round(awayStrength * 10) / 10,
+    homeStyle,
+    awayStyle,
     homeGoals,
     awayGoals,
     winnerName: homeGoals > awayGoals ? match.homeName : match.awayName,
@@ -844,8 +864,8 @@ function simulateSingleRoomMatch(match: RoomMatch, seed: string): RoomMatch {
 }
 
 function winnerEntrant(match: RoomMatch): RoomEntrant {
-  if (match.winnerName === match.homeName) return { name: match.homeName, playerId: match.homePlayerId, strength: match.homeStrength };
-  return { name: match.awayName, playerId: match.awayPlayerId, strength: match.awayStrength };
+  if (match.winnerName === match.homeName) return { name: match.homeName, playerId: match.homePlayerId, strength: match.homeStrength, style: match.homeStyle };
+  return { name: match.awayName, playerId: match.awayPlayerId, strength: match.awayStrength, style: match.awayStyle };
 }
 
 function randomHistoricTeams(seed: string) {
@@ -853,7 +873,8 @@ function randomHistoricTeams(seed: string) {
   const entrants = clubSeasons
     .map((season) => ({
       name: teamSeasonLabel(season.clubName, season.season),
-      strength: historicSeasonStrength(season.id)
+      strength: historicSeasonStrength(season.id),
+      style: inferredOpponentStyle(season.id)
     }))
     .filter((entrant) => {
       if (seen.has(entrant.name)) return false;
@@ -866,6 +887,14 @@ function randomHistoricTeams(seed: string) {
 function expectedGoals(attackStrength: number, defenseStrength: number) {
   const gap = attackStrength - defenseStrength;
   return Math.max(0.35, Math.min(3.25, 1.35 + gap / 22));
+}
+
+function protectRoomFavorite(homeGoals: number, awayGoals: number, strengthGap: number) {
+  if (strengthGap >= 18 && homeGoals <= awayGoals) return { homeGoals: awayGoals + 1, awayGoals };
+  if (strengthGap >= 14 && homeGoals < awayGoals) return { homeGoals: awayGoals, awayGoals };
+  if (strengthGap <= -18 && awayGoals <= homeGoals) return { homeGoals, awayGoals: homeGoals + 1 };
+  if (strengthGap <= -14 && awayGoals < homeGoals) return { homeGoals, awayGoals: homeGoals };
+  return { homeGoals, awayGoals };
 }
 
 function roomPoisson(rng: ReturnType<typeof createRng>, lambda: number) {
@@ -932,6 +961,7 @@ export function normalizeFriendRoom(room: FriendRoom): FriendRoom {
     status,
     createdAt: room.createdAt || new Date().toISOString(),
     updatedAt: room.updatedAt || room.createdAt || new Date().toISOString(),
+    revision: Math.max(0, Number.isFinite(room.revision) ? room.revision : 0),
     lastSeenAt: normalizePresenceMap(room.lastSeenAt, players),
     players,
     turnIndex: Math.min(room.turnIndex ?? 0, Math.max(0, players.length - 1)),
@@ -959,6 +989,7 @@ function normalizePlayer(player: RoomPlayer): RoomPlayer {
     id: player.id || createRoomPlayer(cleanUser, cleanTeam).id,
     userName: cleanUser,
     teamName: cleanTeam,
+    emblemId: player.emblemId,
     formation: player.formation || defaultFormation,
     tacticalStyle: player.tacticalStyle || defaultTacticalStyle,
     squad: (player.squad ?? []).map(normalizePick),

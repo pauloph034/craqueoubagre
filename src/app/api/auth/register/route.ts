@@ -1,23 +1,32 @@
 import { createStoredUser, ensureAdminUser, getStoredUser, sanitizeUser } from "@/server/db";
 import { hashPassword } from "@/server/password";
+import { validatePublicName } from "@/server/name-policy";
 import { setSession } from "@/server/session";
 import { cleanText, cleanUsername, isStrongEnoughPassword, isValidUsername } from "@/server/validation";
+import { isValidEmblemId } from "@/data/team-emblems";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
   await ensureAdminUser();
-  const body = (await request.json().catch(() => ({}))) as { username?: string; password?: string; teamName?: string };
+  const body = (await request.json().catch(() => ({}))) as { username?: string; password?: string; teamName?: string; emblemId?: string };
   const username = cleanUsername(body.username);
   const teamName = cleanText(body.teamName, 48);
   const password = String(body.password ?? "");
-  if (!isValidUsername(username) || teamName.length < 3 || !isStrongEnoughPassword(password)) {
-    return NextResponse.json({ error: "Use usuario valido, nome do time e senha com pelo menos 6 caracteres." }, { status: 400 });
+  const emblemId = String(body.emblemId ?? "");
+  const usernamePolicy = validatePublicName(username);
+  const teamNamePolicy = validatePublicName(teamName);
+  if (!isValidUsername(username) || teamName.length < 3 || !isStrongEnoughPassword(password) || !isValidEmblemId(emblemId)) {
+    return NextResponse.json({ error: "Use usuario valido, nome do time, escudo e senha com pelo menos 6 caracteres." }, { status: 400 });
+  }
+  if (!usernamePolicy.allowed || !teamNamePolicy.allowed) {
+    return NextResponse.json({ error: !usernamePolicy.allowed ? usernamePolicy.reason : teamNamePolicy.reason }, { status: 400 });
   }
   if (await getStoredUser(username)) return NextResponse.json({ error: "Usuario ja existe." }, { status: 409 });
   const user = await createStoredUser({
     username,
     playerName: username,
     teamName,
+    emblemId,
     passwordHash: hashPassword(password),
     role: "player",
     createdAt: new Date().toISOString()

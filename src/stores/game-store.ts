@@ -87,9 +87,9 @@ type GameState = {
   reset: () => void;
   loadActiveCampaign: () => void;
   loadAccount: () => Promise<void>;
-  register: (username: string, password: string, teamName: string) => Promise<boolean>;
+  register: (username: string, password: string, teamName: string, emblemId: string) => Promise<boolean>;
   login: (username: string, password: string) => Promise<boolean>;
-  updateProfile: (values: { playerName: string; teamName: string }) => Promise<boolean>;
+  updateProfile: (values: { playerName: string; teamName: string; emblemId: string }) => Promise<boolean>;
   logout: () => Promise<void>;
   adminResetPassword: (username: string) => Promise<string | undefined>;
   adminDeleteUser: (username: string) => Promise<boolean>;
@@ -542,9 +542,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({ users: [], currentUser: undefined, authError: error instanceof Error ? error.message : "Sessao indisponivel." });
     }
   },
-  register: async (username, password, teamName) => {
+  register: async (username, password, teamName, emblemId) => {
     try {
-      const data = await apiRequest<ApiUserResponse>("/api/auth/register", { method: "POST", body: JSON.stringify({ username, password, teamName }) });
+      const data = await apiRequest<ApiUserResponse>("/api/auth/register", { method: "POST", body: JSON.stringify({ username, password, teamName, emblemId }) });
       const user = data.user ? normalizeAccount(data.user) : undefined;
       if (!user) throw new Error("Cadastro indisponivel.");
       set((state) => ({ currentUser: user, users: [], authError: undefined, config: { ...state.config, userName: user.username, teamName: accountTeamName(user) } }));
@@ -567,9 +567,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       return false;
     }
   },
-  updateProfile: async ({ playerName, teamName }) => {
+  updateProfile: async ({ playerName, teamName, emblemId }) => {
     try {
-      const data = await apiRequest<ApiUserResponse>("/api/auth/profile", { method: "PATCH", body: JSON.stringify({ playerName, teamName }) });
+      const data = await apiRequest<ApiUserResponse>("/api/auth/profile", { method: "PATCH", body: JSON.stringify({ playerName, teamName, emblemId }) });
       const user = data.user ? normalizeAccount(data.user) : undefined;
       if (!user) throw new Error("Perfil indisponivel.");
       set((state) => ({

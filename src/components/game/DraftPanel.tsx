@@ -44,12 +44,12 @@ export function DraftPanel() {
 
   if (canConfirm) {
     return (
-      <aside className="space-y-4">
-        <div className="rounded-2xl border border-gold/30 bg-gold/10 p-5 shadow-card">
+      <aside className="space-y-3">
+        <div className="border border-gold/30 bg-black/25 p-4">
           <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">Elenco completo</p>
           <p className="mt-2 text-sm text-slate-200">Os 11 jogadores ja foram escolhidos. Agora escolha o tecnico para iniciar a campanha.</p>
         </div>
-        <Button className="w-full" onClick={state.confirmSquad}>
+        <Button className="min-h-14 w-full text-base" onClick={state.confirmSquad}>
           Escolher tecnico
         </Button>
       </aside>
@@ -57,27 +57,22 @@ export function DraftPanel() {
   }
 
   return (
-    <aside className="space-y-4 xl:sticky xl:top-20 xl:max-h-[calc(100vh-6rem)] xl:overflow-hidden">
-      <div className="rounded-2xl border border-white/12 bg-white/[0.06] p-4 shadow-card">
-        <div className="grid gap-3">
-          <div className="flex items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
-            <span>{state.config.formation}</span>
-            <span>{state.config.difficulty}</span>
-          </div>
-          <div className="flex items-center justify-between gap-3 rounded border border-white/10 bg-night/60 px-3 py-2 text-xs text-slate-300">
-            <span>Rerolls: <strong className="text-white">{state.rerollsLeft}</strong></span>
-            <span>Trocas: <strong className="text-white">{state.swapsLeft}</strong></span>
-          </div>
-          <Button className="w-full" onClick={() => runDrawAnimation(() => (state.currentDraw ? state.reroll() : state.drawForSlot()))} disabled={isDrawing || Boolean(state.currentDraw && state.rerollsLeft <= 0)}>
+    <aside className="space-y-3 xl:sticky xl:top-16 xl:max-h-[calc(100vh-5rem)] xl:overflow-hidden">
+      <div className="border border-sky-300/12 bg-black/30 p-2.5">
+        <div className="flex items-center gap-3">
+          <span className="whitespace-nowrap px-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+            {state.rerollsLeft} rerolls
+          </span>
+          <Button className="min-h-10 flex-1 text-xs" onClick={() => runDrawAnimation(() => (state.currentDraw ? state.reroll() : state.drawForSlot()))} disabled={isDrawing || Boolean(state.currentDraw && state.rerollsLeft <= 0)}>
             <Dices size={18} /> Sortear time
           </Button>
         </div>
       </div>
 
       {isDrawing && rollingClub ? (
-        <div className="overflow-hidden rounded-lg border border-gold/40 bg-white/[0.07] shadow-card">
+        <div className="overflow-hidden border border-gold/30 bg-black/45">
           <div
-            className="flex min-h-32 items-center gap-4 border-b border-white/10 p-4"
+            className="flex min-h-28 items-center gap-4 border-b border-white/[0.08] p-4"
             style={{
               background: `linear-gradient(135deg, ${rollingClub.primaryColor}44, rgba(7, 24, 50, .9) 48%, ${rollingClub.secondaryColor}30)`
             }}
@@ -91,34 +86,32 @@ export function DraftPanel() {
           </div>
         </div>
       ) : state.currentDraw ? (
-        <div className="overflow-hidden rounded-2xl border border-white/12 bg-white/[0.07] shadow-card">
+        <div className="overflow-hidden border border-sky-300/12 bg-black/30">
           <div
             className="flex items-center gap-4 border-b border-white/10 p-4"
-            style={{
-              background: `linear-gradient(135deg, ${state.currentDraw.clubSeason.primaryColor}33, rgba(7, 24, 50, .86) 48%, ${state.currentDraw.clubSeason.secondaryColor}24)`
-            }}
+            style={{ background: "linear-gradient(90deg, rgba(3,14,31,.98), rgba(6,24,47,.88))" }}
           >
-            <GenericBadge club={state.currentDraw.clubSeason} size={76} />
-            <div>
-              <p className="text-xs uppercase text-gold">{state.currentDraw.clubSeason.rarity}</p>
-              <h3 className="text-xl font-black">{state.currentDraw.clubSeason.clubName} {state.currentDraw.clubSeason.season}</h3>
-              <p className="text-sm text-slate-300">{state.currentDraw.clubSeason.competitionStage} - {state.currentDraw.clubSeason.country}</p>
+            <GenericBadge club={state.currentDraw.clubSeason} size={64} />
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gold">{state.currentDraw.clubSeason.rarity}</p>
+              <h3 className="truncate text-lg font-black text-white">{state.currentDraw.clubSeason.clubName} {state.currentDraw.clubSeason.season}</h3>
+              <p className="truncate text-xs text-slate-400">{state.currentDraw.clubSeason.competitionStage} - {state.currentDraw.clubSeason.country}</p>
             </div>
           </div>
-          <p className="px-4 pt-3 text-sm text-mint">
+          <p className="px-4 pt-3 text-xs font-semibold text-mint">
             {state.currentDraw.options.length} jogadores disponiveis
           </p>
           {pendingPlayer && (
-            <div className="mx-4 mt-4 rounded-md border border-gold/30 bg-gold/10 px-4 py-3">
+            <div className="mx-4 mt-4 border border-gold/35 bg-gold/10 px-4 py-3">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-gold">Selecionado</p>
               <p className="mt-1 truncate text-lg font-black text-white">{pendingPlayer.name}</p>
             </div>
           )}
-          <div className="m-4 rounded-2xl border border-emerald-400/25 bg-emerald-950/25">
-            <div className="border-b border-emerald-400/20 px-4 py-3">
+          <div className="m-3 border-y border-sky-300/15 bg-transparent">
+            <div className="border-b border-emerald-400/15 px-3 py-2">
               <p className="text-xs font-black uppercase tracking-[0.24em] text-emerald-300">Elenco</p>
             </div>
-            <div className="game-scrollbar max-h-[min(430px,calc(100vh-25rem))] overflow-y-auto">
+            <div className="game-scrollbar max-h-[min(440px,calc(100vh-23rem))] overflow-y-auto">
               {state.currentDraw.roster
                 .slice()
                 .sort((a, b) => Number(!state.currentDraw!.options.some((p) => p.id === a.id)) - Number(!state.currentDraw!.options.some((p) => p.id === b.id)) || positionOrder(a.primaryPosition) - positionOrder(b.primaryPosition) || (a.shirtNumber ?? 99) - (b.shirtNumber ?? 99))
@@ -137,7 +130,7 @@ export function DraftPanel() {
           </div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-white/12 bg-white/[0.05] p-6 text-slate-300">
+        <div className="border border-dashed border-sky-300/22 bg-black/35 p-6 text-slate-300">
           Nenhum time sorteado.
         </div>
       )}
@@ -168,7 +161,7 @@ function PlayerListRow({
 }) {
   const blocked = !eligible || alreadyPicked;
   return (
-    <div className={blocked ? "grid grid-cols-[3rem_minmax(0,1fr)_4.25rem_5.75rem] items-center gap-3 border-b border-emerald-400/10 px-4 py-3 text-sm opacity-45" : active ? "grid grid-cols-[3rem_minmax(0,1fr)_4.25rem_5.75rem] items-center gap-3 border-b border-gold bg-gold/15 px-4 py-3 text-sm" : "grid grid-cols-[3rem_minmax(0,1fr)_4.25rem_5.75rem] items-center gap-3 border-b border-emerald-400/10 bg-emerald-400/[0.06] px-4 py-3 text-sm"}>
+    <div className={blocked ? "grid grid-cols-[2rem_minmax(0,1fr)_3rem_2.5rem_5.25rem] items-center gap-3 border-b border-sky-300/[0.07] px-3 py-2 text-xs opacity-40" : active ? "grid grid-cols-[2rem_minmax(0,1fr)_3rem_2.5rem_5.25rem] items-center gap-3 border-b border-gold bg-gold/10 px-3 py-2 text-xs" : "grid grid-cols-[2rem_minmax(0,1fr)_3rem_2.5rem_5.25rem] items-center gap-3 border-b border-sky-300/[0.07] px-3 py-2 text-xs hover:bg-sky-300/[0.05]"}>
       <span className="font-mono text-emerald-300">#{player.shirtNumber ?? "--"}</span>
       <div className="min-w-0">
         <p className="truncate font-black text-white">{player.name}</p>
@@ -176,10 +169,10 @@ function PlayerListRow({
           {player.nationality}
         </p>
       </div>
-      <span className="justify-self-center rounded-full border border-emerald-300/15 bg-night/45 px-2 py-1 font-mono text-[11px] font-black text-emerald-300">{positionLabel(player.primaryPosition)}</span>
-      <div className="flex items-center justify-end gap-2">
-        <span className="w-10 text-right font-mono text-lg font-black text-gold tabular-nums">{hidden ? "--" : player.overall}</span>
-        <Button data-testid="choose-player" className="min-h-9 px-3 py-1 text-xs" variant={blocked ? "secondary" : "primary"} onClick={onChoose} disabled={blocked}>
+      <span className="justify-self-center rounded-full border border-emerald-300/15 bg-night/45 px-1.5 py-1 font-mono text-[10px] font-black text-emerald-300">{positionLabel(player.primaryPosition)}</span>
+      <span className="justify-self-end font-mono text-base font-black text-gold tabular-nums">{hidden ? "--" : player.overall}</span>
+      <div className="flex justify-end">
+        <Button data-testid="choose-player" className="min-h-8 w-full px-2 py-1 text-[11px]" variant={blocked ? "secondary" : "primary"} onClick={onChoose} disabled={blocked}>
           {alreadyPicked ? "XI" : eligible ? "Escolher" : "--"}
         </Button>
       </div>

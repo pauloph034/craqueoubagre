@@ -1,11 +1,14 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { EmblemPicker } from "@/components/game/EmblemPicker";
+import { TeamEmblem } from "@/components/game/TeamEmblem";
 import { GamePanel } from "@/components/ui/surface";
 import { useGameStore } from "@/stores/game-store";
-import { Lock, ShieldCheck, UserPlus, X } from "lucide-react";
+import { ChartNoAxesColumnIncreasing, Lock, ShieldCheck, Star, Trophy, UserPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { PlayerProgression } from "@/types/game";
 import type { FormEvent, ReactNode } from "react";
 import { Suspense, useEffect, useRef, useState } from "react";
 
@@ -30,15 +33,18 @@ function AccountContent() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
   const [teamName, setTeamName] = useState("");
+  const [emblemId, setEmblemId] = useState("emblem-01");
   const [password, setPassword] = useState("");
   const [profilePlayerName, setProfilePlayerName] = useState("");
   const [profileTeamName, setProfileTeamName] = useState("");
+  const [profileEmblemId, setProfileEmblemId] = useState("emblem-01");
   const [profileSaved, setProfileSaved] = useState("");
   const [passwordSaved, setPasswordSaved] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [nextPassword, setNextPassword] = useState("");
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [inputsLocked, setInputsLocked] = useState(true);
+  const [progression, setProgression] = useState<PlayerProgression>();
   const usernameRef = useRef<HTMLInputElement>(null);
   const teamNameRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -53,7 +59,19 @@ function AccountContent() {
     const playerName = currentUser.playerName?.trim() || currentUser.username;
     setProfilePlayerName(playerName);
     setProfileTeamName(currentUser.teamName?.trim() || `${playerName} FC`);
+    setProfileEmblemId(currentUser.emblemId || "emblem-01");
     setProfileSaved("");
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setProgression(undefined);
+      return;
+    }
+    fetch("/api/rankings", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data: { progression?: PlayerProgression }) => setProgression(data.progression))
+      .catch(() => setProgression(undefined));
   }, [currentUser]);
 
   useEffect(() => {
@@ -73,7 +91,7 @@ function AccountContent() {
   }, [currentUser, mode]);
 
   async function submit() {
-    const ok = mode === "login" ? await login(username, password) : await register(username, password, teamName);
+    const ok = mode === "login" ? await login(username, password) : await register(username, password, teamName, emblemId);
     if (ok) {
       setUsername("");
       setTeamName("");
@@ -85,7 +103,7 @@ function AccountContent() {
   async function submitProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setProfileSaved("");
-    const ok = await updateProfile({ playerName: profilePlayerName, teamName: profileTeamName });
+    const ok = await updateProfile({ playerName: profilePlayerName, teamName: profileTeamName, emblemId: profileEmblemId });
     if (ok) setProfileSaved("Perfil atualizado.");
   }
 
@@ -114,7 +132,7 @@ function AccountContent() {
           <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(40,184,255,.18),_transparent_38%),linear-gradient(135deg,_rgba(7,24,50,.98),_rgba(3,8,24,.98))] p-7 lg:border-b-0 lg:border-r">
             <p className="text-sm font-black uppercase tracking-[0.22em] text-gold">Acesso local</p>
             <h1 className="mt-3 font-display text-4xl leading-none md:text-5xl">Sua conta no Craque ou Bagre</h1>
-            <p className="mt-4 max-w-xl text-slate-300">Entre para salvar campanhas, tacas e historico do seu clube neste navegador.</p>
+            <p className="mt-4 max-w-xl text-slate-300">Entre para salvar campanhas, taças e historico do seu clube neste navegador.</p>
             <div className="mt-8 grid gap-3">
               <Feature icon={<Lock size={18} />} text="Sem Google e sem cadastro externo." />
               <Feature icon={<ShieldCheck size={18} />} text="Admin reservado ao painel de dados." />
@@ -126,9 +144,32 @@ function AccountContent() {
             {currentUser ? (
               <div className="rounded-2xl border border-gold/25 bg-night/70 p-5">
                 <p className="text-sm text-slate-400">Logado como</p>
-                <h2 className="text-3xl font-black">{displayPlayerName}</h2>
+                <div className="mt-2 flex items-center gap-3">
+                  <TeamEmblem emblemId={profileEmblemId} teamName={displayTeamName} size={54} />
+                  <h2 className="text-3xl font-black">{displayPlayerName}</h2>
+                </div>
                 <p className="mt-1 text-slate-300">Perfil: {currentUser.role === "admin" ? "Administrador" : "Jogador"}</p>
                 <p className="mt-1 text-slate-300">Time: <strong className="text-white">{displayTeamName}</strong></p>
+                {progression && (
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    <ProfileMetric icon={Star} label={`Nivel ${progression.level}`} value={progression.levelName} />
+                    <ProfileMetric icon={Trophy} label="Taças" value={progression.trophies} />
+                    <ProfileMetric icon={ChartNoAxesColumnIncreasing} label="Rating" value={progression.competitiveRating} />
+                    <div className="sm:col-span-3">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-400">
+                        <span>{progression.xp.toLocaleString("pt-BR")} XP</span>
+                        <span>{progression.nextLevelXp.toLocaleString("pt-BR")} XP</span>
+                      </div>
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
+                        <div
+                          className="h-full rounded-full bg-[linear-gradient(90deg,#24b8ff,#51f0bd)]"
+                          style={{ width: `${levelProgress(progression)}%` }}
+                        />
+                      </div>
+                      <p className="mt-2 text-xs text-slate-400">{progression.wins} vitorias em {progression.matches} partidas · {progression.winRate}% de aproveitamento</p>
+                    </div>
+                  </div>
+                )}
                 <form className="mt-5 grid gap-4 rounded-2xl border border-white/10 bg-[#050b18]/70 p-4" onSubmit={submitProfile}>
                   <label className="grid gap-2 text-sm font-semibold text-slate-200">
                     Nome do jogador
@@ -164,12 +205,14 @@ function AccountContent() {
                       data-form-type="other"
                     />
                   </label>
+                  <EmblemPicker value={profileEmblemId} teamName={profileTeamName} onChange={(id) => { setProfileSaved(""); setProfileEmblemId(id); }} />
                   {authError && <p className="rounded border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">{authError}</p>}
                   {profileSaved && <p className="rounded border border-emerald-300/30 bg-emerald-300/10 p-3 text-sm font-bold text-emerald-100">{profileSaved}</p>}
                   <Button type="submit">Salvar perfil</Button>
                 </form>
                 <div className="mt-5 flex flex-wrap gap-3">
                   <Link href={redirectPath || "/jogar"}><Button>{redirectPath ? "Continuar" : "Jogar"}</Button></Link>
+                  <Link href="/ranking"><Button variant="secondary">Ver ranking</Button></Link>
                   {currentUser.role === "admin" && <Link href="/admin/dados"><Button variant="secondary">Painel admin</Button></Link>}
                   <Button variant="secondary" onClick={logout}>Sair</Button>
                 </div>
@@ -219,24 +262,29 @@ function AccountContent() {
                     />
                   </label>
                   {mode === "register" && (
-                    <label className="mt-4 grid gap-2 text-sm font-semibold text-slate-200">
-                      Nome do time
-                      <input
-                        ref={teamNameRef}
-                        className="min-h-12 w-full rounded-2xl border border-white/10 bg-[#050b18] px-4"
-                        name="craque-ou-bagre-local-team"
-                        value={teamName}
-                        placeholder="ex: Meu Clube FC"
-                        onFocus={() => setInputsLocked(false)}
-                        onChange={(event) => setTeamName(event.target.value)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        data-lpignore="true"
-                        data-form-type="other"
-                        readOnly={inputsLocked}
-                      />
-                    </label>
+                    <>
+                      <label className="mt-4 grid gap-2 text-sm font-semibold text-slate-200">
+                        Nome do time
+                        <input
+                          ref={teamNameRef}
+                          className="min-h-12 w-full rounded-2xl border border-white/10 bg-[#050b18] px-4"
+                          name="craque-ou-bagre-local-team"
+                          value={teamName}
+                          placeholder="ex: Meu Clube FC"
+                          onFocus={() => setInputsLocked(false)}
+                          onChange={(event) => setTeamName(event.target.value)}
+                          autoComplete="off"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          data-lpignore="true"
+                          data-form-type="other"
+                          readOnly={inputsLocked}
+                        />
+                      </label>
+                      <div className="mt-4">
+                        <EmblemPicker value={emblemId} teamName={teamName} onChange={setEmblemId} />
+                      </div>
+                    </>
                   )}
                   <label className="mt-4 grid gap-2 text-sm font-semibold text-slate-200">
                     Senha
@@ -329,4 +377,22 @@ function Feature({ icon, text }: { icon: ReactNode; text: string }) {
       <span>{text}</span>
     </div>
   );
+}
+
+function ProfileMetric({ icon: Icon, label, value }: { icon: typeof Star; label: string; value: string | number }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+        <Icon className="h-4 w-4 text-electric" />
+        {label}
+      </div>
+      <p className="mt-2 text-xl font-black text-white">{value}</p>
+    </div>
+  );
+}
+
+function levelProgress(progression: PlayerProgression) {
+  const previousLevelXp = Math.max(0, (progression.level - 1) * progression.level * 175);
+  const range = Math.max(1, progression.nextLevelXp - previousLevelXp);
+  return Math.max(0, Math.min(100, ((progression.xp - previousLevelXp) / range) * 100));
 }

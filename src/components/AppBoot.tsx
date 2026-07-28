@@ -13,8 +13,23 @@ export function AppBoot() {
     loadHistory();
     storage.clearLegacyAuth();
     window.fetch("/api/metrics/visit", { method: "POST" }).catch(() => undefined);
-    if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
-      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((registrations) => {
+          registrations.forEach((registration) => void registration.unregister());
+        })
+        .catch(() => undefined);
+    }
+    if ("caches" in window) {
+      window.caches
+        .keys()
+        .then((keys) => {
+          keys.forEach((key) => {
+            if (key.startsWith("craque-ou-bagre")) void window.caches.delete(key);
+          });
+        })
+        .catch(() => undefined);
     }
   }, [loadAccount, loadHistory]);
   return null;

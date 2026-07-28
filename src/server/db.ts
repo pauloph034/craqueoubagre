@@ -18,6 +18,7 @@ type SupabaseUserRow = {
   username: string;
   player_name: string | null;
   team_name: string | null;
+  emblem_id: string | null;
   password_hash: string;
   role: "admin" | "player";
   created_at: string;
@@ -62,6 +63,7 @@ function publicUser(user: StoredUser): UserAccount {
     username: user.username,
     playerName: user.playerName,
     teamName: user.teamName,
+    emblemId: user.emblemId,
     password: "",
     role: user.role,
     createdAt: user.createdAt
@@ -73,6 +75,7 @@ function toStoredUser(row: SupabaseUserRow): StoredUser {
     username: row.username,
     playerName: row.player_name ?? undefined,
     teamName: row.team_name ?? undefined,
+    emblemId: row.emblem_id ?? undefined,
     passwordHash: row.password_hash,
     role: row.role,
     createdAt: row.created_at
@@ -84,6 +87,7 @@ function toUserRow(user: StoredUser): SupabaseUserRow {
     username: user.username,
     player_name: user.playerName ?? null,
     team_name: user.teamName ?? null,
+    emblem_id: user.emblemId ?? null,
     password_hash: user.passwordHash,
     role: user.role,
     created_at: user.createdAt
@@ -144,6 +148,7 @@ export async function ensureAdminUser() {
     username,
     playerName: "Admin",
     teamName: "Admin FC",
+    emblemId: "emblem-01",
     passwordHash: hashPassword(password),
     role: "admin",
     createdAt: new Date().toISOString()
@@ -189,6 +194,7 @@ export async function updateStoredUser(username: string, patch: Partial<Omit<Sto
     const body: Partial<SupabaseUserRow> = {};
     if ("playerName" in patch) body.player_name = patch.playerName ?? null;
     if ("teamName" in patch) body.team_name = patch.teamName ?? null;
+    if ("emblemId" in patch) body.emblem_id = patch.emblemId ?? null;
     if ("passwordHash" in patch && patch.passwordHash) body.password_hash = patch.passwordHash;
     if ("role" in patch && patch.role) body.role = patch.role;
     const rows = await supabaseFetch<SupabaseUserRow[]>(`cob_users?username=eq.${encodeURIComponent(username)}`, {

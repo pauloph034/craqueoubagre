@@ -2,6 +2,7 @@
 import { players } from "@/data/loaders";
 import { calculateChemistry } from "@/game-engine/chemistry";
 import { calculateSectorRatings } from "@/game-engine/team-rating";
+import { inferredOpponentStyle, tacticalMatchup } from "@/game-engine/tactics";
 import type { Difficulty, DraftPick, MatchEvent, MatchResult, TacticalStyle } from "@/types/game";
 import type { Rng } from "./rng";
 
@@ -101,17 +102,22 @@ export function simulateMatch(args: {
   const difficulty = difficultyTuning[args.difficulty ?? "classico"];
   const knockoutPressure = args.knockout ? 1.08 : 1;
   const adjustedOpponentStrength = args.opponent.strength + difficulty.opponentStrength + (args.knockout ? 2 : 0);
-  const attackPower = (sectors.attack * 0.5 + sectors.midfield * 0.3 + chemistry * 0.2) / 86;
-  const defensePower = (sectors.defense * 0.44 + sectors.goalkeeper * 0.38 + chemistry * 0.18) / 86;
-  const opponent = adjustedOpponentStrength / 86;
-  const qualityGap = (attackPower + defensePower) / 2 - opponent;
-  const favoriteEdge = Math.max(-0.55, Math.min(0.55, qualityGap));
-  const userXgBase = 1.02 + attackPower * 1.02 + Math.max(-0.32, favoriteEdge * 0.72) - opponent * 0.88;
-  const opponentXgBase = 0.88 + opponent * 1.02 - defensePower * 0.86 + Math.max(0, -favoriteEdge) * 1.05 - Math.max(0, favoriteEdge) * 0.58;
-  const userXg = Math.min(3.9, Math.max(0.2, userXgBase * style.attack * style.tempo * difficulty.userXg));
-  const opponentXg = Math.min(4.2, Math.max(0.25, opponentXgBase * (2 - style.defense) * (args.tacticalStyle === "ofensivo" ? 1.16 : 1) * difficulty.opponentXg * knockoutPressure));
+  const opponentStyle = inferredOpponentStyle(`${args.opponent.id}-${args.opponent.clubSeasonId ?? ""}`);
+  const tactical = tacticalMatchup(args.tacticalStyle, opponentStyle);
+  const userStrength =
+    sectors.attack * 0.31 +
+    sectors.midfield * 0.27 +
+    sectors.defense * 0.23 +
+    sectors.goalkeeper * 0.13 +
+    chemistry * 0.06;
+  const qualityGap = userStrength + tactical.adjustment - adjustedOpponentStrength;
+  const userXgBase = 1.32 + qualityGap / 12.5;
+  const opponentXgBase = 1.24 - qualityGap / 13.5;
+  const userXg = Math.min(4.1, Math.max(0.18, userXgBase * (0.72 + style.attack * 0.28) * (0.78 + style.tempo * 0.22) * difficulty.userXg));
+  const opponentXg = Math.min(4.3, Math.max(0.18, opponentXgBase * (1.72 - style.defense * 0.72) * difficulty.opponentXg * knockoutPressure));
   let userGoals = poisson(args.rng, userXg);
   let opponentGoals = poisson(args.rng, opponentXg);
+  ({ userGoals, opponentGoals } = protectClearFavorite(userGoals, opponentGoals, qualityGap));
   let resolvedByPenalties = false;
   let penaltyScore: string | undefined;
 
@@ -168,8 +174,32 @@ export function simulateMatch(args: {
       opponentShotsOnTarget: Math.max(opponentGoals, Math.round(opponentXg * 2 + args.rng.int(0, 3))),
       opponentCorners: args.rng.int(1, 8)
     },
-    bestPlayer: scorer(args.rng, args.squad)
+    bestPlayer: scorer(args.rng, args.squad),
+    tacticalContext: {
+      userStyle: args.tacticalStyle,
+      opponentStyle,
+      userStrength: Math.round(userStrength * 10) / 10,
+      opponentStrength: Math.round(adjustedOpponentStrength * 10) / 10,
+      tacticalAdjustment: tactical.adjustment,
+      summary: tactical.summary
+    }
   };
+}
+
+function protectClearFavorite(userGoals: number, opponentGoals: number, qualityGap: number) {
+  if (qualityGap >= 18 && userGoals <= opponentGoals) {
+    return { userGoals: opponentGoals + 1, opponentGoals };
+  }
+  if (qualityGap >= 14 && userGoals < opponentGoals) {
+    return { userGoals: opponentGoals, opponentGoals };
+  }
+  if (qualityGap <= -18 && opponentGoals <= userGoals) {
+    return { userGoals, opponentGoals: userGoals + 1 };
+  }
+  if (qualityGap <= -14 && opponentGoals < userGoals) {
+    return { userGoals, opponentGoals: userGoals };
+  }
+  return { userGoals, opponentGoals };
 }
 
 function eventText(type: MatchEvent["type"]) {

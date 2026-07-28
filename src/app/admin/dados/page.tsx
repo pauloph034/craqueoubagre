@@ -95,7 +95,7 @@ export default function AdminDataPage() {
         <Metric icon={Database} label="Jogadores cadastrados" value={dashboard?.players ?? players.length} />
         <Metric icon={ShieldCheck} label="Times cadastrados" value={dashboard?.teams ?? activeSeasons.length} />
         <Metric icon={Trophy} label="Campanhas salvas" value={dashboard?.campaigns ?? "..."} />
-        <Metric icon={Trophy} label="Tacas conquistadas" value={dashboard?.trophies ?? "..."} />
+        <Metric icon={Trophy} label="Taças conquistadas" value={dashboard?.trophies ?? "..."} />
       </section>
 
       <section className="mt-6 grid gap-6 lg:grid-cols-[1.35fr_.65fr]">
