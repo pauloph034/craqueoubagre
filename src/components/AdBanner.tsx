@@ -1,5 +1,8 @@
+"use client";
+
 import { cn } from "@/lib/utils";
-import Image from "next/image";
+import { Megaphone } from "lucide-react";
+import { useState } from "react";
 
 const whatsappUrl = "https://wa.me/557999043448?text=Tenho%20interesse%20em%20anunciar%20no%20Craque%20ou%20Bagre";
 
@@ -31,6 +34,7 @@ const adsByVariant: Record<AdVariant, { src: string; alt: string }> = {
 export function AdBanner({ compact = false, variant = compact ? "mobile-banner" : "leaderboard" }: { compact?: boolean; variant?: AdVariant }) {
   const isSidebar = variant === "sidebar";
   const ad = adsByVariant[variant];
+  const [failed, setFailed] = useState(false);
 
   return (
     <a
@@ -52,14 +56,29 @@ export function AdBanner({ compact = false, variant = compact ? "mobile-banner" 
           variant === "mobile-banner" && "max-h-[132px]"
         )}
       >
-        <Image
-          src={ad.src}
-          alt={ad.alt}
-          fill
-          loading="lazy"
-          sizes="(max-width: 768px) 100vw, 1024px"
-          className="object-contain transition duration-300 group-hover:scale-[1.01]"
-        />
+        {failed ? (
+          <div className="flex w-full items-center justify-between gap-4 px-5 py-4 text-white">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/30 bg-white/10">
+                <Megaphone size={18} />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/75">Publicidade</p>
+                <p className="truncate text-sm font-black">Rocha Marketing</p>
+              </div>
+            </div>
+            {!compact && <span className="shrink-0 rounded-full border border-white/40 px-3 py-1 text-xs font-black">Falar com a equipe</span>}
+          </div>
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={ad.src}
+            alt={ad.alt}
+            loading="lazy"
+            onError={() => setFailed(true)}
+            className="h-full max-h-full w-full object-contain transition duration-300 group-hover:scale-[1.01]"
+          />
+        )}
       </div>
     </a>
   );
