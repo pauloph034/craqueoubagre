@@ -21,15 +21,16 @@ export default function PlayPage() {
   }, [loadActiveCampaign]);
 
   if (phase === "setup") {
-    return <main className="mx-auto max-w-6xl px-4 py-8"><SetupForm /><div className="mt-6"><AdBanner variant="leaderboard" /></div></main>;
+    return <main className="editorial-shell py-5"><SetupForm /><div className="mt-4"><AdBanner variant="leaderboard" /></div></main>;
   }
   if (phase === "campaignReady") {
     return (
-      <main className="mx-auto grid max-w-[1240px] gap-4 px-4 py-6 lg:grid-cols-[minmax(420px,.92fr)_1fr]">
+      <main className="editorial-shell grid gap-4 py-5 lg:grid-cols-[minmax(390px,.9fr)_1fr]">
         <SquadField />
-        <section className="border border-white/10 bg-black/25 p-5">
-          <h1 className="text-3xl font-black">Elenco confirmado</h1>
-          <p className="mt-2 text-slate-300">Elenco e tecnico confirmados. A campanha sera simulada partida por partida.</p>
+        <section className="editorial-panel p-5">
+          <p className="editorial-kicker">03 · Campanha</p>
+          <h1 className="editorial-page-title mt-2">Elenco confirmado</h1>
+          <p className="editorial-muted mt-2">Elenco e técnico confirmados. A campanha será simulada partida por partida.</p>
           <div className="mt-5 flex gap-3">
             <Link href="/campanha"><Button>Ir para campanha</Button></Link>
           </div>
@@ -40,20 +41,20 @@ export default function PlayPage() {
   }
   if (phase === "coachSelection") {
     return (
-      <main className="mx-auto grid max-w-[1240px] gap-4 px-4 py-6 lg:grid-cols-[minmax(420px,.92fr)_1fr]">
+      <main className="editorial-shell grid gap-4 py-5 lg:grid-cols-[minmax(380px,.8fr)_1.2fr]">
         <SquadField />
         <CoachPanel />
       </main>
     );
   }
   return (
-    <main className="mx-auto max-w-[1440px] px-3 py-4 sm:px-5">
-      <div className="grid gap-3 xl:grid-cols-[190px_minmax(430px,.9fr)_minmax(430px,1.1fr)] xl:items-start">
-        <DraftStatusPanel />
+    <main className="editorial-shell game-workspace py-3">
+      <div className="grid h-full gap-3 lg:grid-cols-[minmax(380px,.86fr)_minmax(420px,1fr)] xl:grid-cols-[minmax(410px,.92fr)_minmax(440px,1fr)_180px] xl:items-start">
         <SquadField showMetrics={false} />
         <DraftPanel />
+        <DraftStatusPanel />
       </div>
-      <div className="mt-4">
+      <div className="mt-3 xl:hidden">
         <AdBanner variant="leaderboard" />
       </div>
     </main>
@@ -68,10 +69,10 @@ function DraftStatusPanel() {
   const metrics = useTeamMetrics();
   const rules = difficultyRules[config.difficulty];
   return (
-    <GamePanel className="border-white/[0.08] bg-black/25 p-4 xl:sticky xl:top-16">
+    <GamePanel className="border-black bg-[var(--surface)] p-4 xl:sticky xl:top-[70px]">
       <div className="min-w-0">
-        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-mint">Seu time</p>
-        <h1 className="mt-1 break-words font-display text-xl leading-tight text-white">{config.teamName}</h1>
+        <p className="editorial-kicker">Seu time</p>
+        <h1 className="mt-1 break-words font-display text-xl font-black uppercase leading-tight text-black">{config.teamName}</h1>
       </div>
       <div className="mt-5 space-y-4">
         <div>
@@ -79,11 +80,11 @@ function DraftStatusPanel() {
             <span className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Elenco</span>
             <span className="font-mono text-sm font-black text-white">{squad.length}/11</span>
           </div>
-          <div className="mt-2 h-1 bg-white/10">
-            <div className="h-full rounded-full bg-gradient-to-r from-mint via-electric to-gold" style={{ width: `${Math.round((squad.length / 11) * 100)}%` }} />
+          <div className="mt-2 h-1 bg-black/10">
+            <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round((squad.length / 11) * 100)}%` }} />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-y border-white/[0.08] py-3">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-y border-black/20 py-3">
           <CompactStat label="Rating" value={rules.hideRatings && squad.length < 11 ? "--" : metrics.rating} />
           <CompactStat label="Entros." value={`${metrics.chemistry}%`} />
           <CompactStat label="Rerolls" value={rerollsLeft} />
@@ -97,8 +98,8 @@ function DraftStatusPanel() {
 function CompactStat({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
-      <p className="text-[8px] font-black uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-0.5 font-mono text-lg font-black text-slate-100">{value}</p>
+      <p className="text-[8px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">{label}</p>
+      <p className="mt-0.5 font-display text-lg font-black text-black">{value}</p>
     </div>
   );
 }

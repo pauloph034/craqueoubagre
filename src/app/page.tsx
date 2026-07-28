@@ -1,13 +1,11 @@
 "use client";
 
-import Link from "next/link";
-import Image from "next/image";
 import { AdBanner } from "@/components/AdBanner";
 import { Button } from "@/components/ui/button";
-import { Trophy, Shuffle, Users, Crown, Medal, BarChart3, Flame, ArrowRight } from "lucide-react";
-import type { ReactNode } from "react";
-import { useEffect } from "react";
 import { useGameStore } from "@/stores/game-store";
+import { ArrowRight, BarChart3, Crown, Flame, Medal, Shuffle, Trophy, Users } from "lucide-react";
+import Link from "next/link";
+import { useEffect, type ReactNode } from "react";
 
 export default function HomePage() {
   const currentUser = useGameStore((state) => state.currentUser);
@@ -23,78 +21,73 @@ export default function HomePage() {
   }, [resetSolo]);
 
   return (
-    <main className="mx-auto max-w-[1240px] px-4 py-6 sm:px-6 lg:py-10">
-      <section className="grid min-h-[510px] items-center gap-8 border-b border-white/[0.08] pb-10 lg:grid-cols-[minmax(0,.88fr)_minmax(420px,.72fr)]">
-        <div className="relative z-10 max-w-[560px]">
-          <p className="mb-4 text-xs font-black uppercase tracking-[0.26em] text-mint">Draft historico de futebol</p>
-          <Image
-            src="/assets/logo-craque-ou-bagre.png"
-            alt="Craque ou Bagre"
-            width={760}
-            height={373}
-            className="w-full max-w-[510px] object-contain drop-shadow-[0_0_18px_rgba(40,184,255,.14)]"
-            priority
-          />
-          <p className="mt-4 max-w-lg text-base font-light leading-7 text-slate-300 md:text-lg">
-            <span className="font-semibold text-gold">Monte seu onze historico,</span>
-            <br />
-            sobreviva ao mata-mata e descubra se seu time nasceu para levantar taca.
-          </p>
-          {currentUser && <p className="mt-3 text-slate-300">Logado como <strong className="text-white">{currentUser.playerName?.trim() || currentUser.username}</strong></p>}
-          <div className="mt-7 flex flex-wrap gap-3">
-            <Link href={currentUser ? "/jogar" : "/conta"}><Button className="min-w-40 px-7">{currentUser ? "Jogar agora" : "Entrar"} <ArrowRight size={16} /></Button></Link>
-            <Link href="/salas"><Button className="min-w-40 px-7" variant="secondary">Jogar com amigos</Button></Link>
+    <main className="editorial-shell py-5 sm:py-7">
+      <section className="grid min-h-[calc(100dvh-8rem)] items-center gap-8 py-5 lg:grid-cols-[1fr_.9fr] lg:gap-14 lg:py-10">
+        <div className="flex min-h-[400px] flex-col justify-center">
+          <p className="editorial-kicker mb-6">Liga dos Craques · Temporada aberta</p>
+          <div>
+            <h1 className="brand-display flex flex-col gap-4 text-[4.8rem] uppercase leading-[0.86] text-black sm:text-[6rem] lg:text-[7.5rem]">
+              <span>Craque</span>
+              <span className="whitespace-nowrap text-[0.72em] text-[var(--accent)]">ou Bagre?</span>
+            </h1>
+            <p className="mt-5 max-w-md text-sm leading-6 text-[var(--muted)] sm:text-base">
+              Monte um onze histórico, sobreviva ao mata-mata e prove que suas escolhas levantam taça.
+            </p>
+            {currentUser && <p className="mt-3 text-xs font-bold uppercase">Em campo: {currentUser.playerName?.trim() || currentUser.username}</p>}
+            <div className="mt-5 flex flex-col gap-2 min-[430px]:flex-row">
+              <Link className="w-full min-[430px]:w-auto" href={currentUser ? "/jogar" : "/conta"}>
+                <Button className="w-full min-[430px]:min-w-40">{currentUser ? "Jogar agora" : "Entrar"} <ArrowRight size={15} /></Button>
+              </Link>
+              <Link className="w-full min-[430px]:w-auto" href="/salas">
+                <Button className="w-full min-[430px]:min-w-40" variant="secondary">Jogar com amigos</Button>
+              </Link>
+            </div>
           </div>
         </div>
         <HeroPreview />
       </section>
-      <section className="grid border-b border-white/[0.08] md:grid-cols-3">
-        <Step icon={<Shuffle />} title="Sorteie" text="Um clube e uma temporada por rodada." number="01" />
-        <Step icon={<Users />} title="Escale" text="Escolha o craque e encaixe na formacao." number="02" />
-        <Step icon={<Trophy />} title="Dispute" text="Acompanhe cada minuto ate a final." number="03" />
+
+      <section className="mt-5 grid border-l border-t border-black md:grid-cols-3">
+        <Step icon={<Shuffle size={18} />} title="Sorteie" text="Um clube e uma temporada por rodada." number="01" />
+        <Step icon={<Users size={18} />} title="Escale" text="Escolha o craque e encaixe na formação." number="02" />
+        <Step icon={<Trophy size={18} />} title="Dispute" text="Acompanhe cada minuto até a final." number="03" />
       </section>
-      <section className="grid grid-cols-2 border-b border-white/[0.08] py-5 md:grid-cols-4">
-        <Metric icon={<BarChart3 size={18} />} label="Campanhas" value={userHistory.length} />
-        <Metric icon={<Crown size={18} />} label="Titulos" value={titles} />
-        <Metric icon={<Medal size={18} />} label="Recorde" value={bestScore} />
-        <Metric icon={<Flame size={18} />} label="Perfeitas" value={perfect} />
+
+      <section className="grid grid-cols-2 border-x border-b border-black bg-black py-4 text-white md:grid-cols-4">
+        <Metric icon={<BarChart3 size={16} />} label="Campanhas" value={userHistory.length} />
+        <Metric icon={<Crown size={16} />} label="Títulos" value={titles} />
+        <Metric icon={<Medal size={16} />} label="Recorde" value={bestScore} />
+        <Metric icon={<Flame size={16} />} label="Perfeitas" value={perfect} />
       </section>
-      <div className="mt-5">
-        <AdBanner variant="house-ad" />
-      </div>
+
+      <div className="mt-5"><AdBanner variant="house-ad" /></div>
     </main>
   );
 }
 
 function HeroPreview() {
   const players = [
-    ["PE", "Ronaldo", "97"],
+    ["PE", "C. Ronaldo", "97"],
     ["ATA", "Rooney", "91"],
-    ["PD", "Dembele", "87"],
+    ["PD", "Dembélé", "87"],
     ["MC", "Xavi", "96"],
     ["VOL", "Busquets", "92"],
-    ["GOL", "Valdes", "88"]
+    ["GOL", "Valdés", "88"]
   ];
+  const coords = [[23, 21], [50, 13], [77, 21], [35, 49], [61, 54], [50, 84]];
+
   return (
-    <div className="overflow-hidden">
-      <div className="relative aspect-[7/8] max-h-[430px] min-h-[350px] border border-emerald-200/10 field-lines">
-        {players.map(([pos, name, rating], index) => {
-          const coords = [
-            [24, 20],
-            [50, 13],
-            [76, 20],
-            [34, 48],
-            [58, 52],
-            [50, 84]
-          ][index]!;
-          return (
-            <div key={name} className="absolute grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-electric bg-night/90 text-center shadow-glow" style={{ left: `${coords[0]}%`, top: `${coords[1]}%` }}>
-              <span className="absolute -right-2 -top-2 grid h-7 w-7 place-items-center rounded-full bg-gold font-mono text-[11px] font-black text-night">{rating}</span>
-              <span className="max-w-[3.7rem] truncate text-[10px] font-black text-white">{name}</span>
-              <span className="absolute -bottom-3 rounded-full bg-black/70 px-2 py-0.5 text-[9px] font-black text-sky-100">{pos}</span>
-            </div>
-          );
-        })}
+    <div className="flex min-h-[500px] items-center justify-center lg:min-h-[620px]">
+      <div className="relative mx-auto aspect-[7/9] w-full max-w-[440px] border border-black bg-[#153b2e]">
+        <div className="absolute inset-x-0 top-1/2 border-t border-white/35" />
+        <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/35" />
+        {players.map(([pos, name, rating], index) => (
+          <div key={name} className="absolute grid h-[3.75rem] w-[3.75rem] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white bg-black text-center" style={{ left: `${coords[index]![0]}%`, top: `${coords[index]![1]}%` }}>
+            <span className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full border border-black bg-[var(--background)] font-display text-xs font-black text-black">{rating}</span>
+            <span className="max-w-[3.4rem] text-[7px] font-black leading-[0.9] text-white">{name}</span>
+            <span className="absolute -bottom-3 border border-black bg-[var(--background)] px-1.5 py-0.5 text-[8px] font-black text-black">{pos}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -102,24 +95,22 @@ function HeroPreview() {
 
 function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: string | number }) {
   return (
-    <div className="flex items-center gap-3 border-r border-white/[0.08] px-4 py-2 last:border-0">
-      <span className="shrink-0 text-electric">{icon}</span>
-      <div>
-        <p className="text-2xl font-black leading-none text-white">{value}</p>
-        <p className="mt-1 text-xs font-bold uppercase tracking-wide text-slate-400">{label}</p>
-      </div>
+    <div className="flex items-center gap-3 border-r border-white/25 px-4 last:border-0">
+      <span className="text-[var(--accent)]">{icon}</span>
+      <p className="font-display text-2xl font-black leading-none text-white">{value}</p>
+      <p className="text-[9px] font-black uppercase tracking-[0.12em] text-white/60">{label}</p>
     </div>
   );
 }
 
 function Step({ icon, title, text, number }: { icon: ReactNode; title: string; text: string; number: string }) {
   return (
-    <article className="grid min-h-24 grid-cols-[2.4rem_2.5rem_minmax(0,1fr)] items-center gap-3 border-r border-white/[0.08] px-4 py-5 last:border-0">
-      <span className="font-mono text-xl text-electric">{number}</span>
-      <div className="grid h-9 w-9 shrink-0 place-items-center border border-electric/20 text-electric">{icon}</div>
+    <article className="grid min-h-24 grid-cols-[2.5rem_2rem_minmax(0,1fr)] items-center gap-3 border-b border-r border-black bg-[var(--surface)] px-4 py-5">
+      <span className="editorial-number">{number}</span>
+      <span className="text-[var(--accent)]">{icon}</span>
       <div>
-        <h2 className="text-base font-black">{title}</h2>
-        <p className="mt-1 text-sm leading-relaxed text-slate-300">{text}</p>
+        <h2 className="text-sm font-black uppercase">{title}</h2>
+        <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{text}</p>
       </div>
     </article>
   );

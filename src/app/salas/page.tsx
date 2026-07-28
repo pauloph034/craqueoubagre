@@ -2,6 +2,7 @@
 
 import { TeamNameWithCrest } from "@/components/game/TeamNameWithCrest";
 import { GenericBadge } from "@/components/game/GenericBadge";
+import { NationalityFlag } from "@/components/game/NationalityFlag";
 import { AdBanner } from "@/components/AdBanner";
 import { Button } from "@/components/ui/button";
 import { getFormationSlots } from "@/config/formations";
@@ -45,12 +46,12 @@ import {
 import { cn } from "@/lib/utils";
 import { useGameStore } from "@/stores/game-store";
 import type { Position, TacticalStyle } from "@/types/game";
-import { Check, Clock, Dices, Lock, Play, Plus, ShieldCheck, Users, Volume2 } from "lucide-react";
+import { Check, Clock, Dices, Lock, Play, Plus, ShieldCheck, Trophy, Users, Volume2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 const inputClass =
-  "min-h-11 w-full rounded-2xl border border-white/12 bg-night/70 px-4 py-2 text-sm font-semibold text-white placeholder:text-slate-500 focus:border-electric";
+  "min-h-10 w-full rounded-sm border border-black bg-white px-3 py-2 text-sm font-semibold text-black placeholder:text-[var(--muted)] focus:border-[var(--accent)]";
 
 const phases = [
   { name: "Oitavas de final", label: "Oitavas" },
@@ -324,10 +325,10 @@ export default function FriendRoomsPage() {
 
   if (!accountChecked) {
     return (
-      <main className="mx-auto max-w-4xl px-4 py-10">
-        <section className="rounded-xl border border-emerald-300/20 bg-[linear-gradient(135deg,rgba(4,18,43,.94),rgba(3,46,52,.7))] p-8 text-center shadow-card">
-          <p className="text-xs font-black uppercase tracking-[0.24em] text-emerald-300">Jogar com amigos</p>
-          <h1 className="mt-3 text-4xl font-black">Carregando sua conta</h1>
+      <main className="editorial-shell max-w-4xl py-8">
+        <section className="editorial-panel p-7 text-center">
+          <p className="editorial-kicker">Jogar com amigos</p>
+          <h1 className="editorial-page-title mt-3">Carregando sua conta</h1>
           <p className="mx-auto mt-3 max-w-xl text-slate-300">So um instante para validar seu acesso local.</p>
         </section>
       </main>
@@ -336,10 +337,10 @@ export default function FriendRoomsPage() {
 
   if (!currentUser) {
     return (
-      <main className="mx-auto max-w-4xl px-4 py-10">
-        <section className="rounded-xl border border-emerald-300/20 bg-[linear-gradient(135deg,rgba(4,18,43,.94),rgba(3,46,52,.7))] p-8 text-center shadow-card">
-          <p className="text-xs font-black uppercase tracking-[0.24em] text-emerald-300">Jogar com amigos</p>
-          <h1 className="mt-3 text-4xl font-black">Entre para criar ou acessar salas</h1>
+      <main className="editorial-shell max-w-4xl py-8">
+        <section className="editorial-panel p-7 text-center">
+          <p className="editorial-kicker">Jogar com amigos</p>
+          <h1 className="editorial-page-title mt-3">Entre para criar ou acessar salas</h1>
           <p className="mx-auto mt-3 max-w-xl text-slate-300">O modo com amigos usa o nome do jogador e o nome do time cadastrados na conta.</p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Link href="/conta?modo=entrar&redirect=%2Fsalas"><Button>Entrar</Button></Link>
@@ -357,7 +358,7 @@ export default function FriendRoomsPage() {
   if (focusedRoom) {
     const gameStarted = focusedRoom.status !== "lobby";
     return (
-      <main className={cn("mx-auto px-4", gameStarted ? "max-w-7xl py-5" : "max-w-6xl py-8")}>
+      <main className={cn("editorial-shell", gameStarted ? "max-w-7xl py-4" : "max-w-6xl py-6")}>
         {message && (
           <div className="mb-4 rounded-md border border-electric/30 bg-electric/10 px-4 py-3 text-sm font-bold text-sky-100">
             {message}
@@ -394,12 +395,12 @@ export default function FriendRoomsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-7">
-      <section className="rounded-2xl border border-emerald-300/20 bg-[radial-gradient(circle_at_80%_0%,rgba(17,255,184,.12),transparent_26rem),linear-gradient(135deg,rgba(4,18,43,.96),rgba(3,46,52,.7))] p-6 shadow-card">
-        <p className="text-xs font-black uppercase tracking-[0.24em] text-emerald-300">Jogar com amigos</p>
+    <main className="editorial-shell max-w-6xl py-6">
+      <section className="editorial-panel p-5">
+        <p className="editorial-kicker">Jogar com amigos</p>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-black text-white md:text-5xl">Salas mata-mata</h1>
+            <h1 className="editorial-page-title">Salas mata-mata</h1>
             <p className="mt-2 max-w-2xl text-slate-300">Oitavas com amigos, times aleatorios completando a chave e draft com tempo.</p>
             <p className="mt-2 text-sm text-slate-400">Jogando como <strong className="text-white">{accountPlayerName}</strong> - {accountTeamName}</p>
           </div>
@@ -414,8 +415,8 @@ export default function FriendRoomsPage() {
       )}
 
       <section className="mt-6">
-        <div className="mx-auto max-w-3xl space-y-5">
-          <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-night/70 p-2">
+        <div className="mx-auto max-w-4xl space-y-4">
+          <div className="grid grid-cols-2 border border-black bg-white p-1">
             <button className={tabButtonClass(panelTab === "salas")} onClick={() => setPanelTab("salas")}>Salas disponiveis</button>
             <button className={tabButtonClass(panelTab === "criar")} onClick={() => setPanelTab("criar")}>Criar sala</button>
           </div>
@@ -471,16 +472,16 @@ function CreateRoomPanel({
   onCreate: () => void;
 }) {
   return (
-    <article className="rounded-xl border border-emerald-300/20 bg-[linear-gradient(135deg,rgba(2,12,28,.92),rgba(3,35,40,.72))] p-5 shadow-card">
+    <article className="editorial-panel p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="font-mono text-3xl font-black text-red-400">02</p>
-          <h2 className="-mt-1 text-2xl font-black uppercase text-white">Final de Copa</h2>
+          <p className="editorial-number">02</p>
+          <h2 className="font-display text-2xl font-black uppercase">Criar torneio</h2>
         </div>
         <Users className="mt-1 text-emerald-300" />
       </div>
 
-      <div className="mt-5 grid gap-3">
+      <div className="mt-4 grid gap-3">
         <input className={inputClass} value={form.name} placeholder="Nome do torneio, ex: Copa dos Amigos" onChange={(event) => onChange({ ...form, name: event.target.value })} />
         <div className="rounded-md border border-emerald-300/15 bg-night/55 px-3 py-2 text-sm text-slate-300">
           Criador: <strong className="text-white">{accountUserName}</strong> - Time: <strong className="text-white">{accountTeamName}</strong>
@@ -511,7 +512,7 @@ function CreateRoomPanel({
         Draft por turnos: cada jogador escolhe 3 atletas por vez e fecha o time com 2 escolhas finais.
       </div>
 
-      <Button className="mt-5 w-full bg-danger text-white hover:bg-red-400" onClick={onCreate}>
+      <Button className="mt-5 w-full bg-[var(--success)] text-white hover:bg-black" onClick={onCreate}>
         <Plus size={18} /> Criar sala
       </Button>
     </article>
@@ -536,16 +537,18 @@ function RoomsPanel({
   onJoin: (room: FriendRoom) => void;
 }) {
   return (
-    <article className="rounded-xl border border-white/12 bg-white/[0.055] p-5 shadow-card">
-      <div className="flex items-center justify-between gap-3">
+    <article className="editorial-panel p-0">
+      <div className="flex items-center justify-between gap-3 border-b border-black px-4 py-3">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300">Salas criadas</p>
-          <h2 className="text-2xl font-black">Disponiveis</h2>
+          <p className="editorial-kicker">Salas criadas</p>
+          <h2 className="font-display text-2xl font-black uppercase">Disponiveis</h2>
         </div>
         <ShieldCheck className="text-electric" />
       </div>
-      <RoomSection title="Publicas" rooms={publicRooms} activeRoomId={activeRoomId} joinPasswords={joinPasswords} onPasswordChange={onPasswordChange} onSelect={onSelect} onJoin={onJoin} />
-      <RoomSection title="Privadas" rooms={privateRooms} activeRoomId={activeRoomId} joinPasswords={joinPasswords} onPasswordChange={onPasswordChange} onSelect={onSelect} onJoin={onJoin} />
+      <div className="p-4">
+        <RoomSection title="Publicas" rooms={publicRooms} activeRoomId={activeRoomId} joinPasswords={joinPasswords} onPasswordChange={onPasswordChange} onSelect={onSelect} onJoin={onJoin} />
+        <RoomSection title="Privadas" rooms={privateRooms} activeRoomId={activeRoomId} joinPasswords={joinPasswords} onPasswordChange={onPasswordChange} onSelect={onSelect} onJoin={onJoin} />
+      </div>
     </article>
   );
 }
@@ -570,10 +573,10 @@ function RoomSection({
   return (
     <div className="mt-4">
       <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">{title}</p>
-      <div className="mt-2 space-y-2">
+      <div className="mt-2 divide-y divide-black/15 border border-black/20">
         {rooms.length === 0 && <div className="rounded-md border border-dashed border-white/12 p-3 text-sm text-slate-400">Nenhuma sala.</div>}
         {rooms.map((room) => (
-          <article key={room.id} className={cn("rounded-md border p-3", room.id === activeRoomId ? "border-gold bg-gold/10" : "border-white/10 bg-night/55")}>
+          <article key={room.id} className={cn("grid gap-2 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center", room.id === activeRoomId ? "bg-[var(--surface-muted)]" : "bg-white")}>
             <button className="w-full text-left" onClick={() => onSelect(room)}>
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -592,7 +595,7 @@ function RoomSection({
                 onChange={(event) => onPasswordChange(room.id, event.target.value)}
               />
             )}
-            <Button variant="secondary" className="mt-3 min-h-9 w-full text-xs" onClick={() => onJoin(room)}>
+            <Button variant="secondary" className="min-h-9 w-full text-xs sm:w-auto" onClick={() => onJoin(room)}>
               Entrar
             </Button>
           </article>
@@ -753,8 +756,17 @@ function LobbyPanel({
   const canStart = realPlayers.length > 0 && readyCount === realPlayers.length;
 
   return (
-    <div className="mt-5 grid gap-5">
-      <div className="rounded-lg border border-white/10 bg-night/50 p-4">
+    <div className="mt-5">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(220px,.72fr)_minmax(300px,1.05fr)_minmax(280px,.9fr)]">
+        {currentPlayer ? (
+          <PlayerSetupPanel player={currentPlayer} onReady={onPlayerReady} onSetup={onPlayerSetup} />
+        ) : (
+          <div className="border border-dashed border-black/25 bg-white p-4 text-sm text-[var(--muted)]">
+            Entre nessa sala pela lista para configurar seu time e confirmar pronto.
+          </div>
+        )}
+        <RoomFormationPreview formation={currentPlayer?.formation ?? "4-3-3"} tacticalStyle={currentPlayer?.tacticalStyle ?? "equilibrado"} />
+        <div className="border border-black bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-black">Jogadores na sala</h3>
@@ -771,14 +783,8 @@ function LobbyPanel({
         </div>
         <PlayerLobbyList players={realPlayers} />
       </div>
-      {currentPlayer ? (
-        <PlayerSetupPanel player={currentPlayer} onReady={onPlayerReady} onSetup={onPlayerSetup} />
-      ) : (
-        <div className="rounded-lg border border-dashed border-white/15 bg-white/[0.04] p-4 text-sm text-slate-300">
-          Entre nessa sala pela lista para configurar seu time e confirmar pronto.
-        </div>
-      )}
-      {isHost && <HostSettingsPanel room={room} onChange={onRoomSettings} />}
+      </div>
+      {isHost && <div className="mt-4"><HostSettingsPanel room={room} onChange={onRoomSettings} /></div>}
     </div>
   );
 }
@@ -1071,7 +1077,6 @@ function RoomSquadField({
         <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/20" />
         {slots.map((slot) => {
           const pick = assigned[slot.id];
-          const pickClub = pick ? clubSeasonData.find((season) => season.id === pick.clubSeasonId) : undefined;
           const pendingFit = pendingPick && !pick ? roomPickFit(pendingPick, slot.position) : undefined;
           const canPlacePending = Boolean(interactive && pendingFit?.allowed);
           const reviewMode = Boolean(onReviewSlotClick);
@@ -1096,12 +1101,11 @@ function RoomSquadField({
             >
               {pick ? (
                 <>
-                  {pickClub && (
-                    <span className="absolute left-1 top-0">
-                      <GenericBadge club={pickClub} size={31} />
-                    </span>
-                  )}
-                  <span className="mt-6 max-w-[4.15rem] truncate text-[10px] leading-tight">{shortName(pick.name)}</span>
+                  <NationalityFlag
+                    nationality={pick.nationality}
+                    className="absolute left-1/2 top-1.5 w-7 -translate-x-1/2"
+                  />
+                  <span className="mt-6 max-w-[4.15rem] truncate px-0.5 text-[10px] leading-tight">{shortName(pick.name)}</span>
                   <span className="absolute -right-2 -top-2 grid h-7 w-7 place-items-center rounded-full border border-gold/80 bg-gold font-mono text-[11px] font-black text-night shadow-[0_0_16px_rgba(248,198,48,.35)]">
                     {pick.effectiveRating ?? pick.overall}
                   </span>
@@ -1511,9 +1515,9 @@ function RoomBracket({
         </div>
         {room.champion && (
           <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-lg border border-gold/40 bg-gold/10 px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gold">Campeao</p>
-              <p className="font-black">{room.champion}</p>
+            <div className="border border-black bg-[var(--accent)] px-4 py-3 text-black">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black">Campeao</p>
+              <p className="font-black text-black">{room.champion}</p>
             </div>
             {isHost && <Button onClick={onResetLobby}>Voltar ao lobby</Button>}
           </div>
@@ -1532,7 +1536,7 @@ function RoomBracket({
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <RoomSpeedControl speed={matchSpeed} onSpeedChange={setMatchSpeed} />
-                  <span className="rounded-md border border-emerald-300/20 bg-night/70 px-3 py-2 font-mono text-sm font-black text-emerald-200">{presentationMinute}&apos;</span>
+                  <span className="border border-black bg-[var(--accent)] px-3 py-2 font-mono text-sm font-black text-black">{presentationMinute}&apos;</span>
                   <span className="font-mono text-3xl font-black text-gold">{presentationHomeGoals} - {presentationAwayGoals}</span>
                 </div>
               </div>
@@ -1541,9 +1545,10 @@ function RoomBracket({
               </div>
               <div className="grid max-h-[190px] overflow-y-auto p-3 game-scrollbar">
                 {visibleEvents.map((event, index) => (
-                  <div key={`${event.minute}-${index}`} className={cn("grid grid-cols-[3rem_1fr] items-center gap-3 border-b px-2 py-2 text-sm", event.text.startsWith("Gol") ? "border-gold/35 bg-gold/[0.07] text-white" : "border-white/[0.06] text-slate-300")}>
-                    <span className="font-mono font-black text-sky-200">{event.minute}&apos;</span>
-                    <span className="font-semibold">{event.text}</span>
+                  <div key={`${event.minute}-${index}`} className={cn("grid grid-cols-[3rem_auto_minmax(0,1fr)] items-center gap-3 border-b px-2 py-2.5 text-sm", event.text.startsWith("Gol") ? "border-[var(--warning)]/40 bg-[var(--warning)]/10 font-bold" : "border-black/10")}>
+                    <span className="font-mono font-black text-black">{event.minute}&apos;</span>
+                    <span className={cn("h-2.5 w-2.5 rounded-full", event.text.startsWith("Gol") ? "bg-[var(--warning)]" : "bg-black/20")} aria-hidden />
+                    <span className="min-w-0 break-words font-semibold">{event.text}</span>
                   </div>
                 ))}
               </div>
@@ -1574,7 +1579,7 @@ function RoomBracket({
         <div className="grid min-w-[900px] grid-cols-[1.1fr_.95fr_.85fr_.72fr] gap-3">
           {phases.map((phase) => (
             <div key={phase.name} className="border border-emerald-300/[0.08] bg-night/35 p-3">
-              <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-sky-200">{phase.label}</p>
+               <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-black">{phase.label}</p>
               <div className="grid min-h-[560px]" style={{ gridTemplateRows: "repeat(16, minmax(0, 1fr))" }}>
                 {room.bracket.filter((match) => match.phase === phase.name).map((match, index) => (
                   <div key={match.id} style={{ gridRow: `${bracketRowStart(phase.name, index)} / span 2` }}>
@@ -1591,6 +1596,7 @@ function RoomBracket({
           ))}
         </div>
       </div>
+      {room.status === "finished" && currentPlayer && <RoomFinalSquadCard room={room} player={currentPlayer} />}
     </div>
   );
 }
@@ -1604,6 +1610,48 @@ function RoomBracketMatch({ match, room }: { match: RoomMatch; room: FriendRoom 
       <BracketTeam name={match.homeName} emblemId={homeEmblemId} goals={match.homeGoals} winner={done && match.winnerName === match.homeName} />
       <BracketTeam name={match.awayName} emblemId={awayEmblemId} goals={match.awayGoals} winner={done && match.winnerName === match.awayName} last />
     </article>
+  );
+}
+
+function RoomFinalSquadCard({ room, player }: { room: FriendRoom; player: RoomPlayer }) {
+  const playerMatches = room.bracket.filter(
+    (match) => match.status === "done" && (match.homePlayerId === player.id || match.awayPlayerId === player.id || sameText(match.homeName, player.teamName) || sameText(match.awayName, player.teamName))
+  );
+  const lastMatch = playerMatches.at(-1);
+  const isHome = lastMatch ? lastMatch.homePlayerId === player.id || sameText(lastMatch.homeName, player.teamName) : false;
+  const goalsFor = lastMatch ? (isHome ? lastMatch.homeGoals : lastMatch.awayGoals) : undefined;
+  const goalsAgainst = lastMatch ? (isHome ? lastMatch.awayGoals : lastMatch.homeGoals) : undefined;
+  const resultLabel = sameText(room.champion ?? "", player.teamName) ? "Campeao da sala" : "Campanha encerrada";
+
+  return (
+    <section className="mt-5 border border-black bg-white p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black/20 pb-4">
+        <div>
+          <p className="editorial-kicker">Card final do elenco</p>
+          <h3 className="mt-2 font-display text-3xl font-black uppercase">{player.teamName}</h3>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            {resultLabel}{lastMatch && typeof goalsFor === "number" && typeof goalsAgainst === "number" ? ` · ultimo jogo ${goalsFor}-${goalsAgainst}` : ""}
+          </p>
+        </div>
+        <div className="grid h-12 w-12 place-items-center border border-black bg-[var(--success)] text-white">
+          <Trophy size={24} aria-hidden />
+        </div>
+      </div>
+      <div className="mt-4 grid gap-px border border-black/20 bg-black/20 sm:grid-cols-2 lg:grid-cols-3">
+        {player.squad.map((pick) => (
+          <article key={`${pick.slotId}-${pick.id}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-white px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black">{pick.name}</p>
+              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--muted)]">{pick.clubName} {pick.season}</p>
+            </div>
+            <div className="text-right">
+              <p className="font-display text-lg font-black text-[var(--success)]">{pick.effectiveRating ?? pick.overall}</p>
+              <p className="text-[9px] font-black uppercase">{pick.slotLabel ?? positionLabel(pick.slotPosition ?? pick.position)}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -1630,7 +1678,7 @@ function RoomSpeedControl({ speed, onSpeedChange }: { speed: "normal" | "rapida"
 function BracketTeam({ name, emblemId, goals, winner, last = false }: { name: string; emblemId?: string; goals?: number; winner: boolean; last?: boolean }) {
   return (
     <div className={cn("grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2", !last && "border-b border-white/10 pb-1.5", last && "pt-1.5", winner ? "text-white" : "text-slate-400")}>
-      <TeamNameWithCrest name={name} emblemId={emblemId} size="sm" textClassName="font-black" showUnknown />
+      <TeamNameWithCrest name={name} emblemId={emblemId} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
       <span className="text-right font-mono font-black text-gold">{typeof goals === "number" ? goals : "-"}</span>
     </div>
   );
@@ -1638,7 +1686,11 @@ function BracketTeam({ name, emblemId, goals, winner, last = false }: { name: st
 
 function buildRoomMatchTimeline(room: FriendRoom, match: RoomMatch): RoomTimelineEvent[] {
   const timelineItems: Array<{ minute: number; teamName: string; text: string; side?: "home" | "away" }> = [
-    { minute: 1, teamName: "", text: "Bola rolando" }
+    { minute: 1, teamName: "", text: "Bola rolando" },
+    { minute: 14, teamName: "", text: "Chance perdida" },
+    { minute: 31, teamName: "", text: "Bola na trave" },
+    { minute: 57, teamName: "", text: "Defesa do goleiro" },
+    { minute: 74, teamName: "", text: "Cartao amarelo" }
   ];
   let homeGoals = 0;
   let awayGoals = 0;
@@ -1721,24 +1773,27 @@ function goalTextOrder(text: string) {
 
 function PlayerLobbyList({ players }: { players: RoomPlayer[] }) {
   return (
-    <div className="mt-4 overflow-x-auto">
-      <div className="min-w-[780px] overflow-hidden rounded-lg border border-white/10">
-        <div className="grid grid-cols-[5.5rem_1fr_1.2fr_7rem_8rem_7rem] bg-white/[0.06] px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-          <span>ID</span>
-          <span>Nome</span>
-          <span>Time</span>
-          <span>Formacao</span>
-          <span>Tatica</span>
-          <span>Status</span>
-        </div>
+    <div className="mt-4 overflow-hidden border border-black/20 bg-white">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-3 bg-[var(--surface-muted)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">
+        <span>ID</span>
+        <span>Jogador e time</span>
+        <span>Status</span>
+      </div>
+      <div>
         {players.map((player, index) => (
-          <div key={player.id} className="grid grid-cols-[5.5rem_1fr_1.2fr_7rem_8rem_7rem] items-center border-t border-white/10 px-3 py-3 text-sm">
-            <span className="font-mono font-black text-gold">#{index + 1} {shortPlayerId(player.id)}</span>
-            <span className="truncate font-black text-white">{player.userName}</span>
-            <span className="truncate text-slate-200">{player.teamName}</span>
-            <span className="font-bold text-slate-300">{player.formation}</span>
-            <span className="font-bold text-slate-300">{tacticalStyleLabel(player.tacticalStyle)}</span>
-            <span className={cn("w-fit rounded-full px-3 py-1 text-xs font-black", player.ready ? "bg-emerald-300 text-night" : "border border-white/15 text-slate-300")}>
+          <div key={player.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-t border-black/15 px-3 py-3">
+            <span className="font-mono text-[11px] font-black text-[var(--accent-strong)]">
+              #{index + 1}
+              <span className="mt-0.5 block text-[9px] text-[var(--muted)]">{shortPlayerId(player.id)}</span>
+            </span>
+            <span className="min-w-0">
+              <strong className="block truncate text-sm text-black">{player.userName}</strong>
+              <span className="block truncate text-xs text-[var(--muted)]">{player.teamName}</span>
+              <span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--muted)]">
+                {player.formation} · {tacticalStyleLabel(player.tacticalStyle)}
+              </span>
+            </span>
+            <span className={cn("w-fit whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-black", player.ready ? "bg-[var(--success)] text-white" : "border border-black/20 text-[var(--muted)]")}>
               {player.ready ? "Pronto" : "Aguardando"}
             </span>
           </div>
@@ -1750,12 +1805,12 @@ function PlayerLobbyList({ players }: { players: RoomPlayer[] }) {
 
 function PlayerSetupPanel({ player, onReady, onSetup }: { player: RoomPlayer; onReady: (playerId: string, ready: boolean) => void; onSetup: (playerId: string, setup: { formation?: string; tacticalStyle?: TacticalStyle }) => void }) {
   return (
-    <article className="rounded-lg border border-emerald-300/16 bg-[linear-gradient(135deg,rgba(4,18,43,.78),rgba(3,46,52,.42))] p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <article className="border border-black bg-white p-4">
+      <div className="grid gap-3">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">Sua preparacao</p>
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-[var(--success)]">Sua preparacao</p>
           <h3 className="mt-1 text-2xl font-black">{player.teamName}</h3>
-          <p className="text-sm text-slate-400">{player.userName}</p>
+          <p className="text-sm text-[var(--muted)]">{player.userName}</p>
         </div>
         <Button variant={player.ready ? "secondary" : "primary"} onClick={() => onReady(player.id, !player.ready)}>
           {player.ready ? "Alterar preparacao" : "Confirmar pronto"}
@@ -1771,7 +1826,6 @@ function PlayerSetupPanel({ player, onReady, onSetup }: { player: RoomPlayer; on
           <SegmentButton key={style.value} active={player.tacticalStyle === style.value} onClick={() => onSetup(player.id, { tacticalStyle: style.value })}>{style.label}</SegmentButton>
         ))}
       </ControlBlock>
-      <RoomFormationPreview formation={player.formation} tacticalStyle={player.tacticalStyle} />
     </article>
   );
 }
@@ -1779,12 +1833,12 @@ function PlayerSetupPanel({ player, onReady, onSetup }: { player: RoomPlayer; on
 function RoomFormationPreview({ formation, tacticalStyle }: { formation: string; tacticalStyle: TacticalStyle }) {
   const slots = getFormationSlots(formation, tacticalStyle);
   return (
-    <div className="mt-4 rounded-lg border border-emerald-300/18 bg-emerald-950/25 p-3">
+    <div className="border border-black bg-[var(--surface-muted)] p-3">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <p className="text-[11px] font-black uppercase tracking-[0.22em] text-emerald-300/80">Previa da escalação</p>
+        <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[var(--success)]">Previa da escalação</p>
         <span className="text-xs font-black text-slate-300">{formation} - {tacticalStyleLabel(tacticalStyle)}</span>
       </div>
-      <div className="relative mx-auto aspect-[7/10] max-h-[360px] min-h-[280px] overflow-hidden rounded-md border border-white/15 field-lines">
+      <div className="relative mx-auto aspect-[7/10] max-h-[520px] min-h-[360px] overflow-hidden border border-black field-lines">
         <div className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15" />
         {slots.map((slot) => (
           <span
@@ -1802,7 +1856,7 @@ function RoomFormationPreview({ formation, tacticalStyle }: { formation: string;
 
 function HostSettingsPanel({ room, onChange }: { room: FriendRoom; onChange: (settings: Partial<Pick<FriendRoom, "name" | "visibility" | "password" | "difficulty" | "draftMode" | "simultaneousMinutes" | "turnSeconds">>) => void }) {
   return (
-    <article className="rounded-lg border border-gold/20 bg-gold/10 p-4">
+    <article className="border border-black bg-white p-4">
       <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Configuracoes do criador</p>
       <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto]">
         <input className={inputClass} value={room.name} placeholder="Nome do torneio" onChange={(event) => onChange({ name: event.target.value })} />
@@ -1841,7 +1895,7 @@ function SegmentButton({ active, children, onClick }: { active: boolean; childre
     <button
       className={cn(
         "min-h-10 rounded-full border px-3 py-2 text-sm font-black transition",
-        active ? "border-danger bg-danger text-white shadow-[0_0_18px_rgba(239,68,68,.18)]" : "border-emerald-300/20 bg-night/70 text-white hover:border-electric"
+        active ? "border-[var(--success)] bg-[var(--success)] text-white" : "border-black/20 bg-white text-black hover:border-[var(--success)]"
       )}
       type="button"
       onClick={onClick}

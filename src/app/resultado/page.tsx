@@ -4,8 +4,10 @@ import { AdBanner } from "@/components/AdBanner";
 import { TeamNameWithCrest } from "@/components/game/TeamNameWithCrest";
 import { Button } from "@/components/ui/button";
 import { achievements } from "@/data/loaders";
+import { positionLabel } from "@/game-engine/position-labels";
 import { useGameStore } from "@/stores/game-store";
 import type { BracketMatch, CampaignSummary, MatchEvent } from "@/types/game";
+import { Trophy } from "lucide-react";
 import Link from "next/link";
 
 export default function ResultPage() {
@@ -14,7 +16,7 @@ export default function ResultPage() {
   const currentUser = useGameStore((state) => state.currentUser);
   const reset = useGameStore((state) => state.reset);
 
-  if (!summary) return <main className="mx-auto max-w-4xl px-4 py-10"><p>Nenhum resultado carregado.</p><Link href="/jogar"><Button className="mt-4">Jogar</Button></Link></main>;
+  if (!summary) return <main className="editorial-shell py-8"><section className="editorial-panel max-w-3xl p-6"><p>Nenhum resultado carregado.</p><Link href="/jogar"><Button className="mt-4">Jogar</Button></Link></section></main>;
 
   const stats = campaignStats(summary, history);
   const unlocked = achievements.filter((item) => summary.achievements.includes(item.id));
@@ -31,12 +33,12 @@ export default function ResultPage() {
   }));
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-7">
-      <section className="border-b border-white/[0.09] pb-5">
-        <p className="text-sm uppercase text-gold">Resultado final</p>
+    <main className="editorial-shell py-6">
+      <section className="border-b border-black pb-5">
+        <p className="editorial-kicker">Resultado final</p>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-black">{summary.champion ? "Campeao" : summary.stageReached}</h1>
+            <h1 className="editorial-page-title">{summary.champion ? "Campeao" : summary.stageReached}</h1>
             <p className="mt-2 text-slate-300">{summary.config.userName} comandou o {displayTeamName}</p>
             {summary.champion && <p className="mt-2 text-xl font-black text-gold">Seu clube levantou a Liga dos Craques.</p>}
             {!summary.champion && summary.tournamentChampion && (
@@ -47,7 +49,7 @@ export default function ResultPage() {
           </div>
           <div className="border-l border-gold/30 px-5 py-2 text-center">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Taças da Liga</p>
-            <p className="font-mono text-5xl font-black text-white">{stats.trophies}</p>
+            <p className="font-display text-4xl font-black">{stats.trophies}</p>
           </div>
         </div>
 
@@ -61,28 +63,13 @@ export default function ResultPage() {
           <Metric label="Melhor jogador" value={summary.matches.at(-1)?.bestPlayer ?? "Craque ou Bagre"} />
         </div>
 
-        <div className="mt-5 border-t border-white/[0.08] pt-4">
-          <h2 className="text-xl font-black">Galeria do clube</h2>
-          <p className="mt-2 text-slate-300">
-            {displayTeamName} tem {stats.trophies} taca(s) da Liga dos Craques no perfil de {summary.config.userName}.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {Array.from({ length: Math.max(1, stats.trophies) }).map((_, index) => (
-              <span key={index} className={index < stats.trophies ? "grid h-12 w-12 place-items-center rounded-full border border-gold bg-gold/20 text-2xl" : "grid h-12 w-12 place-items-center rounded-full border border-white/15 bg-white/5 text-2xl opacity-35"}>
-                T
-              </span>
-            ))}
-          </div>
-        </div>
-
         <div className="mt-5 flex flex-wrap gap-3">
-          <Button onClick={reset}>Jogar novamente</Button>
-          <Button variant="secondary" onClick={() => navigator.clipboard?.writeText(`Craque ou Bagre - ${displayTeamName}: ${summary.score} pontos`)}>
-            Compartilhar resultado
-          </Button>
+          <Link href="/jogar" onClick={reset}><Button>Jogar novamente</Button></Link>
           <Link href="/historico"><Button variant="secondary">Ver galeria</Button></Link>
         </div>
       </section>
+
+      <SquadResultCard summary={summary} teamName={displayTeamName} wins={stats.wins} draws={stats.draws} losses={stats.losses} />
 
       <section className="mt-5 grid gap-px overflow-hidden border border-white/[0.08] bg-white/[0.08] md:grid-cols-3">
         {unlocked.map((item) => <article key={item.id} className="bg-night/90 p-4"><h3 className="font-black text-gold">{item.name}</h3><p className="mt-1 text-sm text-slate-300">{item.description}</p></article>)}
@@ -92,7 +79,7 @@ export default function ResultPage() {
         <KnockoutBracket bracket={displayBracket} champion={displayTournamentChampion} customTeamName={displayTeamName} emblemId={currentUser?.emblemId} />
       )}
 
-      <section className="mt-6 rounded-lg border border-white/12 bg-white/[0.06] p-5 shadow-card">
+      <section className="mt-6 border border-black bg-white p-5">
         <p className="text-xs font-black uppercase tracking-[0.22em] text-sky-200">Jogos realizados</p>
         <div className="mt-4 grid gap-3">
           {summary.matches.map((match) => (
@@ -125,24 +112,24 @@ function KnockoutBracket({ bracket, champion, customTeamName, emblemId }: { brac
     { name: "Final", label: "Final" }
   ];
   return (
-    <section className="mt-6 overflow-hidden rounded-xl border border-emerald-300/20 bg-[radial-gradient(circle_at_86%_18%,rgba(17,255,184,.16),transparent_24%),radial-gradient(circle_at_12%_80%,rgba(40,184,255,.12),transparent_28%),linear-gradient(135deg,rgba(4,18,43,.98),rgba(3,46,52,.88)_58%,rgba(5,10,32,.98))] p-5 shadow-card">
+    <section className="mt-6 overflow-hidden border border-black bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Chaveamento da Liga dos Craques</p>
           <h2 className="mt-1 text-3xl font-black">Mata-mata ate o campeao</h2>
         </div>
         {champion && (
-          <div className="rounded-lg border border-gold/35 bg-gold/10 px-4 py-3 shadow-[0_0_24px_rgba(248,198,48,.12)]">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gold">Campeao</p>
-            <p className="max-w-[220px] truncate font-black"><TeamNameWithCrest name={champion} emblemId={champion === customTeamName ? emblemId : undefined} size="sm" showUnknown /></p>
+          <div className="border border-black bg-[var(--accent)] px-4 py-3 text-black">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black">Campeao</p>
+            <div className="max-w-[260px] text-sm font-black text-black"><TeamNameWithCrest name={champion} emblemId={champion === customTeamName ? emblemId : undefined} size="sm" textClassName="!text-black" showUnknown allowWrap /></div>
           </div>
         )}
       </div>
       <div className="mt-5 overflow-x-auto pb-2">
         <div className="grid min-w-[920px] grid-cols-[1.15fr_.95fr_.85fr_.75fr] items-start gap-4">
           {phases.map((phase) => (
-            <div key={phase.name} className="rounded-lg border border-emerald-300/10 bg-night/55 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,.04)]">
-              <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-sky-200">{phase.label}</p>
+            <div key={phase.name} className="border border-black bg-[var(--background)] p-3">
+              <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-black">{phase.label}</p>
               <div className="grid min-h-[650px]" style={{ gridTemplateRows: "repeat(16, minmax(0, 1fr))" }}>
                 {bracket.filter((match) => match.phase === phase.name).map((match, index) => (
                   <div key={match.id} style={{ gridRow: `${bracketRowStart(phase.name, index)} / span 2` }}>
@@ -167,13 +154,13 @@ function bracketRowStart(phase: string, index: number) {
 
 function FinalBracketMatch({ match, customTeamName, emblemId }: { match: BracketMatch; customTeamName: string; emblemId?: string }) {
   return (
-    <article className="rounded-md border border-emerald-300/14 bg-white/[0.055] px-3 py-2 text-sm shadow-[0_0_18px_rgba(17,255,184,.08)]">
+    <article className="border border-black bg-white px-3 py-2 text-sm">
       <div className={`grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2 border-b border-white/10 pb-1.5 ${match.winnerName === match.homeName ? "text-white" : "text-slate-400"}`}>
-        <TeamNameWithCrest name={match.homeName} emblemId={match.homeName === customTeamName ? emblemId : undefined} size="sm" textClassName="font-black" showUnknown />
+        <TeamNameWithCrest name={match.homeName} emblemId={match.homeName === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
         <span className="text-right font-mono font-black text-gold">{match.homeGoals}</span>
       </div>
       <div className={`grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2 pt-1.5 ${match.winnerName === match.awayName ? "text-white" : "text-slate-400"}`}>
-        <TeamNameWithCrest name={match.awayName} emblemId={match.awayName === customTeamName ? emblemId : undefined} size="sm" textClassName="font-black" showUnknown />
+        <TeamNameWithCrest name={match.awayName} emblemId={match.awayName === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
         <span className="text-right font-mono font-black text-gold">{match.awayGoals}</span>
       </div>
     </article>
@@ -218,5 +205,48 @@ function displayTeamAlias(name: string | undefined, storedTeamName: string, disp
 }
 
 function Metric({ label, value }: { label: string; value: string | number }) {
-  return <div className="bg-night/90 p-4"><p className="break-words text-xl font-black">{value}</p><p className="mt-1 text-xs text-slate-400">{label}</p></div>;
+  return <div className="bg-white p-4"><p className="break-words font-display text-xl font-black uppercase leading-tight">{value}</p><p className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">{label}</p></div>;
+}
+
+function SquadResultCard({
+  summary,
+  teamName,
+  wins,
+  draws,
+  losses
+}: {
+  summary: CampaignSummary;
+  teamName: string;
+  wins: number;
+  draws: number;
+  losses: number;
+}) {
+  return (
+    <section className="mt-6 border border-black bg-[var(--surface)] p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black/20 pb-4">
+        <div>
+          <p className="editorial-kicker">Card final do elenco</p>
+          <h2 className="mt-2 font-display text-3xl font-black uppercase">{teamName}</h2>
+          <p className="mt-1 text-sm text-[var(--muted)]">{summary.stageReached} · {wins}V {draws}E {losses}D</p>
+        </div>
+        <div className="grid h-12 w-12 place-items-center border border-black bg-[var(--accent)] text-white">
+          <Trophy size={24} aria-hidden />
+        </div>
+      </div>
+      <div className="mt-4 grid gap-px border border-black/20 bg-black/20 sm:grid-cols-2 lg:grid-cols-3">
+        {summary.squad.map((pick) => (
+          <article key={`${pick.slotId}-${pick.player.id}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-white px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black">{pick.player.name}</p>
+              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--muted)]">{pick.clubSeason.clubName} {pick.clubSeason.season}</p>
+            </div>
+            <div className="text-right">
+              <p className="font-display text-lg font-black text-[var(--accent)]">{pick.effectiveRating}</p>
+              <p className="text-[9px] font-black uppercase">{positionLabel(pick.slotPosition)}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
 }

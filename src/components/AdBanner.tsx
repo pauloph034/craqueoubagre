@@ -51,9 +51,9 @@ export function AdBanner({ compact = false, variant = compact ? "mobile-banner" 
     >
       <div
         className={cn(
-          "relative grid w-full place-items-center bg-[#ff4a24]",
-          isSidebar ? "h-[120px] p-2" : "h-[72px] sm:h-[86px] md:h-[104px]",
-          variant === "mobile-banner" && "h-[64px] sm:h-[76px]"
+          "relative grid w-full place-items-center bg-[#ff4a24] p-2",
+          isSidebar ? "min-h-[120px]" : "min-h-[96px] sm:min-h-[112px]",
+          variant === "mobile-banner" && "min-h-[88px] sm:min-h-[100px]"
         )}
       >
         {failed ? (
@@ -76,7 +76,10 @@ export function AdBanner({ compact = false, variant = compact ? "mobile-banner" 
             alt={ad.alt}
             loading="lazy"
             onError={() => setFailed(true)}
-            className="h-full max-h-full w-full object-contain transition duration-300 group-hover:scale-[1.01]"
+            className={cn(
+              "block h-auto w-full object-contain transition duration-300 group-hover:scale-[1.01]",
+              isSidebar ? "max-w-[360px]" : compact ? "max-w-[360px]" : "max-w-[420px]"
+            )}
           />
         )}
       </div>

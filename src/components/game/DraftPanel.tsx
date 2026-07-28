@@ -44,10 +44,10 @@ export function DraftPanel() {
 
   if (canConfirm) {
     return (
-      <aside className="space-y-3">
-        <div className="border border-gold/30 bg-black/25 p-4">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">Elenco completo</p>
-          <p className="mt-2 text-sm text-slate-200">Os 11 jogadores ja foram escolhidos. Agora escolha o tecnico para iniciar a campanha.</p>
+      <aside className="editorial-panel space-y-3 p-4">
+        <div className="border-b border-black/20 pb-4">
+          <p className="editorial-kicker">Elenco completo</p>
+          <p className="editorial-muted mt-2">Os 11 jogadores já foram escolhidos. Agora escolha o técnico para iniciar a campanha.</p>
         </div>
         <Button className="min-h-14 w-full text-base" onClick={state.confirmSquad}>
           Escolher tecnico
@@ -57,11 +57,11 @@ export function DraftPanel() {
   }
 
   return (
-    <aside className="space-y-3 xl:sticky xl:top-16 xl:max-h-[calc(100vh-5rem)] xl:overflow-hidden">
-      <div className="border border-sky-300/12 bg-black/30 p-2.5">
+    <aside className="h-full space-y-3 overflow-hidden xl:sticky xl:top-[70px] xl:max-h-[calc(100dvh-5rem)]">
+      <div className="border border-black bg-[var(--surface)] p-2.5">
         <div className="flex items-center gap-3">
-          <span className="whitespace-nowrap px-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-            {state.rerollsLeft} rerolls
+          <span className="whitespace-nowrap px-2 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--muted)]">
+            {state.rerollsLeft} de 3 restantes
           </span>
           <Button className="min-h-10 flex-1 text-xs" onClick={() => runDrawAnimation(() => (state.currentDraw ? state.reroll() : state.drawForSlot()))} disabled={isDrawing || Boolean(state.currentDraw && state.rerollsLeft <= 0)}>
             <Dices size={18} /> Sortear time
@@ -70,48 +70,44 @@ export function DraftPanel() {
       </div>
 
       {isDrawing && rollingClub ? (
-        <div className="overflow-hidden border border-gold/30 bg-black/45">
+        <div className="overflow-hidden border border-black bg-[var(--surface)]">
           <div
-            className="flex min-h-28 items-center gap-4 border-b border-white/[0.08] p-4"
-            style={{
-              background: `linear-gradient(135deg, ${rollingClub.primaryColor}44, rgba(7, 24, 50, .9) 48%, ${rollingClub.secondaryColor}30)`
-            }}
+            className="flex min-h-24 items-center gap-4 border-b border-black bg-[var(--accent)] p-4"
           >
-            <GenericBadge club={rollingClub} size={76} />
+            <GenericBadge club={rollingClub} size={62} />
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">Sorteio em movimento</p>
-              <h3 className="text-2xl font-black">{rollingClub.clubName} {rollingClub.season}</h3>
-              <p className="text-sm text-slate-300">{rollingClub.country}</p>
+              <p className="text-[9px] font-black uppercase tracking-[0.16em] text-black">Sorteio em movimento</p>
+              <h3 className="font-display text-2xl font-black uppercase text-black">{rollingClub.clubName} {rollingClub.season}</h3>
+              <p className="text-xs text-black/70">{rollingClub.country}</p>
             </div>
           </div>
         </div>
       ) : state.currentDraw ? (
-        <div className="overflow-hidden border border-sky-300/12 bg-black/30">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-black bg-[var(--surface)]">
           <div
-            className="flex items-center gap-4 border-b border-white/10 p-4"
-            style={{ background: "linear-gradient(90deg, rgba(3,14,31,.98), rgba(6,24,47,.88))" }}
+            className="flex items-center gap-4 border-b border-black bg-[var(--surface-muted)] p-3"
           >
-            <GenericBadge club={state.currentDraw.clubSeason} size={64} />
+            <GenericBadge club={state.currentDraw.clubSeason} size={56} />
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gold">{state.currentDraw.clubSeason.rarity}</p>
-              <h3 className="truncate text-lg font-black text-white">{state.currentDraw.clubSeason.clubName} {state.currentDraw.clubSeason.season}</h3>
-              <p className="truncate text-xs text-slate-400">{state.currentDraw.clubSeason.competitionStage} - {state.currentDraw.clubSeason.country}</p>
+              <h3 className="truncate font-display text-xl font-black uppercase text-black">{state.currentDraw.clubSeason.clubName} {state.currentDraw.clubSeason.season}</h3>
+              <p className="truncate text-[11px] text-[var(--muted)]">{state.currentDraw.clubSeason.competitionStage} · {state.currentDraw.clubSeason.country}</p>
             </div>
           </div>
-          <p className="px-4 pt-3 text-xs font-semibold text-mint">
-            {state.currentDraw.options.length} jogadores disponiveis
+          <p className="border-b border-black/15 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--success)]">
+            {state.currentDraw.options.length} jogadores disponíveis
           </p>
           {pendingPlayer && (
-            <div className="mx-4 mt-4 border border-gold/35 bg-gold/10 px-4 py-3">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-gold">Selecionado</p>
-              <p className="mt-1 truncate text-lg font-black text-white">{pendingPlayer.name}</p>
+            <div className="draft-selection-banner mx-3 mt-3 border border-black bg-black px-3 py-2.5">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--success)]">Selecionado</p>
+              <p className="mt-1 truncate text-sm font-black text-white">{pendingPlayer.name}</p>
             </div>
           )}
-          <div className="m-3 border-y border-sky-300/15 bg-transparent">
-            <div className="border-b border-emerald-400/15 px-3 py-2">
-              <p className="text-xs font-black uppercase tracking-[0.24em] text-emerald-300">Elenco</p>
+          <div className="m-3 min-h-0 flex-1 border border-black/20 bg-transparent">
+            <div className="border-b border-black/20 px-3 py-2">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black">Elenco</p>
             </div>
-            <div className="game-scrollbar max-h-[min(440px,calc(100vh-23rem))] overflow-y-auto">
+            <div className="game-scrollbar h-full max-h-[min(440px,calc(100dvh-19rem))] overflow-y-auto">
               {state.currentDraw.roster
                 .slice()
                 .sort((a, b) => Number(!state.currentDraw!.options.some((p) => p.id === a.id)) - Number(!state.currentDraw!.options.some((p) => p.id === b.id)) || positionOrder(a.primaryPosition) - positionOrder(b.primaryPosition) || (a.shirtNumber ?? 99) - (b.shirtNumber ?? 99))
@@ -130,7 +126,7 @@ export function DraftPanel() {
           </div>
         </div>
       ) : (
-        <div className="border border-dashed border-sky-300/22 bg-black/35 p-6 text-slate-300">
+        <div className="border border-dashed border-black/40 bg-white p-6 text-[var(--muted)]">
           Nenhum time sorteado.
         </div>
       )}
@@ -161,16 +157,16 @@ function PlayerListRow({
 }) {
   const blocked = !eligible || alreadyPicked;
   return (
-    <div className={blocked ? "grid grid-cols-[2rem_minmax(0,1fr)_3rem_2.5rem_5.25rem] items-center gap-3 border-b border-sky-300/[0.07] px-3 py-2 text-xs opacity-40" : active ? "grid grid-cols-[2rem_minmax(0,1fr)_3rem_2.5rem_5.25rem] items-center gap-3 border-b border-gold bg-gold/10 px-3 py-2 text-xs" : "grid grid-cols-[2rem_minmax(0,1fr)_3rem_2.5rem_5.25rem] items-center gap-3 border-b border-sky-300/[0.07] px-3 py-2 text-xs hover:bg-sky-300/[0.05]"}>
-      <span className="font-mono text-emerald-300">#{player.shirtNumber ?? "--"}</span>
+    <div className={blocked ? "grid min-h-14 grid-cols-[2rem_minmax(0,1fr)_3.25rem_2.5rem_4.8rem] items-center gap-2 border-b border-black/10 px-3 py-1.5 text-xs opacity-35" : active ? "grid min-h-14 grid-cols-[2rem_minmax(0,1fr)_3.25rem_2.5rem_4.8rem] items-center gap-2 border-b border-[var(--accent)] bg-[var(--accent)]/10 px-3 py-1.5 text-xs" : "grid min-h-14 grid-cols-[2rem_minmax(0,1fr)_3.25rem_2.5rem_4.8rem] items-center gap-2 border-b border-black/10 px-3 py-1.5 text-xs hover:bg-black/[0.035]"}>
+      <span className="font-mono text-[var(--success)]">#{player.shirtNumber ?? "--"}</span>
       <div className="min-w-0">
-        <p className="truncate font-black text-white">{player.name}</p>
-        <p className="truncate text-xs text-slate-400">
+        <p className="truncate font-black text-black">{player.name}</p>
+        <p className="truncate text-[10px] text-[var(--muted)]">
           {player.nationality}
         </p>
       </div>
-      <span className="justify-self-center rounded-full border border-emerald-300/15 bg-night/45 px-1.5 py-1 font-mono text-[10px] font-black text-emerald-300">{positionLabel(player.primaryPosition)}</span>
-      <span className="justify-self-end font-mono text-base font-black text-gold tabular-nums">{hidden ? "--" : player.overall}</span>
+      <span className="justify-self-center border border-black/20 bg-white px-1.5 py-1 font-mono text-[9px] font-black text-[var(--success)]">{positionLabel(player.primaryPosition)}</span>
+      <span className="justify-self-end font-display text-lg font-black text-[var(--warning)] tabular-nums">{hidden ? "--" : player.overall}</span>
       <div className="flex justify-end">
         <Button data-testid="choose-player" className="min-h-8 w-full px-2 py-1 text-[11px]" variant={blocked ? "secondary" : "primary"} onClick={onChoose} disabled={blocked}>
           {alreadyPicked ? "XI" : eligible ? "Escolher" : "--"}

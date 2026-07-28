@@ -17,8 +17,10 @@ const adaptations: Partial<Record<Position, Position[]>> = {
   CB: ["DM"]
 };
 
-const freeWideRoleSwitches: Partial<Record<Position, Position[]>> = {
+const freeRoleSwitches: Partial<Record<Position, Position[]>> = {
   RW: ["RM"],
+  ST: ["CF"],
+  CF: ["ST"],
   RB: ["RWB"],
   LB: ["LWB"],
   RWB: ["RB"],
@@ -32,8 +34,8 @@ export function calculatePositionFit(player: Player, slotPosition: Position): Po
   if (player.primaryPosition === "GK" || slotPosition === "GK") {
     return { type: "incompatible", effectiveRating: 0, penalty: 99, reason: "Goleiro nao atua na linha e jogadores de linha nao atuam no gol", allowed: false };
   }
-  if (freeWideRoleSwitches[player.primaryPosition]?.includes(slotPosition)) {
-    return { type: "adapted", effectiveRating: player.overall, penalty: 0, reason: "Funcao lateral equivalente", allowed: true };
+  if (freeRoleSwitches[player.primaryPosition]?.includes(slotPosition)) {
+    return { type: "adapted", effectiveRating: player.overall, penalty: 0, reason: "Funcao equivalente", allowed: true };
   }
   if (player.secondaryPositions.includes(slotPosition)) {
     return { type: "secondary", effectiveRating: player.overall - 2, penalty: 2, reason: "Posicao secundaria", allowed: true };

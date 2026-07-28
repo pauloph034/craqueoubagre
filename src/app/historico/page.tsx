@@ -1,6 +1,7 @@
 "use client";
 
 import { AdBanner } from "@/components/AdBanner";
+import { EditorialPageHeader, EmptyState } from "@/components/ui/editorial";
 import { useGameStore } from "@/stores/game-store";
 import { useEffect, useMemo } from "react";
 
@@ -21,21 +22,25 @@ export default function HistoryPage() {
   }, [history]);
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-7">
-      <p className="text-xs font-black uppercase tracking-[0.22em] text-mint">Clube</p>
-      <h1 className="mt-1 text-3xl font-black">Galeria de taças</h1>
+    <main className="editorial-shell py-6">
+      <EditorialPageHeader chapter="Arquivo do clube" title="Galeria de taças" description="Os clubes com campanhas registradas e títulos conquistados." />
 
-      <section className="mt-5 border-y border-white/[0.08] py-4">
-        <div className="grid gap-px overflow-hidden border border-white/[0.08] bg-white/[0.08] md:grid-cols-3">
+      <section className="mt-5 border-y border-black py-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {gallery.map((item) => (
-            <article key={`${item.userName}-${item.teamName}`} className="bg-night/90 p-4">
-              <p className="text-sm text-slate-400">{item.userName}</p>
-              <h2 className="text-xl font-black">{item.teamName}</h2>
-              <p className="mt-3 font-mono text-4xl font-black text-gold">{item.trophies}</p>
-              <p className="text-sm text-slate-300">Liga dos Craques em {item.campaigns} campanha(s)</p>
+            <article key={`${item.userName}-${item.teamName}`} className="grid min-h-32 grid-cols-[1fr_auto] border border-black bg-white p-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[var(--muted)]">{item.userName}</p>
+                <h2 className="mt-1 font-display text-xl font-black uppercase">{item.teamName}</h2>
+                <p className="mt-4 text-xs text-[var(--muted)]">{item.campaigns} campanha(s)</p>
+              </div>
+              <div className="border-l border-black/20 pl-4 text-right">
+                <p className="font-display text-4xl font-black text-[var(--accent)]">{item.trophies}</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.12em]">Taças</p>
+              </div>
             </article>
           ))}
-          {gallery.length === 0 && <p className="text-slate-300">Nenhuma taca conquistada ainda.</p>}
+          {gallery.length === 0 && <div className="sm:col-span-2 lg:col-span-3"><EmptyState title="Estante vazia" description="Nenhuma taça conquistada ainda." /></div>}
         </div>
       </section>
 

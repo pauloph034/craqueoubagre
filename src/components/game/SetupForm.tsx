@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { Button } from "@/components/ui/button";
-import { GamePanel, SectionHeader } from "@/components/ui/surface";
+import { EditorialPageHeader } from "@/components/ui/editorial";
 import { formations, getFormationSlots } from "@/config/formations";
 import { tacticalStyles } from "@/config/game-balance";
 import { cn } from "@/lib/utils";
@@ -20,18 +20,20 @@ export function SetupForm() {
   const [tacticalStyle, setTacticalStyle] = useState<TacticalStyle>("equilibrado");
   const [difficulty, setDifficulty] = useState<Difficulty>("classico");
   return (
-    <GamePanel className="border-sky-300/18 bg-black/45 p-5 md:p-6">
-      <SectionHeader eyebrow="Nova campanha" title="Prepare seu draft" description="Escolha esquema, estilo e dificuldade antes de sortear os times historicos." />
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="space-y-5">
-          <label className="grid gap-2 text-sm font-semibold text-slate-200">
-            Nome do usuario
-            <input className="min-h-12 w-full border border-white/10 bg-night/80 px-4 text-white placeholder:text-slate-500 disabled:opacity-70" value={currentUser?.username ?? userName} onChange={(event) => setUserName(event.target.value)} disabled={Boolean(currentUser)} />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-slate-200">
-            Nome do seu time
-            <input className="min-h-12 w-full border border-white/10 bg-night/80 px-4 text-white placeholder:text-slate-500 disabled:opacity-70" value={currentUser?.teamName ?? teamName} onChange={(event) => setTeamName(event.target.value)} disabled={Boolean(currentUser)} />
-          </label>
+    <section className="editorial-panel p-4 sm:p-6">
+      <EditorialPageHeader chapter="01 · Nova campanha" title="Prepare o draft" description="Escolha a estrutura do time e vá direto ao sorteio." />
+      <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,.72fr)]">
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--muted)]">
+              Usuário
+              <input className="min-h-10 w-full border border-black bg-white px-3 text-sm font-semibold text-black placeholder:text-[var(--muted)] disabled:bg-[var(--surface-muted)]" value={currentUser?.username ?? userName} onChange={(event) => setUserName(event.target.value)} disabled={Boolean(currentUser)} />
+            </label>
+            <label className="grid gap-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--muted)]">
+              Nome do time
+              <input className="min-h-10 w-full border border-black bg-white px-3 text-sm font-semibold text-black placeholder:text-[var(--muted)] disabled:bg-[var(--surface-muted)]" value={currentUser?.teamName ?? teamName} onChange={(event) => setTeamName(event.target.value)} disabled={Boolean(currentUser)} />
+            </label>
+          </div>
           <OptionGroup label="Formacao">
             {Object.keys(formations).map((item) => (
               <button key={item} type="button" onClick={() => setFormation(item)} className={optionClass(formation === item)}>
@@ -56,36 +58,39 @@ export function SetupForm() {
         </div>
         <FormationPreview formation={formation} tacticalStyle={tacticalStyle} />
       </div>
-      <Button className="mt-6 min-h-14 rounded-sm px-8 text-base uppercase tracking-wide" onClick={() => startDraft({ userName: currentUser?.username ?? (userName.trim() || "Jogador"), teamName: currentUser?.teamName ?? (teamName.trim() || "Craque ou Bagre"), formation, tacticalStyle, difficulty })}>
+      <div className="mt-5 flex items-center justify-between gap-4 border-t border-black/20 pt-4">
+        <p className="hidden text-xs text-[var(--muted)] sm:block">Tudo pronto? O primeiro clube aparece em até um segundo.</p>
+        <Button className="min-h-11 w-full px-7 sm:w-auto" onClick={() => startDraft({ userName: currentUser?.username ?? (userName.trim() || "Jogador"), teamName: currentUser?.teamName ?? (teamName.trim() || "Craque ou Bagre"), formation, tacticalStyle, difficulty })}>
         <Play size={18} /> Iniciar draft
-      </Button>
-    </GamePanel>
+        </Button>
+      </div>
+    </section>
   );
 }
 
 function OptionGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <p className="mb-2 text-sm font-semibold text-slate-200">{label}</p>
-      <div className="flex flex-wrap gap-2">{children}</div>
+      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--muted)]">{label}</p>
+      <div className="flex flex-wrap border-l border-t border-black">{children}</div>
     </div>
   );
 }
 
 function optionClass(active: boolean) {
-  return cn("min-h-11 border px-4 py-2 text-sm font-black uppercase tracking-wide transition", active ? "border-electric bg-electric text-night" : "border-white/15 bg-night/80 text-slate-100 hover:bg-white/10");
+  return cn("min-h-10 border-b border-r border-black px-4 py-2 text-xs font-black uppercase transition", active ? "bg-[var(--accent)] text-white" : "bg-white text-black hover:bg-black hover:text-white");
 }
 
 function FormationPreview({ formation, tacticalStyle }: { formation: string; tacticalStyle: TacticalStyle }) {
   const slots = getFormationSlots(formation, tacticalStyle);
   return (
-    <div className="border border-sky-300/20 bg-[#03121f]/72 p-3">
-      <div className="relative mx-auto aspect-[7/10] min-h-[430px] overflow-hidden border border-white/15 field-lines">
+    <div className="border border-black bg-[var(--surface-muted)] p-3">
+      <div className="relative mx-auto aspect-[7/10] max-h-[500px] min-h-[380px] overflow-hidden border border-black field-lines">
         <div className="absolute left-1/2 top-1/2 h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15" />
         {slots.map((slot) => (
           <div
             key={slot.id}
-            className="absolute grid h-11 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded border border-dashed border-emerald-300/50 bg-night/70 text-center text-[10px] font-black text-emerald-200"
+            className="absolute grid h-10 w-12 -translate-x-1/2 -translate-y-1/2 place-items-center border border-dashed border-white/65 bg-black/70 text-center text-[9px] font-black text-white"
             style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
           >
             <span>{slot.label}</span>

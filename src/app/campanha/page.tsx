@@ -117,8 +117,8 @@ export default function CampaignPage() {
 
   if (phase !== "campaignReady" && phase !== "simulating" && phase !== "campaignFinished") {
     return (
-      <main className="mx-auto max-w-4xl px-4 py-10">
-        <section className="rounded-lg border border-white/12 bg-white/[0.07] p-6 shadow-card">
+      <main className="editorial-shell py-8">
+        <section className="editorial-panel max-w-3xl p-6">
           <p className="text-sm font-black uppercase tracking-[0.2em] text-gold">Campanha bloqueada</p>
           <h1 className="mt-2 text-3xl font-black">Monte o elenco antes de simular</h1>
           <p className="mt-2 text-slate-300">Escolha os 11 jogadores e confirme o tecnico para liberar a fase de grupos.</p>
@@ -130,8 +130,8 @@ export default function CampaignPage() {
 
   if (!summary && phase === "campaignFinished") {
     return (
-      <main className="mx-auto max-w-4xl px-4 py-10">
-        <section className="rounded-lg border border-white/12 bg-white/[0.07] p-6">
+      <main className="editorial-shell py-8">
+        <section className="editorial-panel max-w-3xl p-6">
           <h1 className="text-3xl font-black">Campanha</h1>
           <p className="mt-2 text-slate-300">Nenhum resumo final encontrado.</p>
           <Link href="/jogar"><Button className="mt-4">Voltar ao draft</Button></Link>
@@ -141,12 +141,12 @@ export default function CampaignPage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
-      <section className="border-b border-white/[0.09] pb-5">
-        <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">Campanha</p>
+    <main className="editorial-shell py-5">
+      <section className="border-b border-black pb-4">
+        <p className="editorial-kicker">Campanha</p>
         <div className="mt-1 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-black md:text-3xl">{displayTeamName}</h1>
+            <h1 className="editorial-page-title">{displayTeamName}</h1>
             <p className="mt-1 text-sm text-slate-400">{selectedCoach ? `${selectedCoach.name} · ${selectedCoach.clubName} ${selectedCoach.season}` : "Tecnico nao definido"}</p>
           </div>
           {phase === "campaignReady" && (
@@ -231,13 +231,13 @@ export default function CampaignPage() {
 
 function ChampionCelebration({ teamName }: { teamName: string }) {
   return (
-    <section className="mt-6 overflow-hidden rounded-lg border border-gold/40 bg-[radial-gradient(circle_at_top,_rgba(248,198,48,.28),_transparent_42%),rgba(255,255,255,.07)] p-8 text-center shadow-card">
-      <p className="text-sm font-black uppercase tracking-[0.3em] text-gold">Campeao da Liga dos Craques</p>
-      <h2 className="mt-3 text-5xl font-black">{teamName}</h2>
-      <div className="mx-auto mt-6 grid h-28 w-28 place-items-center rounded-full border border-gold bg-gold/20 text-6xl font-black text-gold shadow-[0_0_50px_rgba(248,198,48,.25)]">
+    <section className="mt-6 border border-black bg-[var(--accent)] p-7 text-center">
+      <p className="text-xs font-black uppercase tracking-[0.25em] text-black">Campeao da Liga dos Craques</p>
+      <h2 className="mt-3 font-display text-4xl font-black uppercase leading-none text-black">{teamName}</h2>
+      <div className="mx-auto mt-5 grid h-20 w-20 place-items-center border border-black bg-black text-4xl font-black text-white">
         T
       </div>
-      <p className="mt-5 text-slate-200">Campanha concluida. O titulo veio para sua galeria.</p>
+      <p className="mt-4 text-black/70">Campanha concluida. O titulo veio para sua galeria.</p>
       <Link href="/resultado"><Button className="mt-6">Ver resultado final</Button></Link>
     </section>
   );
@@ -251,24 +251,24 @@ function KnockoutBracket({ bracket, champion, customTeamName, emblemId }: { brac
     { name: "Final", label: "Final" }
   ];
   return (
-    <section className="mt-6 overflow-hidden rounded-xl border border-emerald-300/20 bg-[radial-gradient(circle_at_86%_18%,rgba(17,255,184,.16),transparent_24%),radial-gradient(circle_at_12%_80%,rgba(40,184,255,.12),transparent_28%),linear-gradient(135deg,rgba(4,18,43,.98),rgba(3,46,52,.88)_58%,rgba(5,10,32,.98))] p-5 shadow-card">
+    <section className="mt-6 overflow-hidden border border-black bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Chaveamento</p>
           <h2 className="mt-1 text-3xl font-black">Mata-mata simulado</h2>
         </div>
         {champion && (
-          <div className="rounded-lg border border-gold/35 bg-gold/10 px-4 py-3 shadow-[0_0_24px_rgba(248,198,48,.12)]">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gold">Campeao</p>
-            <p className="max-w-[220px] truncate font-black"><TeamNameWithCrest name={champion} emblemId={champion === customTeamName ? emblemId : undefined} size="sm" showUnknown /></p>
+          <div className="border border-black bg-[var(--accent)] px-4 py-3 text-black">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black">Campeao</p>
+            <div className="max-w-[260px] text-sm font-black text-black"><TeamNameWithCrest name={champion} emblemId={champion === customTeamName ? emblemId : undefined} size="sm" textClassName="!text-black" showUnknown allowWrap /></div>
           </div>
         )}
       </div>
       <div className="mt-5 overflow-x-auto pb-2">
         <div className="grid min-w-[920px] grid-cols-[1.15fr_.95fr_.85fr_.75fr] items-start gap-4">
           {phases.map((phase) => (
-            <div key={phase.name} className="rounded-lg border border-emerald-300/10 bg-night/55 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,.04)]">
-              <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-sky-200">{phase.label}</p>
+            <div key={phase.name} className="border border-black bg-[var(--background)] p-3">
+              <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-black">{phase.label}</p>
               <div className="grid min-h-[650px]" style={{ gridTemplateRows: "repeat(16, minmax(0, 1fr))" }}>
                 {bracket.filter((match) => match.phase === phase.name).map((match, index) => (
                   <div key={match.id} style={{ gridRow: `${bracketRowStart(phase.name, index)} / span 2` }}>
@@ -296,11 +296,11 @@ function FinalBracketMatch({ match, customTeamName, emblemId }: { match: Bracket
   return (
     <article className="rounded-md border border-emerald-300/14 bg-white/[0.055] px-3 py-2 text-sm shadow-[0_0_18px_rgba(17,255,184,.08)]">
       <div className={`grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2 border-b border-white/10 pb-1.5 ${match.winnerName === match.homeName ? "text-white" : "text-slate-400"}`}>
-        <TeamNameWithCrest name={match.homeName} emblemId={match.homeName === customTeamName ? emblemId : undefined} size="sm" textClassName="font-black" showUnknown />
+        <TeamNameWithCrest name={match.homeName} emblemId={match.homeName === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
         <span className="text-right font-mono font-black text-gold">{match.homeGoals}</span>
       </div>
       <div className={`grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2 pt-1.5 ${match.winnerName === match.awayName ? "text-white" : "text-slate-400"}`}>
-        <TeamNameWithCrest name={match.awayName} emblemId={match.awayName === customTeamName ? emblemId : undefined} size="sm" textClassName="font-black" showUnknown />
+        <TeamNameWithCrest name={match.awayName} emblemId={match.awayName === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
         <span className="text-right font-mono font-black text-gold">{match.awayGoals}</span>
       </div>
     </article>
@@ -309,7 +309,7 @@ function FinalBracketMatch({ match, customTeamName, emblemId }: { match: Bracket
 
 function WaitingCard({ phase, opponentName, teamName, onStart }: { phase: string; opponentName?: string; teamName: string; onStart?: () => void }) {
   return (
-    <article className="rounded-lg border border-emerald-300/20 bg-[linear-gradient(135deg,rgba(5,22,49,.96),rgba(2,44,51,.9))] p-6 shadow-card">
+    <article className="border border-black bg-white p-6">
       <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">{phase}</p>
       <h2 className="mt-2 flex flex-wrap items-center gap-2 text-3xl font-black">
         {opponentName ? <><span>{teamName} x</span><TeamNameWithCrest name={opponentName} size="md" textClassName="font-black" /></> : "Preparando tabela"}
@@ -335,7 +335,7 @@ function CampaignSidebar({
 }) {
   const rows = schedule.length > 0 ? schedule.slice(0, 3) : matches.slice(0, 3).map((match) => ({ phase: match.phase, opponent: { name: match.opponentName }, knockout: false }));
   return (
-    <aside className="rounded-lg border border-emerald-300/18 bg-[linear-gradient(135deg,rgba(5,22,49,.78),rgba(2,48,52,.58))] p-4 shadow-card">
+    <aside className="border border-black bg-white p-4">
       <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">Jogos da campanha</p>
       <div className="mt-4 space-y-2">
         {rows.map((item, index) => {
@@ -471,7 +471,7 @@ function CompactMatchPanel({
         </div>
         <div className="flex items-end gap-3">
           <MatchSpeedControl speed={speed} onSpeedChange={onSpeedChange} />
-          <span className="font-mono text-sm font-black text-emerald-300">{minute}'</span>
+          <span className="border border-black bg-[var(--accent)] px-2 py-1 font-mono text-sm font-black text-black">{minute}'</span>
           <span className="whitespace-nowrap font-mono text-3xl font-black leading-none text-gold">{userGoals} - {opponentGoals}</span>
         </div>
       </div>
@@ -480,7 +480,7 @@ function CompactMatchPanel({
       </div>
       <div className={`mt-3 flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${currentGoalEvent ? "border-gold/50 bg-gold/12 text-white" : "border-white/10 bg-white/[0.04] text-slate-300"}`}>
         <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${currentGoalEvent ? "bg-gold shadow-[0_0_14px_rgba(248,198,48,.65)]" : "bg-emerald-300/70"}`} />
-        <span className="font-mono text-xs text-emerald-200">{minute}'</span>
+        <span className="font-mono text-xs font-black text-black">{minute}'</span>
         <span className="font-medium">{currentLabel}</span>
       </div>
     </div>
@@ -508,19 +508,18 @@ function LiveKnockoutBracket({
     { title: "Final", pairs: pairs.final }
   ];
   return (
-    <div className="overflow-hidden rounded-xl border border-emerald-300/20 bg-[radial-gradient(circle_at_85%_25%,rgba(17,255,184,.16),transparent_22%),radial-gradient(circle_at_88%_62%,rgba(40,184,255,.14),transparent_24%),linear-gradient(135deg,rgba(4,18,43,.98),rgba(3,46,52,.92)_55%,rgba(5,10,32,.98))] p-5 shadow-card">
+    <div className="overflow-hidden border border-black bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Mata-mata</p>
           <h2 className="text-3xl font-black">Chaveamento da Liga dos Craques</h2>
         </div>
-        <div className="rounded-full border border-gold/40 bg-gold/10 px-5 py-3 text-3xl text-gold shadow-[0_0_28px_rgba(248,198,48,.12)]">T</div>
       </div>
       <div className="mt-5 overflow-x-auto pb-2">
         <div className="grid min-w-[920px] grid-cols-[1.15fr_.95fr_.85fr_.75fr] items-start gap-4">
           {columns.map((column) => (
-            <div key={column.title} className="min-h-[440px] rounded-lg border border-emerald-300/10 bg-night/50 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,.04)]">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-200">{column.title}</p>
+            <div key={column.title} className="min-h-[440px] border border-black bg-[var(--background)] p-3">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-black">{column.title}</p>
               <div className={column.title === "Oitavas" ? "mt-3 space-y-2" : column.title === "Quartas" ? "mt-3 space-y-5 pt-5" : column.title === "Semi" ? "mt-3 space-y-12 pt-16" : "mt-3 pt-32"}>
                 {column.pairs.map((pair, index) => (
                   <BracketPair key={`${column.title}-${index}`} pair={pair} customTeamName={teamName} emblemId={emblemId} />
@@ -547,11 +546,11 @@ function BracketPair({ pair, customTeamName, emblemId }: { pair: KnockoutPairVie
   return (
     <article className={`relative rounded-md border p-2 text-[11px] font-black uppercase shadow-[0_0_18px_rgba(17,255,184,.1)] ${pair.live ? "border-gold/60 bg-gold/12" : "border-emerald-300/18 bg-white/[0.055]"}`}>
       <p className={`flex items-center justify-between gap-2 border-b border-white/10 pb-1 ${pair.winner === pair.home ? "text-white" : "text-slate-400"}`}>
-        <TeamNameWithCrest name={pair.home} emblemId={pair.home === customTeamName ? emblemId : undefined} size="sm" textClassName="font-black" showUnknown />
+        <TeamNameWithCrest name={pair.home} emblemId={pair.home === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
         {pair.homeGoals !== undefined && <span className="shrink-0 font-mono text-gold">{pair.homeGoals}</span>}
       </p>
       <p className={`flex items-center justify-between gap-2 pt-1 ${pair.winner === pair.away ? "text-white" : "text-slate-400"}`}>
-        <TeamNameWithCrest name={pair.away} emblemId={pair.away === customTeamName ? emblemId : undefined} size="sm" textClassName="font-black" showUnknown />
+        <TeamNameWithCrest name={pair.away} emblemId={pair.away === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
         {pair.awayGoals !== undefined && <span className="shrink-0 font-mono text-gold">{pair.awayGoals}</span>}
       </p>
       <span className="absolute -right-4 top-1/2 hidden h-px w-4 bg-emerald-300/45 sm:block" />
@@ -683,9 +682,6 @@ function LiveMatchCard({
   const userGoals = finished ? match.userGoals : visible.filter((item) => item.event?.type === "goal" && item.event.team === "user").length;
   const opponentGoals = finished ? match.opponentGoals : visible.filter((item) => item.event?.type === "goal" && item.event.team === "opponent").length;
   const progress = Math.min(100, Math.round((minute / (match.events.some((event) => event.minute > 90) ? 120 : 90)) * 100));
-  const goals = visible.filter((item) => item.event?.type === "goal");
-  const currentItem = visible.at(-1);
-
   return (
     <article className="overflow-hidden border border-sky-200/10 bg-black/30">
       <div className="p-4">
@@ -703,7 +699,7 @@ function LiveMatchCard({
           </div>
           <div className="flex flex-wrap items-center gap-3 md:justify-end">
             <MatchSpeedControl speed={speed} onSpeedChange={onSpeedChange} />
-            <span className="rounded-md border border-emerald-300/20 bg-night/70 px-3 py-2 font-mono text-sm font-black text-emerald-200">{minute}'</span>
+            <span className="border border-black bg-[var(--accent)] px-3 py-2 font-mono text-sm font-black text-black">{minute}'</span>
             <span className="whitespace-nowrap font-mono text-3xl font-black leading-none text-gold md:text-4xl">{userGoals} - {opponentGoals}</span>
           </div>
         </div>
@@ -712,29 +708,16 @@ function LiveMatchCard({
         </div>
       </div>
 
-      <div className="grid gap-4 border-t border-white/[0.08] p-4 md:grid-cols-[minmax(0,.72fr)_minmax(230px,.28fr)]">
-        <ol className="max-h-[250px] space-y-1 overflow-y-auto pr-1 game-scrollbar">
+      <div className="border-t border-black/10 p-4">
+        <ol className="game-scrollbar max-h-[300px] space-y-1 overflow-y-auto pr-1" aria-label="Linha do tempo da partida">
           {visible.map((item, index) => (
-            <li key={`${item.minute}-${index}`} className={`grid grid-cols-[2.8rem_1fr] gap-3 border-b px-2 py-2 text-sm transition ${item.event?.type === "goal" ? "border-gold/35 bg-gold/[0.07] text-white" : "border-white/[0.06] text-slate-300"}`}>
-              <span className="font-mono text-xs font-black text-sky-200">{item.minute}'</span>
-              <span className="font-medium">{item.event ? formatEventLabel(item.event, teamName, match.opponentName) : item.label}</span>
+            <li key={`${item.minute}-${index}`} className={`grid grid-cols-[2.8rem_auto_minmax(0,1fr)] items-center gap-3 border-b px-2 py-2.5 text-sm transition ${item.event?.type === "goal" ? "border-[var(--warning)]/40 bg-[var(--warning)]/10 font-bold" : "border-black/10"}`}>
+              <span className="font-mono text-xs font-black text-black">{item.minute}'</span>
+              <span className={`h-2.5 w-2.5 rounded-full ${item.event?.type === "goal" ? "bg-[var(--warning)]" : "bg-black/20"}`} aria-hidden />
+              <span className="min-w-0 break-words font-medium">{item.event ? formatEventLabel(item.event, teamName, match.opponentName) : item.label}</span>
             </li>
           ))}
         </ol>
-        <div className="border-l border-white/[0.08] p-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300">Gols</p>
-          <div className="mt-3 space-y-2">
-            {goals.length ? goals.map((item, index) => (
-              <div key={`goal-${item.minute}-${index}`} className="flex items-center gap-2 text-sm">
-                <span className="h-2.5 w-2.5 rounded-full bg-gold shadow-[0_0_14px_rgba(248,198,48,.65)]" />
-                <span className="font-mono text-xs text-sky-200">{item.minute}'</span>
-                <span className="min-w-0 truncate font-black">{item.event ? formatEventLabel(item.event, teamName, match.opponentName) : item.label}</span>
-              </div>
-            )) : (
-              <p className="text-sm text-slate-400">{currentItem?.label ?? "Bola rolando"}</p>
-            )}
-          </div>
-        </div>
       </div>
     </article>
   );
@@ -786,7 +769,7 @@ function GroupTable({
   const qualified = qualifiedTeams.length ? qualifiedTeams.includes(teamName) : fallbackRows.some((row) => row.name === (displayTeamName ?? teamName) && row.qualified);
 
   return (
-    <section className="mt-6 rounded-lg border border-emerald-300/20 bg-[linear-gradient(135deg,rgba(5,22,49,.88),rgba(2,48,52,.62))] p-5 shadow-card">
+    <section className="mt-6 border border-black bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-sm font-black uppercase tracking-[0.2em] text-emerald-300">Fim da fase de grupos</p>

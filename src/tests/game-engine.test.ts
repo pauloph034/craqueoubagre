@@ -54,6 +54,22 @@ describe("jogadores e posicoes", () => {
     expect(calculatePositionFit(player, "ST")).toMatchObject({ allowed: true, penalty: 0 });
   });
 
+  it("considera ATA e SA funcoes equivalentes sem penalidade", () => {
+    const attacker = players.find((item) => item.primaryPosition === "ST")!;
+    const secondAttacker = players.find((item) => item.primaryPosition === "CF")!;
+
+    expect(calculatePositionFit(attacker, "CF")).toMatchObject({
+      allowed: true,
+      penalty: 0,
+      effectiveRating: attacker.overall
+    });
+    expect(calculatePositionFit(secondAttacker, "ST")).toMatchObject({
+      allowed: true,
+      penalty: 0,
+      effectiveRating: secondAttacker.overall
+    });
+  });
+
   it("aplica penalidade secundaria", () => {
     const player = players.find((item) => item.secondaryPositions.includes("CF"))!;
     expect(calculatePositionFit(player, "CF").penalty).toBe(2);

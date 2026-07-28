@@ -63,7 +63,7 @@ export function buildProgression(username: string, campaigns: CampaignSummary[])
 
 export function buildRankings(users: UserAccount[], campaigns: CampaignSummary[]): RankingEntry[] {
   return users
-    .filter((user) => user.role === "player")
+    .filter((user) => user.teamName?.trim() || user.playerName?.trim() || user.username.trim())
     .map((user) => ({
       username: maskUsername(user.username),
       playerName: user.playerName?.trim() || user.username,
@@ -72,8 +72,8 @@ export function buildRankings(users: UserAccount[], campaigns: CampaignSummary[]
       progression: buildProgression(user.username, campaigns)
     }))
     .sort((a, b) =>
-      b.progression.competitiveRating - a.progression.competitiveRating ||
       b.progression.trophies - a.progression.trophies ||
+      b.progression.competitiveRating - a.progression.competitiveRating ||
       b.progression.xp - a.progression.xp
     );
 }

@@ -2,23 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: "Tusker Grotesk 5600";
+  src: url("/fonts/tusker-grotesk-5600-semibold.otf") format("opentype");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 600;
+}
+
 :root {
-  color-scheme: dark;
-  --bg-base: #01040d;
-  --bg-elevated: rgba(2, 8, 22, 0.97);
-  --surface: rgba(3, 13, 31, 0.82);
-  --surface-strong: rgba(1, 7, 19, 0.98);
-  --border-subtle: rgba(169, 211, 255, 0.09);
-  --border-strong: rgba(66, 189, 255, 0.28);
-  --text-primary: #eef6ff;
-  --text-secondary: #a8b8cf;
-  --primary: #28b8ff;
-  --accent: #f7c948;
-  --success: #34d399;
-  --danger: #fb7185;
-  --radius-panel: 6px;
+  color-scheme: light;
+  --background: #f2ecdd;
+  --background-deep: #e7dfcf;
+  --foreground: #080808;
+  --surface: #ffffff;
+  --surface-muted: #e8e1d4;
+  --surface-dark: #080808;
+  --border: #080808;
+  --border-soft: rgba(8, 8, 8, 0.2);
+  --muted: #68645c;
+  --accent: #12a66a;
+  --accent-dark: #08764a;
+  --success: #08764a;
+  --warning: #bd8121;
+  --danger: #a52a3a;
+  --info: #315e87;
+  --radius: 4px;
+  --header-height: 58px;
+  --content-max: 1180px;
   --font-display: "Arial Narrow", "Roboto Condensed", Impact, sans-serif;
-  --font-ui: Inter, Manrope, "Segoe UI", system-ui, sans-serif;
+  --font-brand: "Tusker Grotesk 5600", "Arial Narrow", Impact, sans-serif;
+  --font-ui: Inter, "Segoe UI", Arial, sans-serif;
+  --bg-base: var(--background);
+  --bg-elevated: var(--surface);
+  --surface-strong: var(--surface);
+  --border-subtle: var(--border-soft);
+  --border-strong: var(--border);
+  --text-primary: var(--foreground);
+  --text-secondary: var(--muted);
+  --primary: var(--accent);
+  --radius-panel: var(--radius);
+}
+
+.brand-display {
+  font-family: var(--font-brand);
+  font-style: normal;
+  font-weight: 600 !important;
+  letter-spacing: 0;
 }
 
 * {
@@ -32,32 +62,39 @@ html {
 body {
   margin: 0;
   background:
-    linear-gradient(180deg, rgba(1, 4, 13, 0.94), rgba(1, 4, 13, 0.98) 52%, #01040c 100%),
-    url("/assets/stadium-blue-neon-bg.jpg") center top / 100% auto fixed no-repeat,
-    #01040c;
-  color: #eef6ff;
+    linear-gradient(rgba(8, 8, 8, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(8, 8, 8, 0.028) 1px, transparent 1px),
+    var(--background);
+  background-size: 32px 32px;
+  color: var(--foreground);
   font-family: var(--font-ui), system-ui, sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
 }
 
-body::before,
-body::after {
+body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: -1;
+  background: linear-gradient(140deg, rgba(18, 166, 106, 0.035), transparent 42%);
 }
 
-body::before {
-  background: linear-gradient(180deg, rgba(40, 184, 255, 0.025), transparent 36rem);
-  opacity: 1;
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
 }
 
-body::after {
-  background: linear-gradient(90deg, rgba(0, 3, 12, 0.78), rgba(0, 3, 12, 0.28) 22%, rgba(0, 3, 12, 0.28) 78%, rgba(0, 3, 12, 0.78));
-  opacity: 0.9;
+main,
+section,
+article,
+aside,
+nav,
+div {
+  min-width: 0;
 }
 
 body.room-focus-mode .app-shell-header,
@@ -76,7 +113,7 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid #28b8ff;
+  outline: 2px solid var(--accent);
 }
 
 .stadium-texture {
@@ -86,22 +123,14 @@ select:focus-visible {
 }
 
 .stadium-texture::before {
-  content: "";
-  position: fixed;
-  inset: auto 0 0;
-  height: 42vh;
-  pointer-events: none;
-  z-index: -1;
-  background: linear-gradient(180deg, transparent, rgba(13, 92, 140, 0.05));
-  opacity: 0.5;
+  display: none;
 }
 
 .field-lines {
   background:
-    linear-gradient(90deg, rgba(75,201,255,.055) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(75,201,255,.04) 1px, transparent 1px),
-    repeating-linear-gradient(180deg, rgba(6,54,76,.7) 0 9%, rgba(4,36,61,.72) 9% 18%),
-    linear-gradient(145deg, rgba(4,55,78,.58), rgba(2,13,34,.9));
+    linear-gradient(90deg, rgba(242, 236, 221, 0.08) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(242, 236, 221, 0.08) 1px, transparent 1px),
+    repeating-linear-gradient(180deg, #153b2e 0 9%, #123428 9% 18%);
   background-size: 50% 100%, 100% 50%, 100% 100%, 100% 100%;
 }
 
@@ -111,13 +140,13 @@ select:focus-visible {
 }
 
 .stadium-texture main {
-  width: 100%;
+  max-width: 100%;
 }
 
 .stadium-texture .rounded-2xl,
 .stadium-texture .rounded-xl,
 .stadium-texture .rounded-lg {
-  border-radius: 6px;
+  border-radius: var(--radius);
 }
 
 .stadium-texture article,
@@ -130,12 +159,12 @@ select:focus-visible {
 }
 
 .game-scrollbar::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(8, 8, 8, 0.06);
 }
 
 .game-scrollbar::-webkit-scrollbar-thumb {
-  border-radius: 8px;
-  background: rgba(80, 190, 255, 0.32);
+  border-radius: 0;
+  background: rgba(8, 8, 8, 0.45);
 }
 
 @keyframes page-enter {
@@ -149,7 +178,7 @@ select:focus-visible {
 
 .game-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(125, 211, 252, 0.5) rgba(255, 255, 255, 0.08);
+  scrollbar-color: rgba(8, 8, 8, 0.5) rgba(8, 8, 8, 0.08);
 }
 
 .soccer-ball-3d {
@@ -329,8 +358,266 @@ select:focus-visible {
     background-size: 100% 100%, 100% 25%, 100% 100%;
   }
 
-  .stadium-texture main {
-    padding-left: 14px;
-    padding-right: 14px;
+  .stadium-texture main:not(.editorial-shell) {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+/* Editorial system ------------------------------------------------------- */
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display), "Arial Narrow", Impact, sans-serif;
+  letter-spacing: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+input,
+select,
+textarea {
+  border-radius: var(--radius) !important;
+}
+
+.editorial-shell {
+  width: min(100% - 32px, var(--content-max));
+  margin-inline: auto;
+}
+
+.app-shell-header nav,
+.app-shell-footer {
+  width: min(100% - 32px, var(--content-max));
+  max-width: var(--content-max) !important;
+  margin-inline: auto;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.editorial-kicker {
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.editorial-title {
+  margin-top: 0.45rem;
+  color: var(--foreground);
+  font-family: var(--font-display), "Arial Narrow", Impact, sans-serif;
+  font-size: clamp(2rem, 4vw, 3.8rem);
+  font-weight: 900;
+  line-height: 0.9;
+  text-transform: uppercase;
+}
+
+.editorial-page-title {
+  color: var(--foreground);
+  font-family: var(--font-display), "Arial Narrow", Impact, sans-serif;
+  font-size: clamp(2rem, 3.4vw, 2.9rem);
+  font-weight: 900;
+  line-height: 0.92;
+  text-transform: uppercase;
+}
+
+.editorial-muted {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.editorial-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.editorial-panel-dark {
+  border: 1px solid var(--foreground);
+  border-radius: var(--radius);
+  background: var(--surface-dark);
+  color: var(--background);
+}
+
+.editorial-rule {
+  border-color: var(--border-soft);
+}
+
+.editorial-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.editorial-number {
+  color: var(--accent);
+  font-family: var(--font-display), "Arial Narrow", Impact, sans-serif;
+  font-size: 1.55rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+/* Translate legacy dark utility surfaces into the new paper system. */
+.stadium-texture main :where(.text-white, .text-slate-50, .text-slate-100, .text-slate-200) {
+  color: var(--foreground) !important;
+}
+
+.stadium-texture main :where(.text-slate-300, .text-slate-400, .text-slate-500) {
+  color: var(--muted) !important;
+}
+
+.stadium-texture main [class*="bg-night"],
+.stadium-texture main [class*="bg-black/"],
+.stadium-texture main [class*="bg-white/"] {
+  background-color: rgba(255, 255, 255, 0.84) !important;
+}
+
+.stadium-texture main section[class*="bg-[linear"],
+.stadium-texture main section[class*="bg-[radial"],
+.stadium-texture main article[class*="bg-[linear"],
+.stadium-texture main article[class*="bg-[radial"],
+.stadium-texture main div[class*="bg-[linear"],
+.stadium-texture main div[class*="bg-[radial"] {
+  background: var(--surface) !important;
+}
+
+.stadium-texture main [class*="border-white"],
+.stadium-texture main [class*="border-sky"],
+.stadium-texture main [class*="border-emerald"] {
+  border-color: var(--border-soft) !important;
+}
+
+.stadium-texture main section,
+.stadium-texture main article {
+  box-shadow: none !important;
+}
+
+.stadium-texture main .field-lines {
+  color: var(--background);
+}
+
+.stadium-texture main .field-lines :where(.text-white, .text-slate-50, .text-slate-100, .text-slate-200, .text-slate-300) {
+  color: #ffffff !important;
+}
+
+.stadium-texture main .field-lines [class*="bg-night"],
+.stadium-texture main .field-lines [class*="bg-black"] {
+  background-color: rgba(8, 8, 8, 0.92) !important;
+}
+
+.stadium-texture main .field-lines [class*="border-white"] {
+  border-color: rgba(242, 236, 221, 0.5) !important;
+}
+
+.stadium-texture main .bg-electric {
+  background-color: var(--accent) !important;
+}
+
+.stadium-texture main .text-electric {
+  color: var(--accent) !important;
+}
+
+.stadium-texture main .text-mint {
+  color: var(--success) !important;
+}
+
+.stadium-texture main .text-gold {
+  color: var(--warning) !important;
+}
+
+.stadium-texture main .bg-gold {
+  background-color: var(--warning) !important;
+}
+
+.stadium-texture main .text-night {
+  color: var(--foreground) !important;
+}
+
+.stadium-texture main .bg-black :where(.text-white, .text-slate-50, .text-slate-100, .text-slate-200) {
+  color: #ffffff !important;
+}
+
+.stadium-texture main .draft-selection-banner,
+.stadium-texture main .draft-selection-banner :where(.text-white) {
+  color: #ffffff !important;
+  background-color: #080808 !important;
+}
+
+.stadium-texture main .draft-selection-banner .text-\[var\(--success\)\] {
+  color: var(--success) !important;
+}
+
+.achievement-emblem {
+  clip-path: polygon(50% 0, 92% 20%, 92% 72%, 50% 100%, 8% 72%, 8% 20%);
+}
+
+.stadium-texture main [class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+}
+
+.stadium-texture main [class*="shadow-"] {
+  box-shadow: none !important;
+}
+
+@media (min-width: 1280px) {
+  .game-workspace {
+    height: calc(100dvh - var(--header-height) - 24px);
+    min-height: 640px;
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 1023px) {
+  .editorial-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+
+  .game-workspace {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 639px) {
+  .editorial-shell {
+    width: min(100% - 32px, var(--content-max));
+  }
+
+  .editorial-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .editorial-page-title {
+    font-size: 2rem;
+  }
+
+  .editorial-title {
+    font-size: 2.35rem;
+    line-height: 0.94;
+  }
+
+  .editorial-panel,
+  .editorial-panel-dark {
+    max-width: 100%;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    max-width: 100%;
   }
 }

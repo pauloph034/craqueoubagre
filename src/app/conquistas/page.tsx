@@ -1,6 +1,7 @@
 "use client";
 
 import { achievements } from "@/data/loaders";
+import { CompactTabs, EditorialPageHeader, EmptyState } from "@/components/ui/editorial";
 import { cn } from "@/lib/utils";
 import { useGameStore } from "@/stores/game-store";
 import {
@@ -29,24 +30,20 @@ const tierRank = {
 
 const tierStyles = {
   special: {
-    card: "border-cyan-300/45 bg-cyan-500/[0.08] shadow-[0_0_35px_rgba(34,211,238,0.15)]",
-    icon: "border-cyan-200/55 bg-cyan-300/15 text-cyan-100",
-    glint: "from-cyan-300/25 via-emerald-300/10 to-transparent"
+    card: "border-[var(--success)] bg-emerald-50",
+    icon: "border-[var(--success)] bg-[var(--success)] text-white"
   },
   gold: {
-    card: "border-gold/50 bg-gold/[0.08] shadow-[0_0_28px_rgba(255,210,70,0.12)]",
-    icon: "border-gold/60 bg-gold/15 text-gold",
-    glint: "from-gold/25 via-yellow-200/10 to-transparent"
+    card: "border-amber-500 bg-amber-50",
+    icon: "border-amber-600 bg-amber-400 text-black"
   },
   silver: {
-    card: "border-slate-200/45 bg-slate-100/[0.07] shadow-[0_0_24px_rgba(226,232,240,0.08)]",
-    icon: "border-slate-200/55 bg-slate-100/15 text-slate-100",
-    glint: "from-slate-100/22 via-cyan-100/8 to-transparent"
+    card: "border-slate-500 bg-slate-100",
+    icon: "border-slate-600 bg-slate-300 text-black"
   },
   bronze: {
-    card: "border-orange-400/45 bg-orange-600/[0.08] shadow-[0_0_22px_rgba(251,146,60,0.1)]",
-    icon: "border-orange-300/55 bg-orange-500/15 text-orange-200",
-    glint: "from-orange-300/20 via-amber-400/8 to-transparent"
+    card: "border-orange-700 bg-orange-50",
+    icon: "border-orange-800 bg-orange-700 text-white"
   }
 };
 
@@ -80,64 +77,47 @@ export default function AchievementsPage() {
   useEffect(() => loadHistory(), [loadHistory]);
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-7">
-      <section className="border-b border-white/[0.08] pb-5">
-        <p className="text-xs font-black uppercase tracking-[0.35em] text-gold">Galeria</p>
-        <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h1 className="text-3xl font-black md:text-4xl">Conquistas</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-              Uma vitrine limpa para as campanhas memoraveis: titulos, defesas historicas, ataques absurdos e feitos raros.
-            </p>
-          </div>
-          <div className="border border-cyan-300/20 bg-cyan-300/[0.06] px-4 py-2 text-sm font-black text-cyan-100">
-            {unlockedIds.size}/{orderedAchievements.length} emblemas
-          </div>
-        </div>
-      </section>
+    <main className="editorial-shell max-w-6xl py-6">
+      <EditorialPageHeader
+        chapter="Galeria do clube"
+        title="Conquistas"
+        description="Títulos, campanhas marcantes e feitos raros."
+        action={<div className="border border-black px-3 py-2 text-xs font-black">{unlockedIds.size}/{orderedAchievements.length} emblemas</div>}
+      />
 
-      <div className="mt-5 grid grid-cols-2 border-b border-white/10 md:max-w-lg">
-        <button
-          className={cn("border-b-2 px-4 py-3 text-sm font-black transition", tab === "unlocked" ? "border-electric text-white" : "border-transparent text-slate-400 hover:text-white")}
-          type="button"
-          onClick={() => setTab("unlocked")}
-        >
-          Na estante ({unlockedIds.size})
-        </button>
-        <button
-          className={cn("border-b-2 px-4 py-3 text-sm font-black transition", tab === "locked" ? "border-electric text-white" : "border-transparent text-slate-400 hover:text-white")}
-          type="button"
-          onClick={() => setTab("locked")}
-        >
-          Na mira ({orderedAchievements.length - unlockedIds.size})
-        </button>
-      </div>
+      <CompactTabs
+        className="mt-4 max-w-lg"
+        value={tab}
+        onChange={(value) => setTab(value as "unlocked" | "locked")}
+        items={[
+          { value: "unlocked", label: "Na estante", count: unlockedIds.size },
+          { value: "locked", label: "Na mira", count: orderedAchievements.length - unlockedIds.size }
+        ]}
+      />
 
-      <section className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {visibleAchievements.map((item) => {
           const Icon = iconByAchievement[item.id] ?? Trophy;
           const style = tierStyles[item.tier];
           const unlocked = unlockedIds.has(item.id);
 
           return (
-            <article key={item.id} className={cn("relative min-h-40 overflow-hidden border p-4", style.card, !unlocked && "opacity-55 grayscale")}>
-              <div className={cn("absolute inset-x-0 top-0 h-24 bg-gradient-to-br", style.glint)} />
-              <div className="relative flex items-start gap-4">
-                <div className={cn("grid h-11 w-11 shrink-0 place-items-center border", style.icon)}>
-                  <Icon className="h-7 w-7" aria-hidden />
+            <article key={item.id} className={cn("relative flex min-h-52 flex-col items-center justify-center overflow-hidden border px-5 py-6 text-center", style.card, !unlocked && "opacity-55 grayscale")}>
+              <span className="absolute right-3 top-3 text-[9px] font-black uppercase tracking-[0.14em] text-black/45">{unlocked ? "Conquistada" : "Bloqueada"}</span>
+              <div className="flex w-full flex-col items-center">
+                <div className={cn("achievement-emblem grid h-14 w-14 place-items-center border-2", style.icon)}>
+                  <Icon className="h-7 w-7" strokeWidth={2.25} aria-hidden />
                 </div>
-                <div className="min-w-0">
-                  <h2 className="text-lg font-black leading-tight text-white">{item.name}</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">{item.description}</p>
+                <div className="mt-4 min-w-0">
+                  <h2 className="font-display text-lg font-black uppercase leading-tight text-black">{item.name}</h2>
+                  <p className="mt-2 text-xs leading-5 text-[var(--muted)]">{item.description}</p>
                 </div>
               </div>
             </article>
           );
         })}
         {visibleAchievements.length === 0 && (
-          <div className="rounded-2xl border border-white/12 bg-white/[0.06] p-6 text-slate-300">
-            {tab === "unlocked" ? "Nenhuma conquista na estante ainda. Jogue uma campanha para comecar a colecao." : "Tudo conquistado. Painel completo."}
-          </div>
+          <div className="sm:col-span-2 lg:col-span-4"><EmptyState title={tab === "unlocked" ? "Estante vazia" : "Painel completo"} description={tab === "unlocked" ? "Jogue uma campanha para começar a coleção." : "Todas as conquistas foram desbloqueadas."} /></div>
         )}
       </section>
     </main>

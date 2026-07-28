@@ -59,8 +59,8 @@ export default function AdminDataPage() {
 
   if (currentUser?.role !== "admin") {
     return (
-      <main className="mx-auto max-w-4xl px-4 py-10">
-        <section className="rounded-2xl border border-white/12 bg-night/80 p-7 shadow-card">
+      <main className="editorial-shell py-8">
+        <section className="editorial-panel max-w-3xl p-7">
           <p className="text-xs font-black uppercase tracking-[0.28em] text-gold">Acesso restrito</p>
           <h1 className="mt-3 text-4xl font-black">Painel administrativo</h1>
           <p className="mt-2 text-slate-300">Entre com uma conta administradora para ver metricas, usuarios e ferramentas de manutencao.</p>
@@ -71,17 +71,17 @@ export default function AdminDataPage() {
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8">
-      <section className="rounded-2xl border border-white/15 bg-[linear-gradient(135deg,rgba(5,22,49,.92),rgba(3,64,70,.72))] p-6 shadow-2xl backdrop-blur md:p-8">
-        <p className="text-xs font-black uppercase tracking-[0.35em] text-gold">Admin</p>
+    <main className="editorial-shell py-6">
+      <section className="border border-black bg-[var(--accent)] p-6 md:p-8">
+        <p className="text-xs font-black uppercase tracking-[0.3em] text-black">Admin</p>
         <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-4xl font-black md:text-5xl">Dashboard do jogo</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+            <h1 className="editorial-page-title text-black">Dashboard do jogo</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-black/70">
               Controle local de usuarios, base de dados, campanhas e sinais de uso do Craque ou Bagre.
             </p>
           </div>
-          <div className="rounded-full border border-emerald-300/25 bg-emerald-300/10 px-5 py-3 text-sm font-black text-emerald-100">
+          <div className="border border-black bg-white px-5 py-3 text-sm font-black text-black">
             {currentUser.playerName ?? currentUser.username}
           </div>
         </div>
@@ -99,7 +99,7 @@ export default function AdminDataPage() {
       </section>
 
       <section className="mt-6 grid gap-6 lg:grid-cols-[1.35fr_.65fr]">
-        <div className="rounded-2xl border border-white/12 bg-night/75 p-5 shadow-card backdrop-blur">
+        <div className="border border-black bg-white p-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.25em] text-emerald-300">Usuarios</p>
@@ -108,7 +108,7 @@ export default function AdminDataPage() {
             <label className="relative block md:w-80">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
-                className="w-full rounded-full border border-white/12 bg-[#050b18]/80 py-3 pl-10 pr-4 text-sm outline-none focus:border-electric/70"
+                className="w-full border border-black bg-white py-3 pl-10 pr-4 text-sm text-black outline-none focus:bg-[var(--background)]"
                 value={query}
                 placeholder="Pesquisar por usuario, nome ou time"
                 onChange={(event) => setQuery(event.target.value)}
@@ -133,8 +133,8 @@ export default function AdminDataPage() {
                 {filteredUsers.map((user) => {
                   const isProtected = user.username.toLowerCase() === "admin" || user.username === currentUser.username;
                   return (
-                    <tr key={user.username} className="bg-white/[0.045]">
-                      <td className="rounded-l-xl px-3 py-3 font-mono font-black">{user.username}</td>
+                    <tr key={user.username} className="bg-[var(--background)]">
+                      <td className="px-3 py-3 font-mono font-black">{user.username}</td>
                       <td className="px-3 py-3">{user.playerName ?? user.username}</td>
                       <td className="px-3 py-3">{user.teamName ?? `${user.username} FC`}</td>
                       <td className="px-3 py-3">
@@ -143,7 +143,7 @@ export default function AdminDataPage() {
                         </span>
                       </td>
                       <td className="px-3 py-3 text-slate-300">{new Date(user.createdAt).toLocaleDateString("pt-BR")}</td>
-                      <td className="rounded-r-xl px-3 py-3">
+                      <td className="px-3 py-3">
                         <div className="flex justify-end gap-2">
                           <IconButton
                             label="Gerar senha"
@@ -167,7 +167,7 @@ export default function AdminDataPage() {
         </div>
 
         <div className="grid gap-6">
-          <section className="rounded-2xl border border-white/12 bg-night/75 p-5 shadow-card backdrop-blur">
+          <section className="border border-black bg-white p-5">
             <p className="text-xs font-black uppercase tracking-[0.25em] text-emerald-300">Base de dados</p>
             <h2 className="mt-2 text-2xl font-black">Saude do cadastro</h2>
             <div className="mt-4 grid gap-3">
@@ -180,9 +180,9 @@ export default function AdminDataPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.06] p-5 shadow-card backdrop-blur">
+          <section className="border border-black bg-[var(--background)] p-5">
             <div className="flex items-center gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-xl border border-cyan-200/40 bg-cyan-200/10 text-cyan-100">
+              <div className="grid h-11 w-11 place-items-center border border-black bg-black text-white">
                 <Lock className="h-5 w-5" />
               </div>
               <div>
@@ -208,19 +208,19 @@ export default function AdminDataPage() {
 
 function Metric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: number | string }) {
   return (
-    <article className="rounded-2xl border border-white/12 bg-night/75 p-4 shadow-card backdrop-blur">
+    <article className="border border-black bg-white p-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-slate-400">{label}</p>
         <Icon className="h-5 w-5 text-emerald-300" />
       </div>
-      <p className="mt-3 text-3xl font-black text-white">{value}</p>
+      <p className="mt-3 font-display text-3xl font-black">{value}</p>
     </article>
   );
 }
 
 function Health({ label, value, warning }: { label: string; value: number; warning?: boolean }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
+    <div className="flex items-center justify-between border-b border-black/15 px-1 py-3">
       <span className="text-sm text-slate-300">{label}</span>
       <span className={cn("font-mono text-lg font-black", warning ? "text-red-200" : "text-gold")}>{value}</span>
     </div>

@@ -1,16 +1,18 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { useGameStore } from "@/stores/game-store";
-import Link from "next/link";
-import Image from "next/image";
-import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useGameStore } from "@/stores/game-store";
+import { Menu, Settings, X } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
 
-const nav = [
+const primaryNav = [
+  ["Início", "/"],
   ["Jogar", "/jogar"],
   ["Salas", "/salas"],
-  ["Galeria", "/historico"],
+  ["Histórico", "/historico"],
   ["Conquistas", "/conquistas"],
   ["Ranking", "/ranking"]
 ] as const;
@@ -19,50 +21,102 @@ export function AppHeader() {
   const currentUser = useGameStore((state) => state.currentUser);
   const logout = useGameStore((state) => state.logout);
   const pathname = usePathname();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname?.startsWith(href));
 
   return (
-    <header className="app-shell-header sticky top-0 z-40 border-b border-white/[0.07] bg-[rgba(2,8,22,.94)] backdrop-blur-lg">
-      <nav className="mx-auto flex min-h-14 max-w-[1320px] flex-wrap items-center justify-between gap-3 px-4 py-2 md:flex-nowrap md:px-6">
-        <Link href="/" className="flex items-center">
-          <Image
-            src="/assets/logo-craque-ou-bagre.png"
-            alt="Craque ou Bagre"
-            width={220}
-            height={108}
-            className="h-8 w-auto object-contain md:h-9"
-            priority
-          />
+    <header className="app-shell-header sticky top-0 z-40 h-[58px] border-b border-black bg-[var(--background)]">
+      <nav className="mx-auto flex h-full max-w-[1400px] items-center justify-between gap-4 px-4 sm:px-6">
+        <Link href="/" className="brand-display flex shrink-0 items-baseline whitespace-nowrap text-[1.55rem] uppercase leading-none" aria-label="Craque ou Bagre - Início" onClick={() => setMenuOpen(false)}>
+          <span>Craque&nbsp;</span>
+          <span className="text-[var(--accent)]">ou Bagre?</span>
         </Link>
-        <div className="order-3 flex w-full items-center gap-1 overflow-x-auto border-b border-white/8 md:order-none md:w-auto md:overflow-visible md:border-0">
-          {nav.map(([label, href]) => (
-            <Link key={href} href={href} className={cn("border-b-2 border-transparent px-3 py-2 text-sm font-bold text-slate-400 transition hover:text-white", pathname === href && "border-electric text-white")}>
+
+        <div className="hidden h-full items-center xl:flex">
+          {primaryNav.map(([label, href]) => (
+            <Link
+              key={href}
+              href={href}
+              className={cn(
+                "grid h-full place-items-center border-x border-transparent px-4 text-xs font-black uppercase transition",
+                isActive(href) ? "border-black bg-[var(--accent)] text-white" : "text-black hover:bg-black hover:text-white"
+              )}
+            >
               {label}
             </Link>
           ))}
           {currentUser?.role === "admin" && (
-            <Link href="/admin/dados" className={cn("border-b-2 border-transparent px-3 py-2 text-sm font-bold text-gold transition", pathname?.startsWith("/admin") && "border-gold")}>
+            <Link href="/admin/dados" className="grid h-full place-items-center px-4 text-xs font-black uppercase text-[var(--accent)] hover:bg-black hover:text-white">
               Admin
             </Link>
           )}
         </div>
-        {currentUser ? (
-          <div className="flex items-center gap-2">
-            <Link href="/conta" className="hidden min-h-9 items-center rounded-md border border-white/10 bg-white/[0.035] px-3 text-sm font-bold text-slate-100 hover:bg-white/10 sm:inline-flex">
-              {currentUser.playerName?.trim() || currentUser.username}
-            </Link>
-            <Button variant="secondary" className="min-h-10 px-3 py-2 text-xs" onClick={logout}>Sair</Button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <Link href="/conta?modo=entrar" className="grid min-h-9 place-items-center rounded-md border border-white/12 bg-white/[0.04] px-4 text-sm font-bold text-slate-100 hover:bg-white/10">
-              Entrar
-            </Link>
-            <Link href="/conta?modo=criar" className="hidden min-h-9 place-items-center rounded-md bg-electric px-4 text-sm font-black text-night hover:bg-sky-300 sm:grid">
-              Criar conta
-            </Link>
-          </div>
-        )}
+
+        <div className="hidden items-center gap-2 sm:flex">
+          {currentUser ? (
+            <>
+              <Link href="/conta" className="border-b border-black px-2 py-1 text-xs font-black uppercase hover:text-[var(--accent)]">
+                {currentUser.playerName?.trim() || currentUser.username}
+              </Link>
+              <SettingsLink />
+              <Button variant="secondary" className="min-h-8 border-black px-3 py-1 text-[11px]" onClick={logout}>Sair</Button>
+            </>
+          ) : (
+            <>
+              <Link href="/conta?modo=entrar" className="px-3 py-2 text-xs font-black uppercase hover:text-[var(--accent)]">Entrar</Link>
+              <SettingsLink />
+              <Link href="/conta?modo=criar" className="bg-black px-3 py-2 text-xs font-black uppercase text-white hover:bg-[var(--accent)]">Criar conta</Link>
+            </>
+          )}
+        </div>
+
+        <button type="button" className="grid h-9 w-9 place-items-center border border-black xl:hidden" onClick={() => setMenuOpen((open) => !open)} aria-label={menuOpen ? "Fechar menu" : "Abrir menu"} aria-expanded={menuOpen}>
+          {menuOpen ? <X size={18} /> : <Menu size={18} />}
+        </button>
       </nav>
+
+      {menuOpen && (
+        <div className="absolute inset-x-0 top-full border-b border-black bg-[var(--background)] p-4 xl:hidden">
+          <div className="grid grid-cols-2 border-l border-t border-black">
+            {primaryNav.map(([label, href]) => (
+              <Link key={href} href={href} className={cn("border-b border-r border-black px-3 py-3 text-xs font-black uppercase", isActive(href) && "bg-[var(--accent)] text-white")} onClick={() => setMenuOpen(false)}>
+                {label}
+              </Link>
+            ))}
+            <Link href="/configuracoes" className={cn("flex items-center gap-2 border-b border-r border-black px-3 py-3 text-xs font-black uppercase", isActive("/configuracoes") && "bg-[var(--accent)] text-white")} onClick={() => setMenuOpen(false)}>
+              <Settings size={14} /> Configurações
+            </Link>
+            {currentUser?.role === "admin" && <Link href="/admin/dados" className="border-b border-r border-black px-3 py-3 text-xs font-black uppercase text-[var(--accent)]" onClick={() => setMenuOpen(false)}>Admin</Link>}
+          </div>
+          <div className="mt-3 flex items-center justify-end gap-3 sm:hidden">
+            {currentUser ? (
+              <>
+                <Link href="/conta" className="text-xs font-black uppercase" onClick={() => setMenuOpen(false)}>{currentUser.playerName?.trim() || currentUser.username}</Link>
+                <Button variant="secondary" className="min-h-9 border-black text-xs" onClick={() => { logout(); setMenuOpen(false); }}>Sair</Button>
+              </>
+            ) : (
+              <>
+                <Link href="/conta?modo=entrar" className="text-xs font-black uppercase" onClick={() => setMenuOpen(false)}>Entrar</Link>
+                <Link href="/conta?modo=criar" className="bg-black px-3 py-2 text-xs font-black uppercase text-white" onClick={() => setMenuOpen(false)}>Criar conta</Link>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </header>
+  );
+}
+
+function SettingsLink() {
+  return (
+    <Link
+      href="/configuracoes"
+      className="grid h-8 w-8 place-items-center border border-black text-black transition hover:bg-black hover:text-white"
+      aria-label="Configurações"
+      title="Configurações"
+    >
+      <Settings size={15} aria-hidden="true" />
+    </Link>
   );
 }
