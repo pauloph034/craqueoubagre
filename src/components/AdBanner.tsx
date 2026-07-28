@@ -10,23 +10,23 @@ type AdVariant = "leaderboard" | "sidebar" | "inline" | "mobile-banner" | "house
 
 const adsByVariant: Record<AdVariant, { src: string; alt: string }> = {
   leaderboard: {
-    src: "/assets/ads/rocha-gera-resultado.png",
+    src: "/assets/ad-rocha-gera-resultado.png",
     alt: "Rocha Marketing - Marketing que gera resultado",
   },
   sidebar: {
-    src: "/assets/ads/rocha-impulsione-marca.png",
+    src: "/assets/ad-rocha-impulsione-marca.png",
     alt: "Rocha Marketing - Impulsione sua marca",
   },
   inline: {
-    src: "/assets/ads/rocha-marketing-converte.png",
+    src: "/assets/ad-rocha-marketing-converte.png",
     alt: "Rocha Marketing - Marketing que converte",
   },
   "mobile-banner": {
-    src: "/assets/ads/rocha-marca-destaque.png",
+    src: "/assets/ad-rocha-marca-destaque.png",
     alt: "Rocha Marketing - Sua marca em destaque",
   },
   "house-ad": {
-    src: "/assets/ads/rocha-marketing-converte.png",
+    src: "/assets/ad-rocha-marketing-converte.png",
     alt: "Rocha Marketing - Marketing que converte",
   },
 };
