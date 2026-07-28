@@ -89,6 +89,8 @@ test("regras de posicao", () => {
   assert.equal(calculatePositionFit(samplePlayerAt("LB"), "LWB").penalty, 0);
   assert.equal(calculatePositionFit(samplePlayerAt("RWB"), "RB").penalty, 0);
   assert.equal(calculatePositionFit(samplePlayerAt("LWB"), "LB").penalty, 0);
+  assert.equal(calculatePositionFit(samplePlayerAt("ST"), "CF").penalty, 0);
+  assert.equal(calculatePositionFit(samplePlayerAt("CF"), "ST").penalty, 0);
 });
 
 test("Messi 2010/11 aparece como atacante de direita", () => {
@@ -227,7 +229,7 @@ test("progressao soma XP, nivel e tacas pelas campanhas", () => {
   assert.equal(progression.level, levelForXp(progression.xp));
 });
 
-test("ranking mascara usuario e ordena tacas", () => {
+test("ranking mascara usuario, inclui admin e ordena tacas", () => {
   const campaign = {
     id: "ranking-1",
     date: new Date(0).toISOString(),
@@ -252,7 +254,10 @@ test("ranking mascara usuario e ordena tacas", () => {
     swapsUsed: 0,
     undoUsed: false
   } satisfies CampaignSummary;
-  const rankings = buildRankings([{ username: "paulorocha", playerName: "Paulo", teamName: "Rocha FC", password: "", role: "player", createdAt: "" }], [campaign]);
+  const rankings = buildRankings([
+    { username: "semtaça", playerName: "Sem", teamName: "Rating Alto FC", password: "", role: "player", createdAt: "" },
+    { username: "paulorocha", playerName: "Paulo", teamName: "Rocha FC", password: "", role: "admin", createdAt: "" }
+  ], [campaign]);
   assert.equal(maskUsername("paulorocha"), "pau*******");
   assert.equal(rankings[0]?.username, "pau*******");
   assert.equal(rankings[0]?.teamName, "Rocha FC");
