@@ -2,6 +2,7 @@
 import { difficultyRules } from "../src/config/game-balance";
 import { formations } from "../src/config/formations";
 import { clubSeasons, players } from "../src/data/loaders";
+import { emblemForTeamName, teamEmblems } from "../src/data/team-emblems";
 import { simulateCampaign } from "../src/game-engine/campaign-engine";
 import { calculateChemistry } from "../src/game-engine/chemistry";
 import { drawClubSeason } from "../src/game-engine/draft-engine";
@@ -10,7 +11,10 @@ import { calculatePositionFit } from "../src/game-engine/position-fit";
 import { createRng } from "../src/game-engine/rng";
 import { calculateScore } from "../src/game-engine/scoring-engine";
 import { calculateTeamRating } from "../src/game-engine/team-rating";
-import type { DraftPick, Player, Position } from "../src/types/game";
+import { tacticalMatchup } from "../src/game-engine/tactics";
+import { isPublicNameAllowed } from "../src/server/name-policy";
+import { buildProgression, buildRankings, levelForXp, maskUsername } from "../src/server/progression";
+import type { CampaignSummary, DraftPick, Player, Position } from "../src/types/game";
 
 function sampleSquad(): DraftPick[] {
   const season = clubSeasons[0]!;
@@ -55,6 +59,13 @@ test("dataset possui volume minimo e goleiros", () => {
     assert.ok(season.players.length >= 15);
     assert.ok(players.some((player) => player.clubSeasonId === season.id && player.primaryPosition === "GK"));
   }
+});
+
+test("galeria possui 30 escudos e fallback estavel por time", () => {
+  assert.equal(teamEmblems.length, 30);
+  assert.equal(new Set(teamEmblems.map((emblem) => emblem.id)).size, 30);
+  assert.equal(emblemForTeamName("Meu Clube").id, emblemForTeamName("Meu Clube").id);
+  assert.notEqual(emblemForTeamName("Meu Clube").id, emblemForTeamName("Outro Clube").id);
 });
 
 test("sorteio com seed e elegibilidade", () => {
@@ -116,6 +127,32 @@ test("simulacao deterministica e mata-mata resolvido", () => {
   assert.deepEqual(a.events.map((event) => event.minute), [...a.events.map((event) => event.minute)].sort((x, y) => x - y));
 });
 
+test("vantagem tecnica grande nao vira derrota absurda", () => {
+  const eliteSquad = sampleSquad().map((pick) => ({
+    ...pick,
+    effectiveRating: 98,
+    player: { ...pick.player, overall: 98, pace: 96, shooting: 96, passing: 96, dribbling: 96, defending: 96, physical: 96, goalkeeping: pick.player.primaryPosition === "GK" ? 98 : pick.player.goalkeeping }
+  }));
+  for (let index = 0; index < 80; index++) {
+    const match = simulateMatch({
+      rng: createRng(`elite-${index}`),
+      squad: eliteSquad,
+      tacticalStyle: "equilibrado",
+      difficulty: "classico",
+      opponent: { id: "fraco", name: "Time fraco", strength: 65 },
+      phase: "Fase de grupos 1",
+      knockout: false
+    });
+    assert.ok(match.userGoals > match.opponentGoals);
+  }
+});
+
+test("confrontos taticos possuem vantagens reciprocas", () => {
+  assert.ok(tacticalMatchup("pressao", "ofensivo").adjustment > 0);
+  assert.ok(tacticalMatchup("defensivo", "pressao").adjustment > 0);
+  assert.equal(tacticalMatchup("equilibrado", "equilibrado").adjustment, 0);
+});
+
 test("goleadores do adversario respeitam o elenco da temporada", () => {
   const squad = sampleSquad();
   const scorers = new Set<string>();
@@ -146,5 +183,79 @@ test("campanha encerra entre eliminacao e final", () => {
 test("pontuacao nunca negativa", () => {
   const score = calculateScore({ config: { seed: "s", userName: "Teste", teamName: "Teste XI", formation: "4-3-3", difficulty: "casual", tacticalStyle: "equilibrado" }, matches: [], champion: false, rerollsUsed: 99, swapsUsed: 99, undoUsed: true });
   assert.equal(score, 0);
+});
+
+test("nomes ofensivos sao bloqueados mesmo com disfarce", () => {
+  assert.equal(isPublicNameAllowed("Clube dos Craques"), true);
+  assert.equal(isPublicNameAllowed("F1lh0 da Put4 FC"), false);
+  assert.equal(isPublicNameAllowed("Time FDP"), false);
+  assert.equal(isPublicNameAllowed("Puuuta Clube"), false);
+  assert.equal(isPublicNameAllowed("Time escrot0"), false);
+  assert.equal(isPublicNameAllowed("Vagabund0s FC"), false);
+  assert.equal(isPublicNameAllowed("Familia de Craques"), true);
+});
+
+test("progressao soma XP, nivel e tacas pelas campanhas", () => {
+  const campaign = {
+    id: "progressao-1",
+    date: new Date(0).toISOString(),
+    config: { seed: "s", userName: "paulo", teamName: "Paulo FC", formation: "4-3-3", difficulty: "classico", tacticalStyle: "equilibrado" },
+    squad: sampleSquad(),
+    matches: [{
+      id: "final",
+      phase: "Final",
+      opponentName: "Rival",
+      opponentBadge: "RI",
+      userGoals: 2,
+      opponentGoals: 0,
+      events: [],
+      stats: { possession: 50, shots: 8, shotsOnTarget: 4, corners: 3, opponentPossession: 50, opponentShots: 4, opponentShotsOnTarget: 1, opponentCorners: 2 },
+      bestPlayer: "Craque"
+    }],
+    stageReached: "Campeao",
+    champion: true,
+    score: 1000,
+    achievements: [],
+    rerollsUsed: 0,
+    swapsUsed: 0,
+    undoUsed: false
+  } satisfies CampaignSummary;
+  const progression = buildProgression("paulo", [campaign, campaign]);
+  assert.equal(progression.campaigns, 1);
+  assert.equal(progression.trophies, 1);
+  assert.ok(progression.xp > 0);
+  assert.equal(progression.level, levelForXp(progression.xp));
+});
+
+test("ranking mascara usuario e ordena tacas", () => {
+  const campaign = {
+    id: "ranking-1",
+    date: new Date(0).toISOString(),
+    config: { seed: "s", userName: "paulorocha", teamName: "Rocha FC", formation: "4-3-3", difficulty: "classico", tacticalStyle: "equilibrado" },
+    squad: sampleSquad(),
+    matches: [{
+      id: "final",
+      phase: "Final",
+      opponentName: "Rival",
+      opponentBadge: "RI",
+      userGoals: 2,
+      opponentGoals: 0,
+      events: [],
+      stats: { possession: 50, shots: 8, shotsOnTarget: 4, corners: 3, opponentPossession: 50, opponentShots: 4, opponentShotsOnTarget: 1, opponentCorners: 2 },
+      bestPlayer: "Craque"
+    }],
+    stageReached: "Campeao",
+    champion: true,
+    score: 1000,
+    achievements: [],
+    rerollsUsed: 0,
+    swapsUsed: 0,
+    undoUsed: false
+  } satisfies CampaignSummary;
+  const rankings = buildRankings([{ username: "paulorocha", playerName: "Paulo", teamName: "Rocha FC", password: "", role: "player", createdAt: "" }], [campaign]);
+  assert.equal(maskUsername("paulorocha"), "pau*******");
+  assert.equal(rankings[0]?.username, "pau*******");
+  assert.equal(rankings[0]?.teamName, "Rocha FC");
+  assert.equal(rankings[0]?.progression.trophies, 1);
 });
 

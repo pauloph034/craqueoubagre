@@ -26,6 +26,7 @@ create table if not exists public.cob_users (
   username text primary key,
   player_name text,
   team_name text,
+  emblem_id text,
   password_hash text not null,
   role text not null check (role in ('admin', 'player')),
   created_at timestamptz not null default now()
@@ -55,6 +56,13 @@ create table if not exists public.cob_friend_rooms (
   room jsonb not null,
   updated_at timestamptz not null default now()
 );
+```
+
+Para um banco que ja foi criado anteriormente, execute tambem:
+
+```sql
+alter table public.cob_users add column if not exists emblem_id text;
+update public.cob_users set emblem_id = 'emblem-01' where emblem_id is null;
 ```
 
 ## 2. Variáveis de ambiente
