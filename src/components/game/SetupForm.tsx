@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useGameStore } from "@/stores/game-store";
 import type { Difficulty, TacticalStyle } from "@/types/game";
 import { Play } from "lucide-react";
+import { SoccerFieldMarkings } from "@/components/game/SoccerFieldMarkings";
 import type { ReactNode } from "react";
 import { useState } from "react";
 
@@ -86,11 +87,11 @@ function FormationPreview({ formation, tacticalStyle }: { formation: string; tac
   return (
     <div className="border border-black bg-[var(--surface-muted)] p-3">
       <div className="relative mx-auto aspect-[7/10] max-h-[500px] min-h-[380px] overflow-hidden border border-black field-lines">
-        <div className="absolute left-1/2 top-1/2 h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15" />
+        <SoccerFieldMarkings />
         {slots.map((slot) => (
           <div
             key={slot.id}
-            className="absolute grid h-10 w-12 -translate-x-1/2 -translate-y-1/2 place-items-center border border-dashed border-white/65 bg-black/70 text-center text-[9px] font-black text-white"
+            className="absolute z-10 grid h-10 w-12 -translate-x-1/2 -translate-y-1/2 place-items-center border border-dashed border-white/65 bg-black/70 text-center text-[9px] font-black text-white"
             style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
           >
             <span>{slot.label}</span>

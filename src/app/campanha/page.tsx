@@ -208,12 +208,9 @@ export default function CampaignPage() {
         <section className="mt-6 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-4">
             {activeMatch ? (
-              <LiveMatchCard match={displayActiveMatch ?? activeMatch} timeline={timeline} revealed={revealed} teamName={displayTeamName} minute={liveMinute} speed={matchSpeed} onSpeedChange={setMatchSpeed} />
+              <LiveMatchCard match={displayActiveMatch ?? activeMatch} timeline={timeline} revealed={revealed} teamName={displayTeamName} minute={liveMinute} speed={matchSpeed} onSpeedChange={setMatchSpeed} onNextMatch={canStartNext ? simulateNextMatch : undefined} />
             ) : (
               <WaitingCard phase={displayCurrentScheduleItem?.phase ?? "Fase de grupos"} opponentName={displayCurrentScheduleItem?.opponent.name} teamName={displayTeamName} onStart={canStartNext ? simulateNextMatch : undefined} />
-            )}
-            {activeMatch && canStartNext && (
-              <Button className="w-full sm:w-auto" onClick={simulateNextMatch}>Comecar proxima partida</Button>
             )}
           </div>
           <CampaignSidebar
@@ -401,12 +398,9 @@ function KnockoutRoad({
     <section className="mt-6 space-y-4">
       <div className="rounded-xl border border-sky-200/12 bg-[linear-gradient(135deg,rgba(5,22,49,.72),rgba(2,48,52,.52))] p-4 shadow-[0_14px_34px_rgba(0,0,0,.2)]">
         {activeMatch ? (
-          <CompactMatchPanel match={activeMatch} timeline={timeline} revealed={revealed} teamName={teamName} minute={minute} speed={speed} onSpeedChange={onSpeedChange} />
+          <CompactMatchPanel match={activeMatch} timeline={timeline} revealed={revealed} teamName={teamName} minute={minute} speed={speed} onSpeedChange={onSpeedChange} onNextMatch={!replayPending && canStartNext ? onStartNext : undefined} />
         ) : (
           <CompactWaitingPanel phase={currentScheduleItem?.phase ?? "Oitavas de final"} opponentName={currentScheduleItem?.opponent.name} teamName={teamName} onStart={onStartNext} />
-        )}
-        {activeMatch && !replayPending && canStartNext && (
-          <Button className="mt-4 w-full sm:w-auto" onClick={onStartNext}>Prosseguir para {currentScheduleItem?.phase ?? "proxima fase"}</Button>
         )}
       </div>
       <LiveKnockoutBracket teamName={teamName} emblemId={useGameStore.getState().currentUser?.emblemId} qualifiedTeams={qualifiedTeams} schedule={schedule} knockoutMatches={knockoutMatches} />
@@ -436,7 +430,8 @@ function CompactMatchPanel({
   teamName,
   minute,
   speed,
-  onSpeedChange
+  onSpeedChange,
+  onNextMatch
 }: {
   match: MatchResult;
   timeline: TimelineItem[];
@@ -445,6 +440,7 @@ function CompactMatchPanel({
   minute: number;
   speed: MatchSpeed;
   onSpeedChange: (speed: MatchSpeed) => void;
+  onNextMatch?: () => void;
 }) {
   const visible = timeline.slice(0, revealed);
   const finished = visible.some((item) => item.kind === "fulltime");
@@ -469,10 +465,15 @@ function CompactMatchPanel({
             <span>{teamName} x</span><TeamNameWithCrest name={match.opponentName} size="sm" textClassName="font-black" />
           </h3>
         </div>
-        <div className="flex items-end gap-3">
-          <MatchSpeedControl speed={speed} onSpeedChange={onSpeedChange} />
-          <span className="border border-black bg-[var(--accent)] px-2 py-1 font-mono text-sm font-black text-black">{minute}'</span>
-          <span className="whitespace-nowrap font-mono text-3xl font-black leading-none text-gold">{userGoals} - {opponentGoals}</span>
+        <div className="grid gap-2 sm:justify-items-end">
+          <div className="flex items-end gap-3">
+            <MatchSpeedControl speed={speed} onSpeedChange={onSpeedChange} />
+            <span className="border border-black bg-[var(--accent)] px-2 py-1 font-mono text-sm font-black text-black">{minute}'</span>
+            <span className="whitespace-nowrap font-mono text-3xl font-black leading-none text-gold">{userGoals} - {opponentGoals}</span>
+          </div>
+          {onNextMatch && (
+            <Button className="w-full sm:w-auto" onClick={onNextMatch}>Proxima partida</Button>
+          )}
         </div>
       </div>
       <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
@@ -667,7 +668,8 @@ function LiveMatchCard({
   teamName,
   minute,
   speed,
-  onSpeedChange
+  onSpeedChange,
+  onNextMatch
 }: {
   match: MatchResult;
   timeline: TimelineItem[];
@@ -676,6 +678,7 @@ function LiveMatchCard({
   minute: number;
   speed: MatchSpeed;
   onSpeedChange: (speed: MatchSpeed) => void;
+  onNextMatch?: () => void;
 }) {
   const visible = timeline.slice(0, revealed);
   const finished = visible.some((item) => item.kind === "fulltime");
@@ -697,10 +700,15 @@ function LiveMatchCard({
               </p>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-3 md:justify-end">
-            <MatchSpeedControl speed={speed} onSpeedChange={onSpeedChange} />
-            <span className="border border-black bg-[var(--accent)] px-3 py-2 font-mono text-sm font-black text-black">{minute}'</span>
-            <span className="whitespace-nowrap font-mono text-3xl font-black leading-none text-gold md:text-4xl">{userGoals} - {opponentGoals}</span>
+          <div className="grid gap-2 md:justify-items-end">
+            <div className="flex flex-wrap items-center gap-3 md:justify-end">
+              <MatchSpeedControl speed={speed} onSpeedChange={onSpeedChange} />
+              <span className="border border-black bg-[var(--accent)] px-3 py-2 font-mono text-sm font-black text-black">{minute}'</span>
+              <span className="whitespace-nowrap font-mono text-3xl font-black leading-none text-gold md:text-4xl">{userGoals} - {opponentGoals}</span>
+            </div>
+            {onNextMatch && (
+              <Button className="w-full md:w-auto" onClick={onNextMatch}>Proxima partida</Button>
+            )}
           </div>
         </div>
         <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10">

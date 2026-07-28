@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { calculatePositionFit } from "@/game-engine/position-fit";
 import { positionLabel } from "@/game-engine/position-labels";
 import { NationalityFlag } from "@/components/game/NationalityFlag";
+import { SoccerFieldMarkings } from "@/components/game/SoccerFieldMarkings";
 
 export function SquadField({ showMetrics = true }: { showMetrics?: boolean }) {
   const formation = useGameStore((state) => state.config.formation);
@@ -22,7 +23,7 @@ export function SquadField({ showMetrics = true }: { showMetrics?: boolean }) {
   const ratingValue = hidden && squad.length < 11 ? "--" : metrics.rating;
   const slots = getFormationSlots(formation, tacticalStyle);
   return (
-    <section className="h-full border border-black bg-[var(--surface)] p-3">
+    <section className="border border-black bg-[var(--surface)] p-3">
       {showMetrics && <div className="mb-3 border border-black/20 bg-[var(--surface-muted)] px-3 py-2">
         <div className="grid items-center gap-4 sm:grid-cols-[auto_1fr_auto]">
           <div className="flex items-baseline gap-3">
@@ -45,7 +46,7 @@ export function SquadField({ showMetrics = true }: { showMetrics?: boolean }) {
         </div>
       </div>}
       <div className="relative mx-auto aspect-[7/10] max-h-[calc(100dvh-7.8rem)] min-h-[390px] overflow-hidden border border-black field-lines sm:min-h-[500px] xl:min-h-0">
-        <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/20" />
+        <SoccerFieldMarkings />
         {slots.map((slot) => {
           const pick = squad.find((item) => item.slotId === slot.id);
           const pendingFit = pendingPlayer && !pick ? calculatePositionFit(pendingPlayer, slot.position) : undefined;
@@ -56,7 +57,7 @@ export function SquadField({ showMetrics = true }: { showMetrics?: boolean }) {
               data-testid={canPlacePending ? "field-position-option" : undefined}
               type="button"
               className={cn(
-                "absolute -translate-x-1/2 -translate-y-1/2 border text-center text-[11px] font-bold shadow-card transition",
+                "absolute z-10 -translate-x-1/2 -translate-y-1/2 border text-center text-[11px] font-bold shadow-card transition",
                 pick ? "grid h-[4rem] w-[4rem] place-items-center rounded-full border-white bg-black/95 px-2 text-white" : "grid h-10 w-14 place-items-center rounded-sm border-dashed border-white/55 bg-black/30 px-2 text-white",
                 canPlacePending && "border-gold bg-gold/20 text-white ring-2 ring-gold hover:bg-gold/30",
                 pendingPlayer && !canPlacePending && !pick && "opacity-35",

@@ -57,7 +57,7 @@ export function DraftPanel() {
   }
 
   return (
-    <aside className="h-full space-y-3 overflow-hidden xl:sticky xl:top-[70px] xl:max-h-[calc(100dvh-5rem)]">
+    <aside className="space-y-3 xl:sticky xl:top-[70px]">
       <div className="border border-black bg-[var(--surface)] p-2.5">
         <div className="flex items-center gap-3">
           <span className="whitespace-nowrap px-2 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--muted)]">
@@ -107,7 +107,7 @@ export function DraftPanel() {
             <div className="border-b border-black/20 px-3 py-2">
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black">Elenco</p>
             </div>
-            <div className="game-scrollbar h-full max-h-[min(440px,calc(100dvh-19rem))] overflow-y-auto">
+            <div className="game-scrollbar min-h-[240px] max-h-[min(560px,65dvh)] touch-pan-y overflow-y-auto overscroll-contain">
               {state.currentDraw.roster
                 .slice()
                 .sort((a, b) => Number(!state.currentDraw!.options.some((p) => p.id === a.id)) - Number(!state.currentDraw!.options.some((p) => p.id === b.id)) || positionOrder(a.primaryPosition) - positionOrder(b.primaryPosition) || (a.shirtNumber ?? 99) - (b.shirtNumber ?? 99))

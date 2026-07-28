@@ -92,8 +92,11 @@ const COUNTRY_CODES: Record<string, string> = {
   venezuela: "VE"
 };
 
-const REGIONAL_FLAG_URLS: Record<string, string> = {
-  escocia: "https://flagcdn.com/w80/gb-sct.png"
+const REGIONAL_FLAG_ASSETS: Record<string, string> = {
+  escocia: "/flags/gb-sct.png",
+  inglaterra: "/flags/gb-eng.png",
+  gales: "/flags/gb-wls.png",
+  "pais de gales": "/flags/gb-wls.png"
 };
 
 function normalizeCountry(value: string) {
@@ -115,10 +118,10 @@ export function countryCodeForNationality(nationality?: string) {
 export function flagUrlForNationality(nationality?: string) {
   if (!nationality) return undefined;
   const normalized = normalizeCountry(nationality);
-  const regionalFlag = REGIONAL_FLAG_URLS[normalized];
+  const regionalFlag = REGIONAL_FLAG_ASSETS[normalized];
   if (regionalFlag) return regionalFlag;
   const countryCode = countryCodeForNationality(nationality);
-  return countryCode ? `https://flagsapi.com/${countryCode}/flat/64.png` : undefined;
+  return countryCode ? `/flags/${countryCode.toLowerCase()}.png` : undefined;
 }
 
 export function NationalityFlag({

@@ -128,8 +128,8 @@ select:focus-visible {
 
 .field-lines {
   background:
-    linear-gradient(90deg, rgba(242, 236, 221, 0.08) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(242, 236, 221, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(239, 230, 210, 0.09) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(239, 230, 210, 0.09) 1px, transparent 1px),
     repeating-linear-gradient(180deg, #153b2e 0 9%, #123428 9% 18%);
   background-size: 50% 100%, 100% 50%, 100% 100%, 100% 100%;
 }

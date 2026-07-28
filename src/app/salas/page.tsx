@@ -3,6 +3,7 @@
 import { TeamNameWithCrest } from "@/components/game/TeamNameWithCrest";
 import { GenericBadge } from "@/components/game/GenericBadge";
 import { NationalityFlag } from "@/components/game/NationalityFlag";
+import { SoccerFieldMarkings } from "@/components/game/SoccerFieldMarkings";
 import { AdBanner } from "@/components/AdBanner";
 import { Button } from "@/components/ui/button";
 import { getFormationSlots } from "@/config/formations";
@@ -980,7 +981,7 @@ function DrawnTeamRoster({
           <p className="text-sm text-slate-300">{draw.country}</p>
         </div>
       </div>
-      <div className="game-scrollbar max-h-[min(430px,calc(100vh-25rem))] overflow-y-auto">
+      <div className="game-scrollbar min-h-[240px] max-h-[min(560px,65dvh)] touch-pan-y overflow-y-auto overscroll-contain">
       {orderedRoster.map((pick) => {
         const alreadyPicked = Boolean(player?.squad.some((item) => item.canonicalPlayerId === pick.canonicalPlayerId));
         const eligible = isRoomPickEligible(player, pick);
@@ -1074,7 +1075,7 @@ function RoomSquadField({
         </div>
       </div>
       <div className="relative mx-auto aspect-[7/10] max-h-[680px] min-h-[430px] overflow-hidden rounded-2xl border border-white/20 field-lines sm:min-h-[500px]">
-        <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/20" />
+        <SoccerFieldMarkings />
         {slots.map((slot) => {
           const pick = assigned[slot.id];
           const pendingFit = pendingPick && !pick ? roomPickFit(pendingPick, slot.position) : undefined;
@@ -1086,7 +1087,7 @@ function RoomSquadField({
               key={slot.id}
               type="button"
               className={cn(
-                "absolute -translate-x-1/2 -translate-y-1/2 border text-center text-[11px] font-bold shadow-card transition",
+                "absolute z-10 -translate-x-1/2 -translate-y-1/2 border text-center text-[11px] font-bold shadow-card transition",
                 pick ? "grid h-[4.5rem] w-[4.5rem] place-items-center rounded-full border-electric bg-night/95 px-2 text-white ring-1 ring-electric/35" : "grid h-12 w-16 place-items-center rounded-md border-dashed border-white/40 bg-white/10 px-2 text-slate-200",
                 canPlacePending && "border-gold bg-gold/20 text-white ring-2 ring-gold hover:bg-gold/30",
                 pendingPick && !canPlacePending && !pick && "opacity-35",
@@ -1460,7 +1461,7 @@ function RoomBracket({
   const pendingHumans = hasPendingHumanRoomMatches(room);
   const currentPhase = phases[room.bracketRound]?.label ?? "Mata-mata";
   const canProgressRound = room.status === "bracket" && !playerMatch && !pendingHumans;
-  const [presentation, setPresentation] = useState<{ playerId: string; match: RoomMatch; events: RoomTimelineEvent[]; visible: number }>();
+  const [presentation, setPresentation] = useState<{ playerId: string; match: RoomMatch; events: RoomTimelineEvent[]; visible: number; committed?: boolean }>();
   const [matchSpeed, setMatchSpeed] = useState<"normal" | "rapida" | "ultra">("normal");
   const onPlayMatchRef = useRef(onPlayMatch);
   const visibleEvents = presentation?.events.slice(0, presentation.visible) ?? [];
@@ -1472,7 +1473,7 @@ function RoomBracket({
 
   useEffect(() => {
     if (!presentation) return;
-    if (!playerMatch || playerMatch.id !== presentation.match.id) {
+    if (!presentation.committed && (!playerMatch || playerMatch.id !== presentation.match.id)) {
       setPresentation(undefined);
     }
   }, [playerMatch, presentation]);
@@ -1483,6 +1484,7 @@ function RoomBracket({
 
   useEffect(() => {
     if (!presentation) return;
+    if (presentation.committed) return;
     if (presentation.visible < presentation.events.length) {
       const timer = window.setTimeout(() => {
         setPresentation((current) => (current ? { ...current, visible: current.visible + 1 } : current));
@@ -1490,8 +1492,8 @@ function RoomBracket({
       return () => window.clearTimeout(timer);
     }
     const finish = window.setTimeout(() => {
+      setPresentation((current) => (current ? { ...current, committed: true } : current));
       onPlayMatchRef.current(presentation.playerId);
-      setPresentation(undefined);
     }, 900);
     return () => window.clearTimeout(finish);
   }, [matchSpeed, presentation]);
@@ -1504,6 +1506,11 @@ function RoomBracket({
       return;
     }
     setPresentation({ playerId: currentPlayer.id, match: preview, events: buildRoomMatchTimeline(room, preview), visible: 1 });
+  }
+
+  function progressRoundFromScore() {
+    setPresentation(undefined);
+    onProgressRound();
   }
 
   return (
@@ -1534,10 +1541,18 @@ function RoomBracket({
                   <p className="mt-1 text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Simulando partida</p>
                   <p className="mt-1 text-xs text-slate-400">{tacticalRoomSummary(presentation.match)}</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <RoomSpeedControl speed={matchSpeed} onSpeedChange={setMatchSpeed} />
-                  <span className="border border-black bg-[var(--accent)] px-3 py-2 font-mono text-sm font-black text-black">{presentationMinute}&apos;</span>
-                  <span className="font-mono text-3xl font-black text-gold">{presentationHomeGoals} - {presentationAwayGoals}</span>
+                <div className="grid gap-2 sm:justify-items-end">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <RoomSpeedControl speed={matchSpeed} onSpeedChange={setMatchSpeed} />
+                    <span className="border border-black bg-[var(--accent)] px-3 py-2 font-mono text-sm font-black text-black">{presentationMinute}&apos;</span>
+                    <span className="font-mono text-3xl font-black text-gold">{presentationHomeGoals} - {presentationAwayGoals}</span>
+                  </div>
+                  {presentation.committed && canProgressRound && (
+                    <Button className="w-full sm:w-auto" onClick={progressRoundFromScore}>Proxima partida</Button>
+                  )}
+                  {presentation.committed && pendingHumans && (
+                    <span className="text-xs font-bold text-slate-300">Aguardando os outros jogadores</span>
+                  )}
                 </div>
               </div>
               <div className="h-1.5 bg-white/10">
@@ -1839,11 +1854,11 @@ function RoomFormationPreview({ formation, tacticalStyle }: { formation: string;
         <span className="text-xs font-black text-slate-300">{formation} - {tacticalStyleLabel(tacticalStyle)}</span>
       </div>
       <div className="relative mx-auto aspect-[7/10] max-h-[520px] min-h-[360px] overflow-hidden border border-black field-lines">
-        <div className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15" />
+        <SoccerFieldMarkings />
         {slots.map((slot) => (
           <span
             key={slot.id}
-            className="absolute grid h-9 w-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded border border-dashed border-emerald-300/45 bg-night/70 text-[9px] font-black text-emerald-100"
+            className="absolute z-10 grid h-9 w-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded border border-dashed border-emerald-300/45 bg-night/70 text-[9px] font-black text-emerald-100"
             style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
           >
             {slot.label}
