@@ -42,9 +42,9 @@ export function AdBanner({ compact = false, variant = compact ? "mobile-banner" 
       target="_blank"
       rel="noreferrer"
       className={cn(
-        "group block overflow-hidden rounded-2xl border border-white/10 bg-[#ff4a24]/95 shadow-[0_14px_44px_rgba(0,0,0,.24)] transition hover:border-white/40",
-        isSidebar ? "min-h-[156px]" : "min-h-[72px]",
-        variant === "leaderboard" && "mx-auto max-w-5xl",
+        "group block overflow-hidden rounded-xl border border-white/10 bg-[#ff4a24]/95 shadow-[0_10px_30px_rgba(0,0,0,.22)] transition hover:border-white/40",
+        isSidebar ? "min-h-[120px]" : "min-h-[64px]",
+        variant === "leaderboard" && "mx-auto max-w-4xl",
         variant === "mobile-banner" && "rounded-xl"
       )}
       aria-label="Publicidade Rocha Marketing"
@@ -52,8 +52,8 @@ export function AdBanner({ compact = false, variant = compact ? "mobile-banner" 
       <div
         className={cn(
           "relative grid w-full place-items-center bg-[#ff4a24]",
-          isSidebar ? "min-h-[156px] p-2" : "aspect-[3/1] max-h-[190px] min-h-[72px]",
-          variant === "mobile-banner" && "max-h-[132px]"
+          isSidebar ? "h-[120px] p-2" : "h-[72px] sm:h-[86px] md:h-[104px]",
+          variant === "mobile-banner" && "h-[64px] sm:h-[76px]"
         )}
       >
         {failed ? (
