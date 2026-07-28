@@ -1,8 +1,8 @@
-﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="Craque ou Bagre">
-  <rect width="192" height="192" rx="36" fill="#050816"/>
-  <circle cx="96" cy="96" r="62" fill="#eef6ff" stroke="#28b8ff" stroke-width="7"/>
-  <path d="M96 50l24 18-9 29H81l-9-29z" fill="#071126"/>
-  <text x="96" y="132" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="900" fill="#f7c948">C/B</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="Bola de futebol">
+  <rect width="192" height="192" rx="42" fill="#050816"/>
+  <circle cx="96" cy="96" r="66" fill="#f4f8fb" stroke="#28b8ff" stroke-width="7"/>
+  <path d="M96 43 124 63 113 97H79L68 63Z" fill="#071126"/>
+  <path d="m124 63 28 9 6 32-25 19-20-26zM68 63l-28 9-6 32 25 19 20-26zM79 97h34l14 31-31 21-31-21z" fill="#071126"/>
+  <path d="M96 43v-13M40 72 27 62M152 72l13-10M65 128l-17 17M127 128l17 17" stroke="#cbd5e1" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="96" cy="96" r="66" fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="2"/>
 </svg>
-
-
