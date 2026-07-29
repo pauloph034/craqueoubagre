@@ -50,3 +50,6 @@ create index if not exists cob_ranked_rewards_user_idx
 alter table public.cob_ranked_seasons enable row level security;
 alter table public.cob_ranked_matches enable row level security;
 alter table public.cob_ranked_rewards enable row level security;
+
+-- Atualiza imediatamente o schema exposto pela API REST do Supabase.
+notify pgrst, 'reload schema';
