@@ -35,7 +35,8 @@ const playerFreeRoles: Record<string, Position[]> = {
   "cristiano-ronaldo": ["ST", "CF"],
   "lionel-messi": ["MEI", "ST", "CF", "RW", "RM"],
   "kevin-de-bruyne": ["CM", "MEI"],
-  "kylian-mbappe": ["ST", "LW", "CF"]
+  "kylian-mbappe": ["ST", "LW", "CF"],
+  "diego-maradona": ["CM", "MEI"]
 };
 
 export function calculatePositionFit(player: Player, slotPosition: Position): PositionFit {

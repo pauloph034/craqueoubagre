@@ -145,6 +145,23 @@ export function simulateMatch(args: {
   for (let i = 0; i < opponentGoals; i++) {
     events.push({ minute: args.rng.int(6, 90), type: "goal", team: "opponent", playerName: opponentScorer(args.rng, args.opponent), text: `Gol do ${args.opponent.name}` });
   }
+  const regularUserGoals = events.filter((event) => event.type === "goal" && event.team === "user");
+  if (!resolvedByPenalties && args.rng.next() < 0.12) {
+    if (regularUserGoals.length > 0 && args.rng.next() < 0.76) {
+      const penaltyGoal = args.rng.pick(regularUserGoals);
+      penaltyGoal.type = "penalty_scored";
+      penaltyGoal.text = "Penalti convertido";
+      penaltyGoal.requiresTakerSelection = true;
+    } else {
+      events.push({
+        minute: args.rng.int(18, 82),
+        type: "penalty_missed",
+        team: "user",
+        text: "Penalti perdido",
+        requiresTakerSelection: true
+      });
+    }
+  }
   const flavor: MatchEvent["type"][] = ["yellow", "save", "woodwork", "miss"];
   for (let i = 0; i < args.rng.int(3, 6); i++) {
     const type = args.rng.pick(flavor);

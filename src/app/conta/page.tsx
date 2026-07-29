@@ -5,11 +5,12 @@ import { EmblemPicker } from "@/components/game/EmblemPicker";
 import { TeamEmblem } from "@/components/game/TeamEmblem";
 import { GamePanel } from "@/components/ui/surface";
 import { useGameStore } from "@/stores/game-store";
-import { ChartNoAxesColumnIncreasing, Lock, ShieldCheck, Star, Trophy, UserPlus, X } from "lucide-react";
+import { ChartNoAxesColumnIncreasing, Star, Trophy, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { PlayerProgression } from "@/types/game";
-import type { FormEvent, ReactNode } from "react";
+import { profileCountries } from "@/data/countries";
+import type { FormEvent } from "react";
 import { Suspense, useEffect, useRef, useState } from "react";
 
 export default function AccountPage() {
@@ -34,10 +35,12 @@ function AccountContent() {
   const [username, setUsername] = useState("");
   const [teamName, setTeamName] = useState("");
   const [emblemId, setEmblemId] = useState("emblem-01");
+  const [country, setCountry] = useState("");
   const [password, setPassword] = useState("");
   const [profilePlayerName, setProfilePlayerName] = useState("");
   const [profileTeamName, setProfileTeamName] = useState("");
   const [profileEmblemId, setProfileEmblemId] = useState("emblem-01");
+  const [profileCountry, setProfileCountry] = useState("");
   const [profileSaved, setProfileSaved] = useState("");
   const [passwordSaved, setPasswordSaved] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -60,6 +63,7 @@ function AccountContent() {
     setProfilePlayerName(playerName);
     setProfileTeamName(currentUser.teamName?.trim() || `${playerName} FC`);
     setProfileEmblemId(currentUser.emblemId || "emblem-01");
+    setProfileCountry(currentUser.country || "");
     setProfileSaved("");
   }, [currentUser]);
 
@@ -91,7 +95,7 @@ function AccountContent() {
   }, [currentUser, mode]);
 
   async function submit() {
-    const ok = mode === "login" ? await login(username, password) : await register(username, password, teamName, emblemId);
+    const ok = mode === "login" ? await login(username, password) : await register(username, password, teamName, emblemId, country);
     if (ok) {
       setUsername("");
       setTeamName("");
@@ -103,7 +107,7 @@ function AccountContent() {
   async function submitProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setProfileSaved("");
-    const ok = await updateProfile({ playerName: profilePlayerName, teamName: profileTeamName, emblemId: profileEmblemId });
+    const ok = await updateProfile({ playerName: profilePlayerName, teamName: profileTeamName, emblemId: profileEmblemId, country: profileCountry });
     if (ok) setProfileSaved("Perfil atualizado.");
   }
 
@@ -132,12 +136,7 @@ function AccountContent() {
           <div className="border-b border-black bg-[var(--accent)] p-6 lg:border-b-0 lg:border-r">
             <p className="text-xs font-black uppercase tracking-[0.16em] text-black">Acesso local</p>
             <h1 className="mt-3 font-display text-4xl font-black uppercase leading-[.9] text-black">Sua conta no Craque ou Bagre</h1>
-            <p className="mt-4 max-w-xl text-slate-300">Entre para salvar campanhas, taças e historico do seu clube neste navegador.</p>
-            <div className="mt-8 grid gap-3">
-              <Feature icon={<Lock size={18} />} text="Sem Google e sem cadastro externo." />
-              <Feature icon={<ShieldCheck size={18} />} text="Admin reservado ao painel de dados." />
-              <Feature icon={<UserPlus size={18} />} text="Crie usuario, nome do time e senha em poucos segundos." />
-            </div>
+            <p className="mt-4 max-w-xl text-white">Entre para salvar campanhas, taças e histórico do seu clube.</p>
           </div>
 
           <div className="p-6 md:p-8">
@@ -206,6 +205,7 @@ function AccountContent() {
                     />
                   </label>
                   <EmblemPicker value={profileEmblemId} teamName={profileTeamName} onChange={(id) => { setProfileSaved(""); setProfileEmblemId(id); }} />
+                  <CountrySelect value={profileCountry} onChange={(value) => { setProfileSaved(""); setProfileCountry(value); }} />
                   {authError && <p className="rounded border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">{authError}</p>}
                   {profileSaved && <p className="rounded border border-emerald-300/30 bg-emerald-300/10 p-3 text-sm font-bold text-emerald-100">{profileSaved}</p>}
                   <Button type="submit">Salvar perfil</Button>
@@ -283,6 +283,9 @@ function AccountContent() {
                       </label>
                       <div className="mt-4">
                         <EmblemPicker value={emblemId} teamName={teamName} onChange={setEmblemId} />
+                      </div>
+                      <div className="mt-4">
+                        <CountrySelect value={country} onChange={setCountry} />
                       </div>
                     </>
                   )}
@@ -367,15 +370,24 @@ function AccountContent() {
 }
 
 function safeRedirect(value: string | null) {
-  return value === "/salas" ? "/salas" : "";
+  return value === "/salas" || value === "/temporadas" ? value : "";
 }
 
-function Feature({ icon, text }: { icon: ReactNode; text: string }) {
+function CountrySelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
-    <div className="flex items-center gap-3 border border-black/25 bg-white/65 px-4 py-3 text-sm text-black">
-      <span className="text-electric">{icon}</span>
-      <span>{text}</span>
-    </div>
+    <label className="grid gap-2 text-sm font-semibold text-black">
+      Pais
+      <select
+        className="min-h-11 w-full border border-black bg-white px-3 text-black"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        required
+      >
+        <option value="">Selecione seu pais</option>
+        {profileCountries.map((countryName) => <option key={countryName} value={countryName}>{countryName}</option>)}
+      </select>
+      <span className="text-[10px] font-normal text-[var(--muted)]">Usado para o ranking nacional. Pode ser alterado no perfil.</span>
+    </label>
   );
 }
 

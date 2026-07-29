@@ -4,6 +4,12 @@ import { TeamNameWithCrest } from "@/components/game/TeamNameWithCrest";
 import { GenericBadge } from "@/components/game/GenericBadge";
 import { NationalityFlag } from "@/components/game/NationalityFlag";
 import { SoccerFieldMarkings } from "@/components/game/SoccerFieldMarkings";
+import { ChemistryLinks } from "@/components/game/ChemistryLinks";
+import {
+  MatchDecisionPrompt,
+  PenaltyTakerPrompt,
+  type MatchDecisionType
+} from "@/components/game/MatchInteractivePrompt";
 import { AdBanner } from "@/components/AdBanner";
 import { Button } from "@/components/ui/button";
 import { getFormationSlots } from "@/config/formations";
@@ -63,11 +69,14 @@ const phases = [
 ] as const;
 
 type RoomTimelineEvent = {
+  id: string;
   minute: number;
   teamName: string;
   text: string;
   homeGoals: number;
   awayGoals: number;
+  kind?: "event" | "decision" | "penalty";
+  decisionType?: MatchDecisionType;
 };
 
 const formationOptions = ["4-3-3", "4-2-3-1", "4-4-2", "3-5-2", "3-4-3", "4-1-2-1-2"];
@@ -1077,6 +1086,18 @@ function RoomSquadField({
       </div>
       <div className="relative mx-auto aspect-[7/10] max-h-[680px] min-h-[430px] overflow-hidden rounded-2xl border border-white/20 field-lines sm:min-h-[500px]">
         <SoccerFieldMarkings />
+        <ChemistryLinks
+          slots={slots}
+          players={Object.entries(assigned).flatMap(([slotId, pick]) =>
+            pick
+              ? [{
+                  slotId,
+                  nationality: pick.nationality,
+                  clubKey: `${pick.clubName}-${pick.season}`
+                }]
+              : []
+          )}
+        />
         {slots.map((slot) => {
           const pick = assigned[slot.id];
           const pendingFit = pendingPick && !pick ? roomPickFit(pendingPick, slot.position) : undefined;
@@ -1472,11 +1493,18 @@ function RoomBracket({
   const canProgressRound = room.status === "bracket" && !playerMatch && !pendingHumans;
   const [presentation, setPresentation] = useState<{ playerId: string; match: RoomMatch; events: RoomTimelineEvent[]; visible: number; committed?: boolean }>();
   const [matchSpeed, setMatchSpeed] = useState<"normal" | "rapida" | "ultra">("normal");
+  const [interactionChoices, setInteractionChoices] = useState<Record<string, string>>({});
   const onPlayMatchRef = useRef(onPlayMatch);
   const visibleEvents = presentation?.events.slice(0, presentation.visible) ?? [];
   const lastVisibleEvent = visibleEvents.at(-1);
-  const presentationHomeGoals = lastVisibleEvent?.homeGoals ?? 0;
-  const presentationAwayGoals = lastVisibleEvent?.awayGoals ?? 0;
+  const interactionPending = Boolean(
+    lastVisibleEvent &&
+      !interactionChoices[lastVisibleEvent.id] &&
+      (lastVisibleEvent.kind === "decision" || lastVisibleEvent.kind === "penalty")
+  );
+  const scoreEvent = interactionPending && lastVisibleEvent?.kind === "penalty" ? visibleEvents.at(-2) : lastVisibleEvent;
+  const presentationHomeGoals = scoreEvent?.homeGoals ?? 0;
+  const presentationAwayGoals = scoreEvent?.awayGoals ?? 0;
   const presentationMinute = presentation ? Math.max(1, lastVisibleEvent?.minute ?? 1) : 1;
   const presentationProgress = Math.min(100, Math.round((presentationMinute / 90) * 100));
 
@@ -1492,7 +1520,7 @@ function RoomBracket({
   }, [onPlayMatch]);
 
   useEffect(() => {
-    if (!presentation) return;
+    if (!presentation || interactionPending) return;
     if (presentation.committed) return;
     if (presentation.visible < presentation.events.length) {
       const timer = window.setTimeout(() => {
@@ -1505,7 +1533,7 @@ function RoomBracket({
       onPlayMatchRef.current(presentation.playerId);
     }, 900);
     return () => window.clearTimeout(finish);
-  }, [matchSpeed, presentation]);
+  }, [interactionPending, matchSpeed, presentation]);
 
   function startMatchPresentation() {
     if (!currentPlayer || !playerMatch || presentation) return;
@@ -1514,7 +1542,8 @@ function RoomBracket({
       onPlayMatch(currentPlayer.id);
       return;
     }
-    setPresentation({ playerId: currentPlayer.id, match: preview, events: buildRoomMatchTimeline(room, preview), visible: 1 });
+    setInteractionChoices({});
+    setPresentation({ playerId: currentPlayer.id, match: preview, events: buildRoomMatchTimeline(room, preview, currentPlayer.id), visible: 1 });
   }
 
   function progressRoundFromScore() {
@@ -1569,13 +1598,45 @@ function RoomBracket({
               </div>
               <div className="grid max-h-[190px] overflow-y-auto p-3 game-scrollbar">
                 {visibleEvents.map((event, index) => (
-                  <div key={`${event.minute}-${index}`} className={cn("grid grid-cols-[3rem_auto_minmax(0,1fr)] items-center gap-3 border-b px-2 py-2.5 text-sm", event.text.startsWith("Gol") ? "border-[var(--warning)]/40 bg-[var(--warning)]/10 font-bold" : "border-black/10")}>
+                  <div key={`${event.minute}-${index}`} className={cn("grid grid-cols-[3rem_auto_minmax(0,1fr)] items-center gap-3 border-b px-2 py-2.5 text-sm", event.text.startsWith("Gol") || event.kind === "penalty" ? "border-[var(--warning)]/40 bg-[var(--warning)]/10 font-bold" : event.kind === "decision" ? "border-[var(--success)]/30 bg-[color-mix(in_srgb,var(--success)_8%,transparent)]" : "border-black/10")}>
                     <span className="font-mono font-black text-black">{event.minute}&apos;</span>
-                    <span className={cn("h-2.5 w-2.5 rounded-full", event.text.startsWith("Gol") ? "bg-[var(--warning)]" : "bg-black/20")} aria-hidden />
-                    <span className="min-w-0 break-words font-semibold">{event.text}</span>
+                    <span className={cn("h-2.5 w-2.5 rounded-full", event.text.startsWith("Gol") || event.kind === "penalty" ? "bg-[var(--warning)]" : event.kind === "decision" ? "bg-[var(--success)]" : "bg-black/20")} aria-hidden />
+                    <span className="min-w-0 break-words font-semibold">
+                      {interactionChoices[event.id]
+                        ? event.kind === "penalty"
+                          ? `Penalti convertido do ${event.teamName}: ${interactionChoices[event.id]}`
+                          : event.kind === "decision"
+                            ? `Ajuste definido: ${interactionChoices[event.id]}`
+                            : event.text
+                        : event.text}
+                    </span>
                   </div>
                 ))}
               </div>
+              {interactionPending && lastVisibleEvent?.kind === "decision" && lastVisibleEvent.decisionType && (
+                <div className="border-t border-black/10 p-3">
+                  <MatchDecisionPrompt
+                    type={lastVisibleEvent.decisionType}
+                    currentFormation={currentPlayer?.formation ?? "4-3-3"}
+                    onChoose={(_, label) => setInteractionChoices((choices) => ({ ...choices, [lastVisibleEvent.id]: label }))}
+                  />
+                </div>
+              )}
+              {interactionPending && lastVisibleEvent?.kind === "penalty" && (
+                <div className="border-t border-black/10 p-3">
+                  <PenaltyTakerPrompt
+                    candidates={(() => {
+                      const candidates = (currentPlayer?.squad ?? [])
+                        .filter((pick) => pick.position !== "GK" && pick.slotPosition !== "GK")
+                        .sort((a, b) => (b.effectiveRating ?? b.overall) - (a.effectiveRating ?? a.overall))
+                        .slice(0, 5)
+                        .map((pick) => ({ id: pick.id, name: pick.name, rating: pick.effectiveRating ?? pick.overall }));
+                      return candidates.length ? candidates : [{ id: "fallback", name: "Batedor", rating: 80 }];
+                    })()}
+                    onChoose={(name) => setInteractionChoices((choices) => ({ ...choices, [lastVisibleEvent.id]: name }))}
+                  />
+                </div>
+              )}
             </div>
           ) : playerMatch ? (
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
@@ -1630,9 +1691,16 @@ function RoomBracketMatch({ match, room }: { match: RoomMatch; room: FriendRoom 
   const homeEmblemId = room.players.find((player) => player.id === match.homePlayerId || sameText(player.teamName, match.homeName))?.emblemId;
   const awayEmblemId = room.players.find((player) => player.id === match.awayPlayerId || sameText(player.teamName, match.awayName))?.emblemId;
   return (
-    <article className={cn("rounded-md border px-3 py-2 text-sm", done ? "border-emerald-300/16 bg-white/[0.055]" : "border-gold/25 bg-gold/[0.06]")}>
+    <article className={cn("relative rounded-md border px-3 py-2 text-sm", done ? "border-emerald-300/16 bg-white/[0.055]" : "border-gold/25 bg-gold/[0.06]")}>
       <BracketTeam name={match.homeName} emblemId={homeEmblemId} goals={match.homeGoals} winner={done && match.winnerName === match.homeName} />
       <BracketTeam name={match.awayName} emblemId={awayEmblemId} goals={match.awayGoals} winner={done && match.winnerName === match.awayName} last />
+      {match.phase !== "Final" && (
+        <span
+          className="bracket-connector absolute -right-3 top-1/2 h-px w-3 bg-[var(--success)]"
+          data-live={done ? "false" : "true"}
+          aria-hidden
+        />
+      )}
     </article>
   );
 }
@@ -1708,46 +1776,78 @@ function BracketTeam({ name, emblemId, goals, winner, last = false }: { name: st
   );
 }
 
-function buildRoomMatchTimeline(room: FriendRoom, match: RoomMatch): RoomTimelineEvent[] {
-  const timelineItems: Array<{ minute: number; teamName: string; text: string; side?: "home" | "away" }> = [
-    { minute: 1, teamName: "", text: "Bola rolando" },
-    { minute: 14, teamName: "", text: "Chance perdida" },
-    { minute: 31, teamName: "", text: "Bola na trave" },
-    { minute: 57, teamName: "", text: "Defesa do goleiro" },
-    { minute: 74, teamName: "", text: "Cartao amarelo" }
+function buildRoomMatchTimeline(room: FriendRoom, match: RoomMatch, currentPlayerId: string): RoomTimelineEvent[] {
+  const timelineItems: Array<{
+    id: string;
+    minute: number;
+    teamName: string;
+    text: string;
+    side?: "home" | "away";
+    kind?: RoomTimelineEvent["kind"];
+    decisionType?: MatchDecisionType;
+  }> = [
+    { id: "kickoff", minute: 1, teamName: "", text: "Bola rolando" },
+    { id: "flavor-14", minute: 14, teamName: "", text: "Chance perdida" },
+    { id: "decision-30", minute: 30, teamName: "", text: "Decisao tatica", kind: "decision", decisionType: "tempo" },
+    { id: "flavor-31", minute: 31, teamName: "", text: "Bola na trave" },
+    { id: "halftime", minute: 45, teamName: "", text: "Intervalo" },
+    { id: "decision-45", minute: 45, teamName: "", text: "Decisao do intervalo", kind: "decision", decisionType: "posture" },
+    { id: "flavor-57", minute: 57, teamName: "", text: "Defesa do goleiro" },
+    { id: "decision-70", minute: 70, teamName: "", text: "Ajuste para a reta final", kind: "decision", decisionType: "formation" },
+    { id: "flavor-74", minute: 74, teamName: "", text: "Cartao amarelo" }
   ];
   let homeGoals = 0;
   let awayGoals = 0;
+  const currentSide = match.homePlayerId === currentPlayerId ? "home" : match.awayPlayerId === currentPlayerId ? "away" : undefined;
+  const penaltySeed = stableRoomTimelineNumber(`${room.id}-${match.id}-penalty`);
+  const hasRarePenalty = Boolean(currentSide && penaltySeed % 9 === 0 && (currentSide === "home" ? match.homeGoals : match.awayGoals));
   const goalEvents = [
     ...Array.from({ length: match.homeGoals ?? 0 }, (_, index) => ({ teamName: match.homeName, order: index, side: "home" as const })),
     ...Array.from({ length: match.awayGoals ?? 0 }, (_, index) => ({ teamName: match.awayName, order: index, side: "away" as const }))
   ].sort((a, b) => `${a.teamName}-${a.order}`.localeCompare(`${b.teamName}-${b.order}`));
   const goalMinutes = spreadGoalMinutes(goalEvents.length);
+  let penaltyAssigned = false;
   goalEvents.forEach((goal, index) => {
     const scorerName = roomGoalScorer(room, match, goal.side, goal.order);
+    const isPenalty = hasRarePenalty && !penaltyAssigned && goal.side === currentSide;
+    if (isPenalty) penaltyAssigned = true;
     timelineItems.push({
+      id: `goal-${goal.side}-${goal.order}`,
       minute: goalMinutes[index] ?? 88,
       teamName: goal.teamName,
-      text: `Gol do ${goal.teamName}: ${scorerName}`,
-      side: goal.side
+      text: isPenalty ? `Penalti para ${goal.teamName}` : `Gol do ${goal.teamName}: ${scorerName}`,
+      side: goal.side,
+      kind: isPenalty ? "penalty" : "event"
     });
   });
-  timelineItems.push({ minute: 45, teamName: "", text: "Intervalo" });
-  timelineItems.push({ minute: 90, teamName: "", text: "Fim de jogo" });
+  timelineItems.push({ id: "fulltime", minute: 90, teamName: "", text: "Fim de jogo" });
 
   return timelineItems
-    .sort((a, b) => a.minute - b.minute || goalTextOrder(a.text) - goalTextOrder(b.text))
+    .sort((a, b) => a.minute - b.minute || roomTimelineOrder(a) - roomTimelineOrder(b))
     .map((event) => {
       if (event.side === "home") homeGoals += 1;
       if (event.side === "away") awayGoals += 1;
       return {
+        id: event.id,
         minute: event.minute,
         teamName: event.teamName,
         text: event.text,
         homeGoals,
-        awayGoals
+        awayGoals,
+        kind: event.kind,
+        decisionType: event.decisionType
       };
     });
+}
+
+function roomTimelineOrder(event: { text: string; kind?: RoomTimelineEvent["kind"] }) {
+  if (event.text === "Intervalo") return 1;
+  if (event.kind === "decision") return 2;
+  return goalTextOrder(event.text);
+}
+
+function stableRoomTimelineNumber(value: string) {
+  return value.split("").reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 104729, 17);
 }
 
 function roomGoalScorer(room: FriendRoom, match: RoomMatch, side: "home" | "away", goalIndex: number) {
@@ -1939,7 +2039,7 @@ function StatusPill({ status }: { status: FriendRoom["status"] }) {
 
 function tabButtonClass(active: boolean) {
   return cn(
-    "rounded-full px-3 py-3 text-sm font-black transition",
+    "rounded-none px-3 py-3 text-sm font-black transition",
     active ? "bg-electric text-night" : "text-slate-200 hover:bg-white/10"
   );
 }

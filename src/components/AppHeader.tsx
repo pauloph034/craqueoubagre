@@ -11,8 +11,9 @@ import { useState } from "react";
 const primaryNav = [
   ["Início", "/"],
   ["Jogar", "/jogar"],
+  ["Temporadas", "/temporadas"],
   ["Salas", "/salas"],
-  ["Histórico", "/historico"],
+  ["Galeria", "/historico"],
   ["Conquistas", "/conquistas"],
   ["Ranking", "/ranking"]
 ] as const;
@@ -39,7 +40,7 @@ export function AppHeader() {
               key={href}
               href={href}
               className={cn(
-                "grid h-full place-items-center border-x border-transparent px-4 text-xs font-black uppercase transition",
+                "grid h-full place-items-center border-x border-transparent px-3 text-[11px] font-black uppercase transition",
                 isActive(href) ? "border-black bg-[var(--accent)] text-white" : "text-black hover:bg-black hover:text-white"
               )}
             >

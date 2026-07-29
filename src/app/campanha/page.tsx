@@ -1,6 +1,11 @@
 "use client";
 
 import { TeamNameWithCrest } from "@/components/game/TeamNameWithCrest";
+import {
+  MatchDecisionPrompt,
+  PenaltyTakerPrompt,
+  type MatchDecisionType
+} from "@/components/game/MatchInteractivePrompt";
 import { Button } from "@/components/ui/button";
 import { useGameStore } from "@/stores/game-store";
 import type { BracketMatch, GroupStanding, MatchEvent, MatchResult } from "@/types/game";
@@ -9,9 +14,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type TimelineItem = {
+  id: string;
   minute: number;
   label: string;
-  kind: "kickoff" | "halftime" | "event" | "fulltime";
+  kind: "kickoff" | "halftime" | "decision" | "event" | "fulltime";
+  decisionType?: MatchDecisionType;
   event?: MatchEvent;
 };
 
@@ -27,6 +34,7 @@ export default function CampaignPage() {
   const summary = useGameStore((state) => state.lastSummary);
   const config = useGameStore((state) => state.config);
   const currentUser = useGameStore((state) => state.currentUser);
+  const squad = useGameStore((state) => state.squad);
   const selectedCoach = useGameStore((state) => state.selectedCoach);
   const loadActiveCampaign = useGameStore((state) => state.loadActiveCampaign);
   const startCampaign = useGameStore((state) => state.startCampaign);
@@ -43,6 +51,7 @@ export default function CampaignPage() {
   const [revealed, setRevealed] = useState(1);
   const [completedReplayIds, setCompletedReplayIds] = useState<string[]>([]);
   const [matchSpeed, setMatchSpeed] = useState<MatchSpeed>("normal");
+  const [interactionChoices, setInteractionChoices] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadActiveCampaign();
@@ -54,23 +63,52 @@ export default function CampaignPage() {
   const activeKnockoutMatch = inKnockout ? rawDisplayMatches.filter((match) => isKnockoutPhase(match.phase)).at(-1) : undefined;
   const visibleMatch = inKnockout ? activeKnockoutMatch : activeMatch;
   const activeMatchId = visibleMatch?.id;
-  const timeline = useMemo(() => (visibleMatch ? buildTimeline(visibleMatch) : []), [visibleMatch]);
+  const rawTimeline = useMemo(() => (visibleMatch ? buildTimeline(visibleMatch) : []), [visibleMatch]);
+  const timeline = useMemo(
+    () =>
+      rawTimeline.map((item) => {
+        const choice = interactionChoices[`${activeMatchId}:${item.id}`];
+        if (!choice) return item;
+        if (item.kind === "decision") return { ...item, label: `Ajuste definido: ${choice}` };
+        if (item.event?.requiresTakerSelection) {
+          return { ...item, event: { ...item.event, playerName: choice } };
+        }
+        return item;
+      }),
+    [activeMatchId, interactionChoices, rawTimeline]
+  );
   const replayFinished = Boolean(visibleMatch && revealed >= timeline.length);
   const liveMinute = replayFinished ? 90 : Math.max(1, timeline[Math.max(0, revealed - 1)]?.minute ?? 1);
   const replayPending = Boolean(visibleMatch && !completedReplayIds.includes(visibleMatch.id));
   const currentScheduleItem = schedule[step];
   const finishingKnockoutReplay = phase === "campaignFinished" && Boolean(activeMatch && replayPending && isKnockoutPhase(activeMatch.phase) && qualifiedTeams.length > 0);
+  const currentTimelineItem = timeline[Math.max(0, revealed - 1)];
+  const currentInteractionKey = activeMatchId && currentTimelineItem ? `${activeMatchId}:${currentTimelineItem.id}` : undefined;
+  const interactionPending = Boolean(
+    currentInteractionKey &&
+      !interactionChoices[currentInteractionKey] &&
+      (currentTimelineItem?.kind === "decision" || currentTimelineItem?.event?.requiresTakerSelection)
+  );
+  const penaltyCandidates = useMemo(
+    () =>
+      squad
+        .filter((pick) => pick.player.primaryPosition !== "GK")
+        .sort((a, b) => b.player.shooting - a.player.shooting || b.effectiveRating - a.effectiveRating)
+        .slice(0, 5)
+        .map((pick) => ({ id: pick.player.id, name: pick.player.name, rating: pick.effectiveRating })),
+    [squad]
+  );
 
   useEffect(() => {
     if (activeMatchId && !completedReplayIds.includes(activeMatchId)) setRevealed(1);
   }, [activeMatchId, completedReplayIds]);
 
   useEffect(() => {
-    if (!replayPending || replayFinished || showGroupTable) return;
+    if (!replayPending || replayFinished || showGroupTable || interactionPending) return;
     const delay = matchSpeedDelay[matchSpeed];
     const timer = window.setTimeout(() => setRevealed((value) => Math.min(value + 1, timeline.length)), delay);
     return () => window.clearTimeout(timer);
-  }, [matchSpeed, replayPending, replayFinished, showGroupTable, timeline.length, revealed]);
+  }, [interactionPending, matchSpeed, replayPending, replayFinished, showGroupTable, timeline.length, revealed]);
 
   useEffect(() => {
     if (!activeMatch || !replayPending || !replayFinished) return;
@@ -160,6 +198,25 @@ export default function CampaignPage() {
           )}
         </div>
       </section>
+
+      {interactionPending && currentInteractionKey && currentTimelineItem?.kind === "decision" && currentTimelineItem.decisionType && (
+        <div className="mt-4">
+          <MatchDecisionPrompt
+            type={currentTimelineItem.decisionType}
+            currentFormation={config.formation}
+            onChoose={(_, label) => setInteractionChoices((choices) => ({ ...choices, [currentInteractionKey]: label }))}
+          />
+        </div>
+      )}
+
+      {interactionPending && currentInteractionKey && currentTimelineItem?.event?.requiresTakerSelection && (
+        <div className="mt-4">
+          <PenaltyTakerPrompt
+            candidates={penaltyCandidates.length ? penaltyCandidates : [{ id: "fallback", name: visibleMatch?.bestPlayer ?? "Batedor", rating: 80 }]}
+            onChoose={(name) => setInteractionChoices((choices) => ({ ...choices, [currentInteractionKey]: name }))}
+          />
+        </div>
+      )}
 
       {showGroupTable ? (
         <GroupTable teamName={config.teamName} displayTeamName={displayTeamName} matches={matches.slice(0, 3)} groupTables={groupTables} qualifiedTeams={qualifiedTeams} onContinue={continueAfterGroup} />
@@ -463,12 +520,14 @@ function CompactMatchPanel({
 }) {
   const visible = timeline.slice(0, revealed);
   const finished = visible.some((item) => item.kind === "fulltime");
-  const userGoals = finished ? match.userGoals : visible.filter((item) => item.event?.type === "goal" && item.event.team === "user").length;
-  const opponentGoals = finished ? match.opponentGoals : visible.filter((item) => item.event?.type === "goal" && item.event.team === "opponent").length;
+  const userGoals = finished ? match.userGoals : visible.filter((item) => isScoringEvent(item.event) && item.event?.team === "user").length;
+  const opponentGoals = finished ? match.opponentGoals : visible.filter((item) => isScoringEvent(item.event) && item.event?.team === "opponent").length;
   const currentItem = visible.at(-1);
-  const currentGoalEvent = currentItem?.event?.type === "goal" ? currentItem.event : undefined;
+  const currentGoalEvent = isScoringEvent(currentItem?.event) ? currentItem?.event : undefined;
   const currentLabel = currentGoalEvent
     ? formatEventLabel(currentGoalEvent, teamName, match.opponentName)
+    : currentItem?.event
+      ? formatEventLabel(currentItem.event, teamName, match.opponentName)
     : currentItem?.kind === "fulltime"
       ? "Fim de jogo"
       : currentItem?.kind === "halftime"
@@ -573,7 +632,10 @@ function BracketPair({ pair, customTeamName, emblemId }: { pair: KnockoutPairVie
         <TeamNameWithCrest showCrest={false} name={pair.away} emblemId={pair.away === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
         {pair.awayGoals !== undefined && <span className="shrink-0 font-mono text-gold">{pair.awayGoals}</span>}
       </p>
-      <span className="absolute -right-4 top-1/2 hidden h-px w-4 bg-emerald-300/45 sm:block" />
+      <span
+        className="bracket-connector absolute -right-4 top-1/2 hidden h-px w-4 bg-[var(--success)] sm:block"
+        data-live={pair.live ? "true" : "false"}
+      />
     </article>
   );
 }
@@ -701,8 +763,8 @@ function LiveMatchCard({
 }) {
   const visible = timeline.slice(0, revealed);
   const finished = visible.some((item) => item.kind === "fulltime");
-  const userGoals = finished ? match.userGoals : visible.filter((item) => item.event?.type === "goal" && item.event.team === "user").length;
-  const opponentGoals = finished ? match.opponentGoals : visible.filter((item) => item.event?.type === "goal" && item.event.team === "opponent").length;
+  const userGoals = finished ? match.userGoals : visible.filter((item) => isScoringEvent(item.event) && item.event?.team === "user").length;
+  const opponentGoals = finished ? match.opponentGoals : visible.filter((item) => isScoringEvent(item.event) && item.event?.team === "opponent").length;
   const progress = Math.min(100, Math.round((minute / (match.events.some((event) => event.minute > 90) ? 120 : 90)) * 100));
   return (
     <article className="overflow-hidden border border-sky-200/10 bg-black/30">
@@ -738,9 +800,9 @@ function LiveMatchCard({
       <div className="border-t border-black/10 p-4">
         <ol className="game-scrollbar max-h-[300px] space-y-1 overflow-y-auto pr-1" aria-label="Linha do tempo da partida">
           {visible.map((item, index) => (
-            <li key={`${item.minute}-${index}`} className={`grid grid-cols-[2.8rem_auto_minmax(0,1fr)] items-center gap-3 border-b px-2 py-2.5 text-sm transition ${item.event?.type === "goal" ? "border-[var(--warning)]/40 bg-[var(--warning)]/10 font-bold" : "border-black/10"}`}>
+            <li key={`${item.minute}-${index}`} className={`grid grid-cols-[2.8rem_auto_minmax(0,1fr)] items-center gap-3 border-b px-2 py-2.5 text-sm transition ${isScoringEvent(item.event) ? "border-[var(--warning)]/40 bg-[var(--warning)]/10 font-bold" : item.kind === "decision" ? "border-[var(--success)]/30 bg-[color-mix(in_srgb,var(--success)_8%,transparent)]" : "border-black/10"}`}>
               <span className="font-mono text-xs font-black text-black">{item.minute}'</span>
-              <span className={`h-2.5 w-2.5 rounded-full ${item.event?.type === "goal" ? "bg-[var(--warning)]" : "bg-black/20"}`} aria-hidden />
+              <span className={`h-2.5 w-2.5 rounded-full ${isScoringEvent(item.event) ? "bg-[var(--warning)]" : item.kind === "decision" ? "bg-[var(--success)]" : "bg-black/20"}`} aria-hidden />
               <span className="min-w-0 break-words font-medium">{item.event ? formatEventLabel(item.event, teamName, match.opponentName) : item.label}</span>
             </li>
           ))}
@@ -830,23 +892,35 @@ function GroupTable({
 function buildTimeline(match: MatchResult): TimelineItem[] {
   const endMinute = match.events.some((event) => event.minute > 90) ? 120 : 90;
   return [
-    { minute: 1, label: "Bola rolando", kind: "kickoff" as const },
-    ...match.events.map((event) => ({ minute: event.minute, label: event.text, kind: "event" as const, event })),
-    { minute: 45, label: "Intervalo", kind: "halftime" as const },
-    { minute: endMinute, label: "Fim de jogo", kind: "fulltime" as const }
+    { id: "kickoff", minute: 1, label: "Bola rolando", kind: "kickoff" as const },
+    ...match.events.map((event, index) => ({ id: `event-${event.minute}-${index}`, minute: event.minute, label: event.text, kind: "event" as const, event })),
+    { id: "decision-30", minute: 30, label: "Decisao tática", kind: "decision" as const, decisionType: "tempo" as const },
+    { id: "halftime", minute: 45, label: "Intervalo", kind: "halftime" as const },
+    { id: "decision-45", minute: 45, label: "Decisao do intervalo", kind: "decision" as const, decisionType: "posture" as const },
+    { id: "decision-70", minute: 70, label: "Ajuste para a reta final", kind: "decision" as const, decisionType: "formation" as const },
+    { id: "fulltime", minute: endMinute, label: "Fim de jogo", kind: "fulltime" as const }
   ].sort((a, b) => a.minute - b.minute || timelineOrder(a.kind) - timelineOrder(b.kind));
 }
 
 function timelineOrder(kind: TimelineItem["kind"]) {
-  return { kickoff: 0, event: 1, halftime: 2, fulltime: 3 }[kind];
+  return { kickoff: 0, event: 1, halftime: 2, decision: 3, fulltime: 4 }[kind];
 }
 
 function formatEventLabel(event: MatchEvent, teamName: string, opponentName: string) {
-  if (event.type === "goal") {
+  if (isScoringEvent(event)) {
     const scorerName = event.playerName ?? "Coletivo";
-    return event.team === "user" ? `Gol do ${teamName}: ${scorerName}` : `Gol do ${opponentName}: ${scorerName}`;
+    const prefix = event.type === "penalty_scored" ? "Penalti convertido" : "Gol";
+    return event.team === "user" ? `${prefix} do ${teamName}: ${scorerName}` : `${prefix} do ${opponentName}: ${scorerName}`;
+  }
+  if (event.type === "penalty_missed") {
+    const taker = event.playerName ?? "Batedor";
+    return `Penalti perdido pelo ${event.team === "user" ? teamName : opponentName}: ${taker}`;
   }
   return event.playerName ? `${event.text}: ${event.playerName}` : event.text;
+}
+
+function isScoringEvent(event?: MatchEvent) {
+  return event?.type === "goal" || (event?.type === "penalty_scored" && event.requiresTakerSelection);
 }
 
 function displayTeamAlias(name: string | undefined, storedTeamName: string, displayTeamName: string, userName: string) {

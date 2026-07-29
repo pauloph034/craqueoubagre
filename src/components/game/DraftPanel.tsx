@@ -10,7 +10,17 @@ import type { Player } from "@/types/game";
 import { Dices } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-export function DraftPanel() {
+export function DraftPanel({
+  onComplete,
+  completeLabel = "Escolher técnico",
+  completeDescription = "Os 11 jogadores já foram escolhidos. Agora escolha o técnico para iniciar a campanha.",
+  completing = false
+}: {
+  onComplete?: () => void;
+  completeLabel?: string;
+  completeDescription?: string;
+  completing?: boolean;
+} = {}) {
   const state = useGameStore();
   const pendingPlayer = state.currentDraw?.options.find((player) => player.id === state.pendingPlayerId);
   const canConfirm = state.squad.length === 11;
@@ -47,10 +57,10 @@ export function DraftPanel() {
       <aside className="editorial-panel space-y-3 p-4">
         <div className="border-b border-black/20 pb-4">
           <p className="editorial-kicker">Elenco completo</p>
-          <p className="editorial-muted mt-2">Os 11 jogadores já foram escolhidos. Agora escolha o técnico para iniciar a campanha.</p>
+          <p className="editorial-muted mt-2">{completeDescription}</p>
         </div>
-        <Button className="min-h-14 w-full text-base" onClick={state.confirmSquad}>
-          Escolher tecnico
+        <Button className="min-h-14 w-full text-base" onClick={onComplete ?? state.confirmSquad} disabled={completing}>
+          {completing ? "Preparando temporada..." : completeLabel}
         </Button>
       </aside>
     );

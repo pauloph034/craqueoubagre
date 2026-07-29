@@ -639,6 +639,10 @@ textarea {
   color: var(--foreground) !important;
 }
 
+.stadium-texture main .ranking-scope-active {
+  color: #ffffff !important;
+}
+
 .stadium-texture main :where(.text-slate-300, .text-slate-400, .text-slate-500) {
   color: var(--muted) !important;
 }
@@ -726,6 +730,59 @@ textarea {
 
 .achievement-emblem {
   clip-path: polygon(50% 0, 92% 20%, 92% 72%, 50% 100%, 8% 72%, 8% 20%);
+}
+
+.chemistry-link {
+  stroke: var(--success);
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-dasharray: 5 4;
+  opacity: 0;
+  animation: chemistry-link-in 700ms ease-out forwards, chemistry-link-flow 2.6s linear 700ms infinite;
+}
+
+.chemistry-link[data-strength="2"] {
+  stroke: var(--warning);
+  stroke-width: 1.7;
+}
+
+@keyframes chemistry-link-in {
+  from {
+    opacity: 0;
+    stroke-dashoffset: 18;
+  }
+  to {
+    opacity: 0.72;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes chemistry-link-flow {
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+
+.bracket-connector {
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: bracket-connector-draw 600ms ease-out forwards;
+}
+
+.bracket-connector[data-live="true"] {
+  animation: bracket-connector-draw 600ms ease-out forwards, bracket-connector-pulse 1.4s ease-in-out 650ms infinite;
+}
+
+@keyframes bracket-connector-draw {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes bracket-connector-pulse {
+  50% {
+    opacity: 0.28;
+  }
 }
 
 .stadium-texture main [class*="backdrop-blur"] {

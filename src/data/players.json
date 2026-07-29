@@ -316,7 +316,8 @@
     "preferredFoot": "E",
     "primaryPosition": "ST",
     "secondaryPositions": [
-      "CF"
+      "CF",
+      "CM"
     ],
     "shirtNumber": 9,
     "overall": 94,
@@ -4355,7 +4356,8 @@
     "preferredFoot": "Ambos",
     "primaryPosition": "MEI",
     "secondaryPositions": [
-      "CF"
+      "CF",
+      "CM"
     ],
     "shirtNumber": 10,
     "overall": 91,
@@ -26766,7 +26768,8 @@
     "preferredFoot": "D",
     "primaryPosition": "MEI",
     "secondaryPositions": [
-      "CF"
+      "CF",
+      "CM"
     ],
     "shirtNumber": 10,
     "overall": 97,

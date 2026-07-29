@@ -3,24 +3,49 @@
 import { AdBanner } from "@/components/AdBanner";
 import { EditorialPageHeader, EmptyState } from "@/components/ui/editorial";
 import { useGameStore } from "@/stores/game-store";
+import type { RankedReward } from "@/types/seasons";
 import Image from "next/image";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export default function HistoryPage() {
-  const { history, loadHistory } = useGameStore();
+  const { history, loadHistory, currentUser, loadAccount } = useGameStore();
+  const [rankedRewards, setRankedRewards] = useState<RankedReward[]>([]);
   useEffect(() => loadHistory(), [loadHistory]);
+  useEffect(() => {
+    if (!currentUser) void loadAccount();
+  }, [currentUser, loadAccount]);
+  useEffect(() => {
+    if (!currentUser) {
+      setRankedRewards([]);
+      return;
+    }
+    fetch("/api/seasons/current", { cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() : { rewards: [] })
+      .then((data: { rewards?: RankedReward[] }) => setRankedRewards(data.rewards ?? []))
+      .catch(() => setRankedRewards([]));
+  }, [currentUser]);
 
   const gallery = useMemo(() => {
-    const rows = history.reduce<Record<string, { userName: string; teamName: string; trophies: number; campaigns: number }>>((acc, item) => {
+    type Shelf = { userName: string; teamName: string; campaignTrophies: number; seasonTrophies: RankedReward[]; campaigns: number };
+    const rows = history.reduce<Record<string, Shelf>>((acc, item) => {
       const userName = item.config.userName ?? "Jogador";
       const key = `${userName}__${item.config.teamName}`;
-      acc[key] ??= { userName, teamName: item.config.teamName, trophies: 0, campaigns: 0 };
+      acc[key] ??= { userName, teamName: item.config.teamName, campaignTrophies: 0, seasonTrophies: [], campaigns: 0 };
       acc[key].campaigns += 1;
-      if (item.champion) acc[key].trophies += 1;
+      if (item.champion) acc[key].campaignTrophies += 1;
       return acc;
     }, {});
-    return Object.values(rows).sort((a, b) => b.trophies - a.trophies || b.campaigns - a.campaigns);
-  }, [history]);
+    const seasonTrophies = rankedRewards.filter((reward) => reward.rewardId.startsWith("season-trophy"));
+    if (currentUser && seasonTrophies.length) {
+      const teamName = currentUser.teamName?.trim() || `${currentUser.username} FC`;
+      const key = `${currentUser.username}__${teamName}`;
+      rows[key] ??= { userName: currentUser.username, teamName, campaignTrophies: 0, seasonTrophies: [], campaigns: 0 };
+      rows[key].seasonTrophies = seasonTrophies;
+    }
+    return Object.values(rows)
+      .map((row) => ({ ...row, trophies: row.campaignTrophies + row.seasonTrophies.length }))
+      .sort((a, b) => b.trophies - a.trophies || b.campaigns - a.campaigns);
+  }, [currentUser, history, rankedRewards]);
 
   return (
     <main className="editorial-shell py-6">
@@ -45,10 +70,13 @@ export default function HistoryPage() {
               <div className="px-4 pb-4 pt-5">
                 {item.trophies > 0 ? (
                   <div className="relative flex min-h-28 flex-wrap items-end gap-x-1 gap-y-5 border-b-[6px] border-black px-2 pb-1 shadow-[0_5px_0_rgba(24,167,112,0.28)]">
-                    {Array.from({ length: item.trophies }, (_, index) => (
-                      <div key={index} className="group relative w-16 shrink-0 text-center sm:w-[4.5rem]">
+                    {[
+                      ...Array.from({ length: item.campaignTrophies }, (_, index) => ({ id: `campaign-${index}`, src: "/images/liga-dos-craques-trophy.png", label: `Liga #${index + 1}` })),
+                      ...item.seasonTrophies.map((reward) => ({ id: reward.id, src: "/assets/temporadas/taca-divisoes.png", label: `Divisão ${reward.division}` }))
+                    ].map((trophy, index) => (
+                      <div key={trophy.id} className="group relative w-16 shrink-0 text-center sm:w-[4.5rem]">
                         <Image
-                          src="/images/liga-dos-craques-trophy.png"
+                          src={trophy.src}
                           alt={`Taça ${index + 1} de ${item.teamName}`}
                           width={2560}
                           height={2560}
@@ -56,7 +84,7 @@ export default function HistoryPage() {
                           className="mx-auto h-24 w-full object-contain drop-shadow-[0_7px_5px_rgba(0,0,0,0.22)] transition-transform group-hover:-translate-y-1"
                         />
                         <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[8px] font-black uppercase tracking-[0.08em] text-black/55">
-                          #{String(index + 1).padStart(2, "0")}
+                          {trophy.label}
                         </span>
                       </div>
                     ))}

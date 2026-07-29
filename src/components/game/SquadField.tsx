@@ -7,6 +7,7 @@ import { calculatePositionFit } from "@/game-engine/position-fit";
 import { positionLabel } from "@/game-engine/position-labels";
 import { NationalityFlag } from "@/components/game/NationalityFlag";
 import { SoccerFieldMarkings } from "@/components/game/SoccerFieldMarkings";
+import { ChemistryLinks } from "@/components/game/ChemistryLinks";
 
 export function SquadField({ showMetrics = true }: { showMetrics?: boolean }) {
   const formation = useGameStore((state) => state.config.formation);
@@ -35,9 +36,11 @@ export function SquadField({ showMetrics = true }: { showMetrics?: boolean }) {
               <span className="text-[9px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">Entrosamento</span>
               <span className="font-display text-sm font-black text-black">{metrics.chemistry}%</span>
             </div>
-            <div className="mt-2 h-1 overflow-hidden bg-black/10">
-              <div className="h-full bg-[var(--success)] transition-all" style={{ width: `${metrics.chemistry}%` }} />
-            </div>
+            {metrics.chemistry > 0 && (
+              <div className="mt-2 h-1 overflow-hidden bg-black/10">
+                <div className="h-full bg-[var(--success)] transition-all" style={{ width: `${metrics.chemistry}%` }} />
+              </div>
+            )}
           </div>
           <div className="flex items-center justify-between gap-3 border-l border-black/20 px-3 py-1">
             <span className="text-[9px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">Elenco</span>
@@ -47,6 +50,14 @@ export function SquadField({ showMetrics = true }: { showMetrics?: boolean }) {
       </div>}
       <div className="relative mx-auto aspect-[7/10] max-h-[calc(100dvh-7.8rem)] min-h-[390px] overflow-hidden border border-black field-lines sm:min-h-[500px] xl:min-h-0">
         <SoccerFieldMarkings />
+        <ChemistryLinks
+          slots={slots}
+          players={squad.map((pick) => ({
+            slotId: pick.slotId,
+            nationality: pick.player.nationality,
+            clubKey: pick.clubSeason.clubId
+          }))}
+        />
         {slots.map((slot) => {
           const pick = squad.find((item) => item.slotId === slot.id);
           const pendingFit = pendingPlayer && !pick ? calculatePositionFit(pendingPlayer, slot.position) : undefined;
