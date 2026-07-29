@@ -125,6 +125,7 @@ test("tecnicos da sala carregam temporada para mostrar escudo", () => {
         id: `p${index}`,
         canonicalPlayerId: `p${index}`,
         name: `P${index}`,
+        nationality: index === 0 ? "Italia" : "Brasil",
         clubName: "Teste",
         clubSeasonId: "barcelona-2010-11",
         season: "2010/11",
@@ -138,7 +139,22 @@ test("tecnicos da sala carregam temporada para mostrar escudo", () => {
     }]
   };
   room = drawRoomCoaches(room, player.id);
-  assert.ok(room.coachOptionsByPlayer[player.id]?.every((coach) => coach.clubSeasonId));
+  assert.ok(room.coachOptionsByPlayer[player.id]?.every((coach) => coach.clubSeasonId && coach.nationality));
+  const selectedCoach = room.coachOptionsByPlayer[player.id]?.[0];
+  assert.ok(selectedCoach);
+  room = {
+    ...room,
+    players: room.players.map((roomPlayer) => ({
+      ...roomPlayer,
+      squad: roomPlayer.squad.map((pick, index) => ({
+        ...pick,
+        nationality: index === 0 ? selectedCoach.nationality : "Brasil"
+      }))
+    }))
+  };
+  room = chooseRoomCoach(room, player.id, selectedCoach.id);
+  assert.equal(room.players[0]?.squad[0]?.effectiveRating, 82);
+  assert.equal(room.players[0]?.squad[1]?.effectiveRating, 80);
 });
 
 test("draft por turnos sorteia times, revisa elenco, escolhe tecnico e gera chave", () => {

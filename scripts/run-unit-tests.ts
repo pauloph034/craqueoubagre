@@ -2,19 +2,22 @@
 import { difficultyRules } from "../src/config/game-balance";
 import { formations } from "../src/config/formations";
 import { clubSeasons, players } from "../src/data/loaders";
+import { coaches } from "../src/data/coaches";
 import { emblemForTeamName, teamEmblems } from "../src/data/team-emblems";
 import { simulateCampaign } from "../src/game-engine/campaign-engine";
 import { calculateChemistry } from "../src/game-engine/chemistry";
 import { drawClubSeason } from "../src/game-engine/draft-engine";
+import { completeUserGroupTable } from "../src/game-engine/group-stage";
 import { simulateMatch } from "../src/game-engine/match-engine";
 import { calculatePositionFit } from "../src/game-engine/position-fit";
 import { createRng } from "../src/game-engine/rng";
 import { calculateScore } from "../src/game-engine/scoring-engine";
 import { calculateTeamRating } from "../src/game-engine/team-rating";
+import { applyCoachNationalityBonus, nationalitiesMatch, ratingWithCoachNationalityBonus } from "../src/game-engine/coach-nationality";
 import { tacticalMatchup } from "../src/game-engine/tactics";
 import { isPublicNameAllowed } from "../src/server/name-policy";
 import { buildProgression, buildRankings, levelForXp, maskUsername } from "../src/server/progression";
-import type { CampaignSummary, DraftPick, Player, Position } from "../src/types/game";
+import type { CampaignSummary, DraftPick, MatchResult, Player, Position } from "../src/types/game";
 
 function sampleSquad(): DraftPick[] {
   const season = clubSeasons[0]!;
@@ -61,6 +64,22 @@ test("dataset possui volume minimo e goleiros", () => {
   }
 });
 
+test("tecnicos possuem nacionalidade e concedem bonus de compatriota", () => {
+  assert.ok(coaches.every((coach) => coach.nationality));
+  assert.equal(nationalitiesMatch("Holanda", "Paises Baixos"), true);
+  assert.equal(ratingWithCoachNationalityBonus(98, "Brasil", "Brasil"), 99);
+  assert.equal(ratingWithCoachNationalityBonus(88, "Brasil", "Italia"), 88);
+
+  const squad = sampleSquad();
+  const firstPick = squad[0]!;
+  const coach = { ...coaches[0]!, nationality: firstPick.player.nationality };
+  const boosted = applyCoachNationalityBonus(squad, coach);
+  const boostedAgain = applyCoachNationalityBonus(boosted, coach);
+  const baseRating = calculatePositionFit(firstPick.player, firstPick.slotPosition).effectiveRating;
+  assert.equal(boosted[0]?.effectiveRating, Math.min(99, baseRating + 2));
+  assert.equal(boostedAgain[0]?.effectiveRating, boosted[0]?.effectiveRating);
+});
+
 test("galeria possui 30 escudos e fallback estavel por time", () => {
   assert.equal(teamEmblems.length, 30);
   assert.equal(new Set(teamEmblems.map((emblem) => emblem.id)).size, 30);
@@ -78,13 +97,16 @@ test("sorteio com seed e elegibilidade", () => {
 
 test("regras de posicao", () => {
   const st = players.find((item) => item.primaryPosition === "ST")!;
-  const secondary = players.find((item) => item.secondaryPositions.includes("CF"))!;
+  const secondary = { ...samplePlayerAt("CM"), secondaryPositions: ["CF" as const] };
   const gk = players.find((item) => item.primaryPosition === "GK")!;
   assert.equal(calculatePositionFit(st, "ST").penalty, 0);
   assert.equal(calculatePositionFit(secondary, "CF").penalty, 2);
   assert.equal(calculatePositionFit(gk, "ST").allowed, false);
   assert.equal(calculatePositionFit(sampleGoalkeeperWithSecondary("CB"), "CB").allowed, false);
   assert.equal(calculatePositionFit(samplePlayerAt("RW"), "RM").penalty, 0);
+  assert.equal(calculatePositionFit(samplePlayerAt("RM"), "RW").penalty, 0);
+  assert.equal(calculatePositionFit(samplePlayerAt("LW"), "LM").penalty, 0);
+  assert.equal(calculatePositionFit(samplePlayerAt("LM"), "LW").penalty, 0);
   assert.equal(calculatePositionFit(samplePlayerAt("RB"), "RWB").penalty, 0);
   assert.equal(calculatePositionFit(samplePlayerAt("LB"), "LWB").penalty, 0);
   assert.equal(calculatePositionFit(samplePlayerAt("RWB"), "RB").penalty, 0);
@@ -93,13 +115,56 @@ test("regras de posicao", () => {
   assert.equal(calculatePositionFit(samplePlayerAt("CF"), "ST").penalty, 0);
 });
 
-test("Messi 2010/11 aparece como atacante de direita", () => {
-  const messi = players.find((item) => item.name === "Lionel Messi" && item.clubSeasonId === "barcelona-2010-11")!;
-  assert.equal(messi.primaryPosition, "RW");
-  assert.deepEqual(messi.secondaryPositions, ["CF", "ST", "MEI"]);
-  assert.equal(messi.overall, 98);
-  assert.equal(calculatePositionFit(messi, "RW").allowed, true);
-  assert.equal(calculatePositionFit(messi, "ST").allowed, true);
+test("craques mantem rating nas funcoes dominadas", () => {
+  const roleChecks: Array<[string, Position[]]> = [
+    ["neymar", ["LM", "MEI"]],
+    ["cristiano-ronaldo", ["ST", "CF"]],
+    ["lionel-messi", ["MEI", "ST", "CF", "RW", "RM"]],
+    ["kevin-de-bruyne", ["CM", "MEI"]]
+  ];
+  for (const [canonicalPlayerId, positions] of roleChecks) {
+    const versions = players.filter((player) => player.canonicalPlayerId === canonicalPlayerId);
+    assert.ok(versions.length > 0);
+    for (const player of versions) {
+      for (const position of positions) {
+        const fit = calculatePositionFit(player, position);
+        assert.equal(fit.allowed, true, `${player.name} deveria atuar em ${position}`);
+        assert.equal(fit.penalty, 0, `${player.name} perdeu pontos em ${position}`);
+      }
+    }
+  }
+});
+
+test("metadados historicos corrigidos", () => {
+  const nottingham = players.filter((player) => player.clubSeasonId === "nottingham-forest-1979-80");
+  assert.equal(nottingham.find((player) => player.name === "Kenny Burns")?.nationality, "Escocia");
+  assert.equal(nottingham.find((player) => player.name === "Frank Gray")?.nationality, "Escocia");
+  assert.equal(nottingham.some((player) => player.name === "Frank Clark"), false);
+  assert.equal(nottingham.find((player) => player.name === "John Robertson")?.nationality, "Escocia");
+  assert.equal(players.find((player) => player.name === "Andriy Shevchenko" && player.clubSeasonId === "dynamo-kyiv-1998-99")?.nationality, "Ucrania");
+  assert.equal(players.find((player) => player.name === "Gianluca Vialli" && player.clubSeasonId === "sampdoria-1991-92")?.nationality, "Italia");
+});
+
+test("grupo simula os seis confrontos da tabela", () => {
+  const userMatches = [
+    { opponentName: "Clube A", userGoals: 2, opponentGoals: 0 },
+    { opponentName: "Clube B", userGoals: 1, opponentGoals: 0 },
+    { opponentName: "Clube C", userGoals: 3, opponentGoals: 1 }
+  ] as MatchResult[];
+  const rows = completeUserGroupTable({
+    teamName: "Meu time",
+    userMatches,
+    teams: [
+      { name: "Clube A", strength: 82 },
+      { name: "Clube B", strength: 84 },
+      { name: "Clube C", strength: 86 }
+    ],
+    rng: createRng("grupo-completo")
+  });
+  assert.equal(rows.length, 4);
+  assert.equal(rows.find((row) => row.name === "Meu time")?.pts, 9);
+  assert.ok(rows.filter((row) => row.name !== "Meu time").reduce((sum, row) => sum + row.pts, 0) >= 6);
+  assert.ok(rows.reduce((sum, row) => sum + row.pts, 0) >= 15);
 });
 
 test("contadores por dificuldade", () => {
