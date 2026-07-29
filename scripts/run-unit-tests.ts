@@ -1,7 +1,7 @@
 ﻿import assert from "node:assert/strict";
 import { difficultyRules } from "../src/config/game-balance";
 import { formations } from "../src/config/formations";
-import { clubSeasons, players } from "../src/data/loaders";
+import { clubSeasons, opponents, players } from "../src/data/loaders";
 import { coaches } from "../src/data/coaches";
 import { emblemForTeamName, teamEmblems } from "../src/data/team-emblems";
 import { simulateCampaign } from "../src/game-engine/campaign-engine";
@@ -13,21 +13,36 @@ import { calculatePositionFit } from "../src/game-engine/position-fit";
 import { createRng } from "../src/game-engine/rng";
 import { calculateScore } from "../src/game-engine/scoring-engine";
 import { calculateTeamRating } from "../src/game-engine/team-rating";
+import { buildChemistryLinks } from "../src/components/game/ChemistryLinks";
 import { applyCoachNationalityBonus, nationalitiesMatch, ratingWithCoachNationalityBonus } from "../src/game-engine/coach-nationality";
 import { tacticalMatchup } from "../src/game-engine/tactics";
+import { dailyAllowance, saoPauloDateKey } from "../src/game-engine/seasons/daily-limit";
+import { completionXp, matchXp } from "../src/game-engine/seasons/season-xp";
+import { nextDivision, pointsForResult, seasonOutcome } from "../src/game-engine/seasons/season-progress";
 import { isPublicNameAllowed } from "../src/server/name-policy";
 import { buildProgression, buildRankings, levelForXp, maskUsername } from "../src/server/progression";
 import type { CampaignSummary, DraftPick, MatchResult, Player, Position } from "../src/types/game";
+import type { RankedMatch } from "../src/types/seasons";
 
 function sampleSquad(): DraftPick[] {
-  const season = clubSeasons[0]!;
-  const used = new Set<string>();
-  return formations["4-3-3"].map((slot) => {
-    const player = players.find((item) => item.clubSeasonId === season.id && calculatePositionFit(item, slot.position).allowed && !used.has(item.canonicalPlayerId))!;
-    used.add(player.canonicalPlayerId);
-    const fit = calculatePositionFit(player, slot.position);
-    return { slotId: slot.id, slotPosition: slot.position, player, clubSeason: season, effectiveRating: fit.effectiveRating, fitType: fit.type };
-  });
+  for (const season of clubSeasons) {
+    const used = new Set<string>();
+    const squad: DraftPick[] = [];
+    for (const slot of formations["4-3-3"]) {
+      const player = players.find(
+        (item) =>
+          item.clubSeasonId === season.id &&
+          calculatePositionFit(item, slot.position).allowed &&
+          !used.has(item.canonicalPlayerId)
+      );
+      if (!player) break;
+      used.add(player.canonicalPlayerId);
+      const fit = calculatePositionFit(player, slot.position);
+      squad.push({ slotId: slot.id, slotPosition: slot.position, player, clubSeason: season, effectiveRating: fit.effectiveRating, fitType: fit.type });
+    }
+    if (squad.length === 11) return squad;
+  }
+  throw new Error("Nenhum elenco da base cobre a formacao 4-3-3.");
 }
 
 function samplePlayerAt(position: Position): Player {
@@ -61,6 +76,16 @@ test("dataset possui volume minimo e goleiros", () => {
   for (const season of clubSeasons) {
     assert.ok(season.players.length >= 15);
     assert.ok(players.some((player) => player.clubSeasonId === season.id && player.primaryPosition === "GK"));
+  }
+});
+
+test("adversarios historicos exibem o ano do elenco", () => {
+  const legacySeasonFallbacks = new Set(["Benfica", "Sevilla"]);
+  for (const opponent of opponents) {
+    assert.ok(
+      legacySeasonFallbacks.has(opponent.name) || clubSeasons.some((season) => season.clubName === opponent.name),
+      `${opponent.name} esta sem temporada cadastrada`
+    );
   }
 });
 
@@ -121,7 +146,8 @@ test("craques mantem rating nas funcoes dominadas", () => {
     ["cristiano-ronaldo", ["ST", "CF"]],
     ["lionel-messi", ["MEI", "ST", "CF", "RW", "RM"]],
     ["kevin-de-bruyne", ["CM", "MEI"]],
-    ["kylian-mbappe", ["ST", "LW", "CF"]]
+    ["kylian-mbappe", ["ST", "LW", "CF"]],
+    ["diego-maradona", ["CM", "MEI"]]
   ];
   for (const [canonicalPlayerId, positions] of roleChecks) {
     const versions = players.filter((player) => player.canonicalPlayerId === canonicalPlayerId);
@@ -198,6 +224,20 @@ test("rating e entrosamento do elenco", () => {
   assert.ok(calculateChemistry(squad) > 50);
 });
 
+test("entrosamento visual respeita vizinhanca tatica", () => {
+  const slots = formations["4-3-3"];
+  const links = buildChemistryLinks(
+    slots,
+    slots.map((slot) => ({ slotId: slot.id, nationality: "Argentina", clubKey: "teste" }))
+  );
+  const pairs = links.map((link) => new Set([link.from.id, link.to.id]));
+  const goalkeeperPairs = pairs.filter((pair) => pair.has("gk"));
+  assert.equal(goalkeeperPairs.length, 2);
+  assert.ok(goalkeeperPairs.every((pair) => pair.has("cb1") || pair.has("cb2")));
+  assert.equal(pairs.some((pair) => pair.has("gk") && (pair.has("dm") || pair.has("cm1") || pair.has("cm2"))), false);
+  assert.equal(pairs.some((pair) => pair.has("rb") && (pair.has("dm") || pair.has("cm1") || pair.has("cm2"))), false);
+});
+
 test("simulacao deterministica e mata-mata resolvido", () => {
   const squad = sampleSquad();
   const args = { squad, tacticalStyle: "equilibrado" as const, opponent: { id: "x", name: "Teste", strength: 82 }, phase: "Final", knockout: true };
@@ -207,6 +247,24 @@ test("simulacao deterministica e mata-mata resolvido", () => {
   assert.equal(a.opponentGoals, b.opponentGoals);
   assert.notEqual(a.userGoals, a.opponentGoals);
   assert.deepEqual(a.events.map((event) => event.minute), [...a.events.map((event) => event.minute)].sort((x, y) => x - y));
+});
+
+test("penalti durante a partida e raro e pede um unico cobrador", () => {
+  const squad = sampleSquad();
+  const matches = Array.from({ length: 120 }, (_, index) =>
+    simulateMatch({
+      rng: createRng(`penalty-${index}`),
+      squad,
+      tacticalStyle: "equilibrado",
+      opponent: { id: "x", name: "Teste", strength: 82 },
+      phase: "Fase de grupos",
+      knockout: false
+    })
+  );
+  const penaltyMatches = matches.filter((match) => match.events.some((event) => event.requiresTakerSelection));
+  assert.ok(penaltyMatches.length >= 3);
+  assert.ok(penaltyMatches.length <= 28);
+  assert.ok(penaltyMatches.every((match) => match.events.filter((event) => event.requiresTakerSelection).length === 1));
 });
 
 test("vantagem tecnica grande nao vira derrota absurda", () => {
@@ -342,5 +400,39 @@ test("ranking mascara usuario, inclui admin e ordena tacas", () => {
   assert.equal(rankings[0]?.username, "pau*******");
   assert.equal(rankings[0]?.teamName, "Rocha FC");
   assert.equal(rankings[0]?.progression.trophies, 1);
+});
+
+test("temporadas usa oito jogos e progressao configurada", () => {
+  assert.equal(pointsForResult("win"), 3);
+  assert.equal(pointsForResult("draw"), 1);
+  assert.equal(pointsForResult("loss"), 0);
+  assert.equal(seasonOutcome(10, 15), "promoted");
+  assert.equal(nextDivision(10, "promoted"), 9);
+  assert.equal(seasonOutcome(1, 18), "champion");
+  assert.equal(nextDivision(1, "champion"), "lenda");
+  assert.equal(seasonOutcome("lenda", 24), "legend-perfect");
+  assert.equal(nextDivision("lenda", "relegated"), 1);
+});
+
+test("XP de temporadas diferencia resultado e recompensa final", () => {
+  assert.equal(matchXp("win"), 75);
+  assert.equal(matchXp("draw"), 45);
+  assert.equal(matchXp("loss"), 25);
+  assert.equal(completionXp(5, "promoted", 5), 350);
+  assert.equal(completionXp(3, "champion", 6), 500);
+  assert.equal(completionXp("lenda", "legend-perfect", 8), 1300);
+});
+
+test("limite diario usa meia-noite de Sao Paulo", () => {
+  const makeMatch = (completedAt: string, index: number) => ({ completedAt, id: String(index) }) as RankedMatch;
+  const matches = [
+    makeMatch("2026-07-29T02:59:59.000Z", 1),
+    makeMatch("2026-07-29T03:00:00.000Z", 2),
+    makeMatch("2026-07-29T15:00:00.000Z", 3)
+  ];
+  assert.equal(saoPauloDateKey(new Date(matches[0]!.completedAt)), "2026-07-28");
+  const allowance = dailyAllowance(matches, new Date("2026-07-29T16:00:00.000Z"));
+  assert.equal(allowance.used, 2);
+  assert.equal(allowance.remaining, 6);
 });
 
