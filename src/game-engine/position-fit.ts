@@ -19,6 +19,9 @@ const adaptations: Partial<Record<Position, Position[]>> = {
 
 const freeRoleSwitches: Partial<Record<Position, Position[]>> = {
   RW: ["RM"],
+  RM: ["RW"],
+  LW: ["LM"],
+  LM: ["LW"],
   ST: ["CF"],
   CF: ["ST"],
   RB: ["RWB"],
@@ -27,12 +30,22 @@ const freeRoleSwitches: Partial<Record<Position, Position[]>> = {
   LWB: ["LB"]
 };
 
+const playerFreeRoles: Record<string, Position[]> = {
+  neymar: ["LM", "MEI"],
+  "cristiano-ronaldo": ["ST", "CF"],
+  "lionel-messi": ["MEI", "ST", "CF", "RW", "RM"],
+  "kevin-de-bruyne": ["CM", "MEI"]
+};
+
 export function calculatePositionFit(player: Player, slotPosition: Position): PositionFit {
   if (player.primaryPosition === slotPosition) {
     return { type: "primary", effectiveRating: player.overall, penalty: 0, reason: "Posicao principal", allowed: true };
   }
   if (player.primaryPosition === "GK" || slotPosition === "GK") {
     return { type: "incompatible", effectiveRating: 0, penalty: 99, reason: "Goleiro nao atua na linha e jogadores de linha nao atuam no gol", allowed: false };
+  }
+  if (playerFreeRoles[player.canonicalPlayerId]?.includes(slotPosition)) {
+    return { type: "secondary", effectiveRating: player.overall, penalty: 0, reason: "Funcao dominada pelo jogador", allowed: true };
   }
   if (freeRoleSwitches[player.primaryPosition]?.includes(slotPosition)) {
     return { type: "adapted", effectiveRating: player.overall, penalty: 0, reason: "Funcao equivalente", allowed: true };

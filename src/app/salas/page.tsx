@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { getFormationSlots } from "@/config/formations";
 import { clubSeasons as clubSeasonData, players as playerData } from "@/data/loaders";
 import { calculatePositionFit } from "@/game-engine/position-fit";
+import { countCoachNationalityMatches } from "@/game-engine/coach-nationality";
 import { positionLabel } from "@/game-engine/position-labels";
 import {
   autoPickRoomTurn,
@@ -1297,6 +1298,7 @@ function RoomCoachPanel({
               <CoachCard
                 key={coach.id}
                 coach={coach}
+                squad={currentPlayer?.squad ?? []}
                 selected={selectedCoachId === coach.id}
                 disabled={Boolean(selectedCoachId)}
                 onChoose={() => currentPlayer && onChooseCoach(currentPlayer.id, coach.id)}
@@ -1310,7 +1312,7 @@ function RoomCoachPanel({
   );
 }
 
-function CoachCard({ coach, selected, disabled, onChoose }: { coach: RoomCoach; selected: boolean; disabled: boolean; onChoose: () => void }) {
+function CoachCard({ coach, squad, selected, disabled, onChoose }: { coach: RoomCoach; squad: RoomPick[]; selected: boolean; disabled: boolean; onChoose: () => void }) {
   const club =
     clubSeasonData.find((season) => season.id === coach.clubSeasonId) ??
     clubSeasonData.find((season) => sameText(season.clubName, coach.clubName) && season.season === coach.season);
@@ -1339,8 +1341,15 @@ function CoachCard({ coach, selected, disabled, onChoose }: { coach: RoomCoach; 
       <div className="mt-4 min-w-0">
         <p className="text-2xl font-black leading-tight text-white">{coach.name}</p>
         <p className="mt-2 text-sm leading-relaxed text-slate-300">{coach.clubName} {shortSeason(coach.season)} - {tacticalStyleLabel(coach.style)}</p>
+        <div className="mt-3 flex items-center gap-2">
+          <NationalityFlag nationality={coach.nationality} />
+          <span className="text-sm font-bold text-white">{coach.nationality}</span>
+        </div>
       </div>
       <p className="mt-4 text-sm leading-relaxed text-slate-400">{coach.description}</p>
+      <p className="mt-3 text-xs font-black uppercase tracking-[0.12em] text-emerald-300">
+        {countCoachNationalityMatches(squad.map((pick) => pick.nationality), coach.nationality)} jogadores recebem +2
+      </p>
     </button>
   );
 }

@@ -11,7 +11,9 @@ import { calculatePositionFit } from "@/game-engine/position-fit";
 import { createCampaignSeed, createRng } from "@/game-engine/rng";
 import { calculateScore, unlockedAchievements } from "@/game-engine/scoring-engine";
 import { calculateChemistry } from "@/game-engine/chemistry";
+import { completeUserGroupTable } from "@/game-engine/group-stage";
 import { calculateTeamRating } from "@/game-engine/team-rating";
+import { applyCoachNationalityBonus } from "@/game-engine/coach-nationality";
 import { storage } from "@/lib/storage";
 import type { BracketMatch, CampaignConfig, CampaignSummary, ClubSeason, Coach, DraftPick, GamePhase, GroupStanding, MatchResult, Player, Position, TacticalStyle, Difficulty, UserAccount } from "@/types/game";
 import { create } from "zustand";
@@ -375,9 +377,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get();
     const coach = state.coachOptions.find((item) => item.id === coachId) ?? state.coachDraw;
     if (!coach) return;
-    const next = { ...state, selectedCoach: coach, coachDraw: coach, phase: "campaignReady" as GamePhase };
+    const squad = applyCoachNationalityBonus(state.squad, coach);
+    const next = { ...state, squad, selectedCoach: coach, coachDraw: coach, phase: "campaignReady" as GamePhase };
     storage.saveActive(activeSnapshot(next));
-    set({ selectedCoach: coach, coachDraw: coach, phase: "campaignReady" });
+    set({ squad, selectedCoach: coach, coachDraw: coach, phase: "campaignReady" });
   },
   swapSlot: (slotId) => {
     const state = get();
@@ -691,22 +694,15 @@ function buildGroupStage(state: GameState, userMatches: MatchResult[]) {
   const groupTables: GroupStanding[] = [
     {
       groupName: "Grupo A",
-      rows: rankRows([
-        {
-          name: state.config.teamName,
-          pts: userMatches.reduce((sum, match) => sum + (match.userGoals > match.opponentGoals ? 3 : match.userGoals === match.opponentGoals ? 1 : 0), 0),
-          gf: userMatches.reduce((sum, match) => sum + match.userGoals, 0),
-          ga: userMatches.reduce((sum, match) => sum + match.opponentGoals, 0),
-          qualified: false
-        },
-        ...userMatches.map((match) => ({
+      rows: completeUserGroupTable({
+        teamName: state.config.teamName,
+        userMatches,
+        teams: userMatches.map((match) => ({
           name: match.opponentName,
-          pts: match.opponentGoals > match.userGoals ? 3 : match.opponentGoals === match.userGoals ? 1 : 0,
-          gf: match.opponentGoals,
-          ga: match.userGoals,
-          qualified: false
-        }))
-      ])
+          strength: findOpponent(match.opponentName).strength
+        })),
+        rng: createRng(`${state.config.seed}-user-group-opponents`)
+      })
     }
   ];
 

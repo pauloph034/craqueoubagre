@@ -108,6 +108,7 @@ export type CampaignConfig = {
 export type Coach = {
   id: string;
   name: string;
+  nationality: string;
   clubSeasonId: string;
   clubName: string;
   season: string;

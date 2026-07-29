@@ -1,8 +1,10 @@
 "use client";
 
 import { TeamCrest } from "@/components/game/TeamCrest";
+import { NationalityFlag } from "@/components/game/NationalityFlag";
 import { Button } from "@/components/ui/button";
 import { getFootballTeamByName } from "@/data/football-clubs";
+import { countCoachNationalityMatches } from "@/game-engine/coach-nationality";
 import { useGameStore } from "@/stores/game-store";
 import { Shuffle, UserCheck } from "lucide-react";
 
@@ -11,6 +13,7 @@ export function CoachPanel() {
   const drawCoach = useGameStore((state) => state.drawCoach);
   const coachDrawCount = useGameStore((state) => state.coachDrawCount);
   const confirmCoach = useGameStore((state) => state.confirmCoach);
+  const squad = useGameStore((state) => state.squad);
   const hasOptions = options.length > 0;
 
   return (
@@ -22,7 +25,7 @@ export function CoachPanel() {
       {hasOptions ? (
         <div className="mt-5 grid gap-3 lg:grid-cols-3">
           {options.map((coach) => (
-            <article key={coach.id} className="flex min-h-[210px] flex-col border border-black/20 bg-white p-3 transition hover:border-[var(--accent)]">
+            <article key={coach.id} className="flex min-h-[230px] flex-col border border-black/20 bg-white p-3 transition hover:border-[var(--accent)]">
               <div className="flex items-center justify-between gap-4">
                 <TeamCrest src={getFootballTeamByName(coach.clubName)?.logo} teamName={coach.clubName} pixelSize={44} />
                 <div className="grid h-10 min-w-10 shrink-0 place-items-center border border-black bg-[var(--background)] px-2 font-display text-lg font-black text-black">{coach.rating}</div>
@@ -30,8 +33,15 @@ export function CoachPanel() {
               <div className="mt-4 min-w-0">
                 <h2 className="font-display text-xl font-black uppercase leading-tight text-black">{coach.name}</h2>
                 <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{coach.clubName} {coach.season}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <NationalityFlag nationality={coach.nationality} className="border-black/25" />
+                  <span className="text-xs font-bold text-black">{coach.nationality}</span>
+                </div>
               </div>
               <p className="mt-3 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{coach.description}</p>
+              <p className="mt-2 text-xs font-black uppercase text-[var(--accent)]">
+                {countCoachNationalityMatches(squad.map((pick) => pick.player.nationality), coach.nationality)} jogadores recebem +2
+              </p>
               <Button className="mt-auto min-h-9 w-full" onClick={() => confirmCoach(coach.id)}>
                 <UserCheck size={18} /> Escolher tecnico
               </Button>

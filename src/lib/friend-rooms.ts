@@ -2,6 +2,7 @@ import { coaches } from "@/data/coaches";
 import { clubSeasons, players } from "@/data/loaders";
 import { getFormationSlots } from "@/config/formations";
 import { calculatePositionFit } from "@/game-engine/position-fit";
+import { ratingWithCoachNationalityBonus } from "@/game-engine/coach-nationality";
 import { createRng } from "@/game-engine/rng";
 import { inferredOpponentStyle, tacticalMatchup } from "@/game-engine/tactics";
 import { safeLoad, safeSave } from "@/lib/storage";
@@ -43,7 +44,7 @@ export type RoomDraw = {
   roster: RoomPick[];
 };
 
-export type RoomCoach = Pick<Coach, "id" | "name" | "clubSeasonId" | "clubName" | "season" | "style" | "rating" | "description">;
+export type RoomCoach = Pick<Coach, "id" | "name" | "nationality" | "clubSeasonId" | "clubName" | "season" | "style" | "rating" | "description">;
 
 export type RoomPlayer = {
   id: string;
@@ -416,7 +417,8 @@ export function chooseRoomCoach(room: FriendRoom, playerId: string, coachId: str
   const normalized = normalizeRoom(room);
   if (normalized.status !== "coach") return normalized;
   const options = normalized.coachOptionsByPlayer[playerId] ?? [];
-  if (!options.some((coach) => coach.id === coachId)) return normalized;
+  const selectedCoach = options.find((coach) => coach.id === coachId);
+  if (!selectedCoach) return normalized;
   const selectedCoachByPlayer = {
     ...normalized.selectedCoachByPlayer,
     [playerId]: coachId
@@ -424,7 +426,11 @@ export function chooseRoomCoach(room: FriendRoom, playerId: string, coachId: str
   const next = normalizeRoom({
     ...normalized,
     selectedCoachByPlayer,
-    players: normalized.players.map((player) => (player.id === playerId ? { ...player, ready: true } : player))
+    players: normalized.players.map((player) =>
+      player.id === playerId
+        ? { ...applyRoomCoachNationalityBonus(player, selectedCoach), ready: true }
+        : player
+    )
   });
   if (next.players.every((player) => selectedCoachByPlayer[player.id]) && allSquadsComplete(next.players)) return createInitialRoomBracket(next);
   return next;
@@ -631,6 +637,7 @@ function toRoomCoach(coach: Coach): RoomCoach {
   return {
     id: coach.id,
     name: coach.name,
+    nationality: coach.nationality,
     clubSeasonId: coach.clubSeasonId,
     clubName: coach.clubName,
     season: coach.season,
@@ -652,6 +659,27 @@ function assignPickToSlot(pick: RoomPick, player: RoomPlayer, slotId: string) {
     slotLabel: slot.label,
     slotPosition: slot.position,
     effectiveRating: fit.effectiveRating
+  };
+}
+
+function applyRoomCoachNationalityBonus(player: RoomPlayer, coach: Pick<Coach, "nationality">) {
+  return {
+    ...player,
+    squad: player.squad.map((pick) => {
+      const sourcePlayer = findRoomSourcePlayer(pick);
+      const baseRating =
+        sourcePlayer && pick.slotPosition
+          ? calculatePositionFit(sourcePlayer, pick.slotPosition).effectiveRating
+          : pick.effectiveRating ?? pick.overall;
+      return {
+        ...pick,
+        effectiveRating: ratingWithCoachNationalityBonus(
+          baseRating,
+          pick.nationality ?? sourcePlayer?.nationality,
+          coach.nationality
+        )
+      };
+    })
   };
 }
 
@@ -1043,7 +1071,11 @@ function normalizeCoachMap(map?: Record<string, RoomCoach[]>) {
       const source =
         coaches.find((item) => item.id === coach.id) ??
         coaches.find((item) => sameName(item.clubName, coach.clubName) && item.season === coach.season);
-      return { ...coach, clubSeasonId: coach.clubSeasonId || source?.clubSeasonId || "" };
+      return {
+        ...coach,
+        nationality: coach.nationality || source?.nationality || "",
+        clubSeasonId: coach.clubSeasonId || source?.clubSeasonId || ""
+      };
     });
   }
   return clean;

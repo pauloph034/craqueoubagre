@@ -4,6 +4,7 @@ import { TeamNameWithCrest } from "@/components/game/TeamNameWithCrest";
 import { Button } from "@/components/ui/button";
 import { useGameStore } from "@/stores/game-store";
 import type { BracketMatch, GroupStanding, MatchEvent, MatchResult } from "@/types/game";
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -228,14 +229,32 @@ export default function CampaignPage() {
 
 function ChampionCelebration({ teamName }: { teamName: string }) {
   return (
-    <section className="mt-6 border border-black bg-[var(--accent)] p-7 text-center">
-      <p className="text-xs font-black uppercase tracking-[0.25em] text-black">Campeao da Liga dos Craques</p>
-      <h2 className="mt-3 font-display text-4xl font-black uppercase leading-none text-black">{teamName}</h2>
-      <div className="mx-auto mt-5 grid h-20 w-20 place-items-center border border-black bg-black text-4xl font-black text-white">
-        T
+    <section className="mt-6 grid min-h-[390px] items-center gap-6 overflow-hidden py-8 sm:py-10 lg:grid-cols-[minmax(0,1fr)_minmax(300px,460px)] lg:gap-12 lg:py-12">
+      <div className="max-w-2xl">
+        <p className="editorial-kicker">Campeão da Liga dos Craques</p>
+        <h2 className="mt-4 max-w-3xl font-display text-5xl font-black uppercase leading-[0.88] text-black sm:text-6xl lg:text-7xl">
+          {teamName}
+        </h2>
+        <p className="mt-5 max-w-lg text-base leading-relaxed text-black/65">
+          Campanha concluída. Seu clube levantou a taça e escreveu o nome na galeria de campeões.
+        </p>
+        <Link href="/resultado">
+          <Button className="mt-7">Ver resultado final</Button>
+        </Link>
       </div>
-      <p className="mt-4 text-black/70">Campanha concluida. O titulo veio para sua galeria.</p>
-      <Link href="/resultado"><Button className="mt-6">Ver resultado final</Button></Link>
+
+      <div className="relative flex min-h-[300px] items-center justify-center lg:justify-end">
+        <div className="absolute bottom-7 left-1/2 h-px w-4/5 -translate-x-1/2 bg-black/20" aria-hidden="true" />
+        <Image
+          src="/images/liga-dos-craques-trophy.png"
+          alt="Taça dourada da Liga dos Craques"
+          width={2560}
+          height={2560}
+          sizes="(max-width: 1023px) 320px, 460px"
+          className="relative z-10 h-auto w-full max-w-[310px] object-contain drop-shadow-[0_24px_20px_rgba(0,0,0,0.2)] sm:max-w-[360px] lg:max-w-[440px]"
+          priority
+        />
+      </div>
     </section>
   );
 }

@@ -1,6 +1,9 @@
 "use client";
 
 import { AdBanner } from "@/components/AdBanner";
+import { HomeIntroLoader } from "@/components/AppLoadingScreen";
+import { NationalityFlag } from "@/components/game/NationalityFlag";
+import { SoccerFieldMarkings } from "@/components/game/SoccerFieldMarkings";
 import { Button } from "@/components/ui/button";
 import { useGameStore } from "@/stores/game-store";
 import { ArrowRight, BarChart3, Crown, Flame, Medal, Shuffle, Trophy, Users } from "lucide-react";
@@ -21,7 +24,9 @@ export default function HomePage() {
   }, [resetSolo]);
 
   return (
-    <main className="editorial-shell py-5 sm:py-7">
+    <>
+      <HomeIntroLoader />
+      <main className="editorial-shell py-5 sm:py-7">
       <section className="grid min-h-[calc(100dvh-8rem)] items-center gap-8 py-5 lg:grid-cols-[1fr_.9fr] lg:gap-14 lg:py-10">
         <div className="flex min-h-[400px] flex-col justify-center">
           <p className="editorial-kicker mb-6">Liga dos Craques · Temporada aberta</p>
@@ -36,7 +41,7 @@ export default function HomePage() {
             {currentUser && <p className="mt-3 text-xs font-bold uppercase">Em campo: {currentUser.playerName?.trim() || currentUser.username}</p>}
             <div className="mt-5 flex flex-col gap-2 min-[430px]:flex-row">
               <Link className="w-full min-[430px]:w-auto" href={currentUser ? "/jogar" : "/conta"}>
-                <Button className="w-full min-[430px]:min-w-40">{currentUser ? "Jogar agora" : "Entrar"} <ArrowRight size={15} /></Button>
+                <Button className="hero-play-button w-full min-[430px]:min-w-40">{currentUser ? "Jogar agora" : "Entrar"} <ArrowRight size={15} /></Button>
               </Link>
               <Link className="w-full min-[430px]:w-auto" href="/salas">
                 <Button className="w-full min-[430px]:min-w-40" variant="secondary">Jogar com amigos</Button>
@@ -61,31 +66,35 @@ export default function HomePage() {
       </section>
 
       <div className="mt-5"><AdBanner variant="house-ad" /></div>
-    </main>
+      </main>
+    </>
   );
 }
 
 function HeroPreview() {
   const players = [
-    ["PE", "C. Ronaldo", "97"],
-    ["ATA", "Rooney", "91"],
-    ["PD", "Dembélé", "87"],
-    ["MC", "Xavi", "96"],
-    ["VOL", "Busquets", "92"],
-    ["GOL", "Valdés", "88"]
+    { position: "PE", name: "C. Ronaldo", rating: "97", nationality: "Portugal" },
+    { position: "ATA", name: "Rooney", rating: "91", nationality: "Inglaterra" },
+    { position: "PD", name: "Dembélé", rating: "87", nationality: "Franca" },
+    { position: "MC", name: "Xavi", rating: "96", nationality: "Espanha" },
+    { position: "VOL", name: "Busquets", rating: "92", nationality: "Espanha" },
+    { position: "GOL", name: "Valdés", rating: "88", nationality: "Espanha" }
   ];
-  const coords = [[23, 21], [50, 13], [77, 21], [35, 49], [61, 54], [50, 84]];
+  const coords = [[22, 23], [50, 17], [78, 23], [36, 54], [64, 54], [50, 82]];
 
   return (
-    <div className="flex min-h-[500px] items-center justify-center lg:min-h-[620px]">
-      <div className="relative mx-auto aspect-[7/9] w-full max-w-[440px] border border-black bg-[#153b2e]">
-        <div className="absolute inset-x-0 top-1/2 border-t border-white/35" />
-        <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/35" />
-        {players.map(([pos, name, rating], index) => (
-          <div key={name} className="absolute grid h-[3.75rem] w-[3.75rem] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white bg-black text-center" style={{ left: `${coords[index]![0]}%`, top: `${coords[index]![1]}%` }}>
-            <span className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full border border-black bg-[var(--background)] font-display text-xs font-black text-black">{rating}</span>
-            <span className="max-w-[3.4rem] text-[7px] font-black leading-[0.9] text-white">{name}</span>
-            <span className="absolute -bottom-3 border border-black bg-[var(--background)] px-1.5 py-0.5 text-[8px] font-black text-black">{pos}</span>
+    <div className="flex min-h-[330px] items-center justify-center lg:min-h-[430px]">
+      <div
+        className="relative mx-auto aspect-[8/5] w-full max-w-[560px] overflow-hidden border border-black bg-[#153b2e]"
+        style={{ backgroundImage: "repeating-linear-gradient(0deg, rgba(255,255,255,.035) 0, rgba(255,255,255,.035) 11.11%, transparent 11.11%, transparent 22.22%)" }}
+      >
+        <SoccerFieldMarkings variant="attacking-half" className="inset-[3%] text-[#efe6d2]" />
+        {players.map((player, index) => (
+          <div key={player.name} className="absolute z-10 grid h-[3.75rem] w-[3.75rem] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white bg-black text-center" style={{ left: `${coords[index]![0]}%`, top: `${coords[index]![1]}%` }}>
+            <NationalityFlag nationality={player.nationality} className="absolute -left-1 -top-1 w-6 border-black" />
+            <span className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full border border-black bg-[var(--background)] font-display text-xs font-black text-black">{player.rating}</span>
+            <span className="mt-2 max-w-[3.4rem] px-1 text-[7px] font-black leading-[0.9] text-white">{player.name}</span>
+            <span className="absolute -bottom-3 border border-black bg-[var(--background)] px-1.5 py-0.5 text-[8px] font-black text-black">{player.position}</span>
           </div>
         ))}
       </div>

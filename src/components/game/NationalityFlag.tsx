@@ -48,6 +48,7 @@ const COUNTRY_CODES: Record<string, string> = {
   inglaterra: "GB",
   ira: "IR",
   irlanda: "IE",
+  "irlanda do norte": "GB",
   islandia: "IS",
   israel: "IL",
   italia: "IT",
