@@ -26,6 +26,7 @@ export type Player = {
   canonicalPlayerId: string;
   name: string;
   shortName: string;
+  /** Senior national team represented by the player, never birthplace alone. */
   nationality: string;
   birthYear?: number;
   preferredFoot?: "D" | "E" | "Ambos";
@@ -108,6 +109,7 @@ export type CampaignConfig = {
 export type Coach = {
   id: string;
   name: string;
+  /** Senior national team association used by the chemistry bonus. */
   nationality: string;
   clubSeasonId: string;
   clubName: string;

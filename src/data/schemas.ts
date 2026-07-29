@@ -9,7 +9,7 @@ export const playerSchema = z.object({
   canonicalPlayerId: z.string().min(2),
   name: z.string().min(2),
   shortName: z.string().min(2),
-  nationality: z.string().min(2),
+  nationality: z.string().min(2).describe("Selecao principal defendida pelo jogador; nao usar apenas o pais de nascimento"),
   birthYear: z.number().int().min(1900).max(2010).optional(),
   preferredFoot: z.enum(["D", "E", "Ambos"]).optional(),
   primaryPosition: positionSchema,
