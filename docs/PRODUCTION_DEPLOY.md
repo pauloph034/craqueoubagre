@@ -65,6 +65,11 @@ alter table public.cob_users add column if not exists emblem_id text;
 update public.cob_users set emblem_id = 'emblem-01' where emblem_id is null;
 ```
 
+Para publicar o modo **Temporadas**, execute tambem, uma unica vez, o arquivo
+`scripts/supabase-seasons.sql` no SQL Editor. Esse script adiciona o pais do
+jogador e cria as tabelas de temporadas, partidas ranqueadas e recompensas.
+Ele pode ser executado novamente sem apagar dados.
+
 ## 2. Variáveis de ambiente
 
 Na hospedagem, configure:
