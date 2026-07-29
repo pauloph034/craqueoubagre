@@ -14,4 +14,13 @@ describe("dataset demonstrativo", () => {
       expect(players.some((player) => player.clubSeasonId === season.id && player.primaryPosition === "GK")).toBe(true);
     }
   });
+
+  it("mantem PSV e Panathinaikos com suas temporadas historicas", () => {
+    expect(clubSeasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ clubName: "PSV", season: "1987/88" }),
+        expect.objectContaining({ clubName: "Panathinaikos", season: "1970/71" })
+      ])
+    );
+  });
 });

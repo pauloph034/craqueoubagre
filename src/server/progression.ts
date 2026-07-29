@@ -1,4 +1,5 @@
 import type { CampaignSummary, PlayerProgression, RankingEntry, UserAccount } from "@/types/game";
+import type { RankedReward, RankedSeason } from "@/types/seasons";
 
 const levelNames = [
   { min: 30, name: "Imortal" },
@@ -36,32 +37,57 @@ export function levelForXp(xp: number) {
   return level;
 }
 
-export function buildProgression(username: string, campaigns: CampaignSummary[]): PlayerProgression {
+export function buildProgression(
+  username: string,
+  campaigns: CampaignSummary[],
+  rankedSeasons: RankedSeason[] = [],
+  rankedRewards: RankedReward[] = []
+): PlayerProgression {
   const ownCampaigns = uniqueCampaigns(campaigns).filter((campaign) => campaign.config.userName.toLowerCase() === username.toLowerCase());
-  const matches = ownCampaigns.flatMap((campaign) => campaign.matches);
-  const wins = matches.filter((match) => match.userGoals > match.opponentGoals).length;
-  const trophies = ownCampaigns.filter((campaign) => campaign.champion).length;
-  const goalsFor = matches.reduce((sum, match) => sum + match.userGoals, 0);
-  const xp = ownCampaigns.reduce((sum, campaign) => sum + xpForCampaign(campaign), 0);
+  const ownRankedSeasons = Array.from(
+    new Map(
+      rankedSeasons
+        .filter((season) => season.username.toLowerCase() === username.toLowerCase())
+        .map((season) => [season.id, season])
+    ).values()
+  );
+  const soloMatches = ownCampaigns.flatMap((campaign) => campaign.matches);
+  const rankedMatches = ownRankedSeasons.reduce((sum, season) => sum + season.matchesPlayed, 0);
+  const wins = soloMatches.filter((match) => match.userGoals > match.opponentGoals).length + ownRankedSeasons.reduce((sum, season) => sum + season.wins, 0);
+  const rankedTrophies = new Set(
+    rankedRewards
+      .filter((reward) => reward.username.toLowerCase() === username.toLowerCase() && reward.rewardId.startsWith("season-trophy"))
+      .map((reward) => reward.id)
+  ).size;
+  const trophies = ownCampaigns.filter((campaign) => campaign.champion).length + rankedTrophies;
+  const goalsFor = soloMatches.reduce((sum, match) => sum + match.userGoals, 0) + ownRankedSeasons.reduce((sum, season) => sum + season.goalsFor, 0);
+  const xp = ownCampaigns.reduce((sum, campaign) => sum + xpForCampaign(campaign), 0) + ownRankedSeasons.reduce((sum, season) => sum + season.xpEarned, 0);
+  const totalMatches = soloMatches.length + rankedMatches;
+  const completedRankedSeasons = ownRankedSeasons.filter((season) => season.status === "completed").length;
   const level = levelForXp(xp);
   const levelName = levelNames.find((tier) => level >= tier.min)?.name ?? "Base";
-  const competitiveRating = Math.max(800, Math.round(1000 + wins * 14 + trophies * 125 + ownCampaigns.length * 4 - (matches.length - wins) * 3));
+  const competitiveRating = Math.max(800, Math.round(1000 + wins * 14 + trophies * 125 + (ownCampaigns.length + completedRankedSeasons) * 4 - (totalMatches - wins) * 3));
   return {
     xp,
     level,
     levelName,
     nextLevelXp: xpRequiredForLevel(level + 1),
     trophies,
-    campaigns: ownCampaigns.length,
-    matches: matches.length,
+    campaigns: ownCampaigns.length + completedRankedSeasons,
+    matches: totalMatches,
     wins,
     goalsFor,
-    winRate: matches.length ? Math.round((wins / matches.length) * 100) : 0,
+    winRate: totalMatches ? Math.round((wins / totalMatches) * 100) : 0,
     competitiveRating
   };
 }
 
-export function buildRankings(users: UserAccount[], campaigns: CampaignSummary[]): RankingEntry[] {
+export function buildRankings(
+  users: UserAccount[],
+  campaigns: CampaignSummary[],
+  rankedSeasons: RankedSeason[] = [],
+  rankedRewards: RankedReward[] = []
+): RankingEntry[] {
   return users
     .filter((user) => user.teamName?.trim() || user.playerName?.trim() || user.username.trim())
     .map((user) => ({
@@ -69,7 +95,8 @@ export function buildRankings(users: UserAccount[], campaigns: CampaignSummary[]
       playerName: user.playerName?.trim() || user.username,
       teamName: user.teamName?.trim() || `${user.username} FC`,
       emblemId: user.emblemId,
-      progression: buildProgression(user.username, campaigns)
+      country: user.country,
+      progression: buildProgression(user.username, campaigns, rankedSeasons, rankedRewards)
     }))
     .sort((a, b) =>
       b.progression.trophies - a.progression.trophies ||

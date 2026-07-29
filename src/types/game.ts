@@ -125,6 +125,7 @@ export type MatchEvent = {
   team: "user" | "opponent";
   text: string;
   playerName?: string;
+  requiresTakerSelection?: boolean;
 };
 
 export type MatchResult = {
@@ -210,6 +211,7 @@ export type UserAccount = {
   playerName?: string;
   teamName?: string;
   emblemId?: string;
+  country?: string;
   password: string;
   role: "admin" | "player";
   createdAt: string;
@@ -234,6 +236,7 @@ export type RankingEntry = {
   playerName: string;
   teamName: string;
   emblemId?: string;
+  country?: string;
   progression: PlayerProgression;
 };
 

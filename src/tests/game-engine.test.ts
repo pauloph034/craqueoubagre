@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { difficultyRules } from "@/config/game-balance";
 import { formations } from "@/config/formations";
+import { buildChemistryLinks } from "@/components/game/ChemistryLinks";
 import { clubSeasons, players } from "@/data/loaders";
 import { simulateCampaign } from "@/game-engine/campaign-engine";
 import { calculateChemistry } from "@/game-engine/chemistry";
@@ -9,18 +10,29 @@ import { simulateMatch } from "@/game-engine/match-engine";
 import { calculatePositionFit } from "@/game-engine/position-fit";
 import { createRng } from "@/game-engine/rng";
 import { calculateScore } from "@/game-engine/scoring-engine";
+import { seasonOutcome } from "@/game-engine/seasons/season-progress";
 import { calculateTeamRating } from "@/game-engine/team-rating";
 import type { DraftPick } from "@/types/game";
 
 function sampleSquad(): DraftPick[] {
-  const season = clubSeasons[0]!;
-  const used = new Set<string>();
-  return formations["4-3-3"].map((slot) => {
-    const player = players.find((item) => item.clubSeasonId === season.id && calculatePositionFit(item, slot.position).allowed && !used.has(item.canonicalPlayerId)) ?? players.find((item) => item.clubSeasonId === season.id)!;
-    used.add(player.canonicalPlayerId);
-    const fit = calculatePositionFit(player, slot.position);
-    return { slotId: slot.id, slotPosition: slot.position, player, clubSeason: season, effectiveRating: fit.effectiveRating, fitType: fit.type };
-  });
+  for (const season of clubSeasons) {
+    const used = new Set<string>();
+    const squad: DraftPick[] = [];
+    for (const slot of formations["4-3-3"]) {
+      const player = players.find(
+        (item) =>
+          item.clubSeasonId === season.id &&
+          calculatePositionFit(item, slot.position).allowed &&
+          !used.has(item.canonicalPlayerId)
+      );
+      if (!player) break;
+      used.add(player.canonicalPlayerId);
+      const fit = calculatePositionFit(player, slot.position);
+      squad.push({ slotId: slot.id, slotPosition: slot.position, player, clubSeason: season, effectiveRating: fit.effectiveRating, fitType: fit.type });
+    }
+    if (squad.length === 11) return squad;
+  }
+  throw new Error("Nenhum elenco da base cobre a formacao 4-3-3.");
 }
 
 describe("sorteio", () => {
@@ -79,6 +91,20 @@ describe("jogadores e posicoes", () => {
     const gk = players.find((item) => item.primaryPosition === "GK")!;
     expect(calculatePositionFit(gk, "ST").allowed).toBe(false);
   });
+
+  it("permite Maradona em MC e MEI sem perder overall", () => {
+    const maradona = players.find((item) => item.canonicalPlayerId === "diego-maradona")!;
+    expect(calculatePositionFit(maradona, "CM")).toMatchObject({
+      allowed: true,
+      penalty: 0,
+      effectiveRating: maradona.overall
+    });
+    expect(calculatePositionFit(maradona, "MEI")).toMatchObject({
+      allowed: true,
+      penalty: 0,
+      effectiveRating: maradona.overall
+    });
+  });
 });
 
 describe("contadores", () => {
@@ -98,6 +124,33 @@ describe("elenco", () => {
     expect(squad).toHaveLength(11);
     expect(calculateTeamRating(squad)).toBeGreaterThan(70);
     expect(calculateChemistry(squad)).toBeGreaterThan(50);
+  });
+
+  it("liga apenas vizinhos taticos com afinidade", () => {
+    const slots = formations["4-3-3"];
+    const links = buildChemistryLinks(
+      slots,
+      slots.map((slot) => ({
+        slotId: slot.id,
+        nationality: "Argentina",
+        clubKey: "teste"
+      }))
+    );
+    const pairs = links.map((link) => new Set([link.from.id, link.to.id]));
+    const goalkeeperPairs = pairs.filter((pair) => pair.has("gk"));
+
+    expect(goalkeeperPairs).toHaveLength(2);
+    expect(goalkeeperPairs.every((pair) => pair.has("cb1") || pair.has("cb2"))).toBe(true);
+    expect(pairs.some((pair) => pair.has("gk") && (pair.has("dm") || pair.has("cm1") || pair.has("cm2")))).toBe(false);
+    expect(pairs.some((pair) => pair.has("rb") && (pair.has("dm") || pair.has("cm1") || pair.has("cm2")))).toBe(false);
+  });
+});
+
+describe("temporadas ranqueadas", () => {
+  it("classifica sem entregar taca antes da Divisao 1", () => {
+    expect(seasonOutcome(10, 15)).toBe("promoted");
+    expect(seasonOutcome(5, 18)).toBe("promoted");
+    expect(seasonOutcome(1, 18)).toBe("champion");
   });
 });
 
