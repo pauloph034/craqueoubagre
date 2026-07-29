@@ -22,6 +22,10 @@ export default function SeasonsPage() {
   const [mobileTab, setMobileTab] = useState<"season" | "participants" | "squad">("season");
   const [refreshKey, setRefreshKey] = useState(0);
   const [showRankedDraft, setShowRankedDraft] = useState(false);
+  const missingSeasonTables = /PGRST205|cob_ranked_(?:seasons|matches|rewards)/i.test(error);
+  const visibleError = missingSeasonTables
+    ? "O banco do Supabase ainda nao possui as tabelas do modo Temporadas."
+    : error;
   const transferWindowPending = Boolean(
     data?.season?.status === "active" &&
     (data.season.requiresTransferWindow ?? (data.season.seasonNumber > 1 && data.season.matchesPlayed === 0)) &&
@@ -136,15 +140,37 @@ export default function SeasonsPage() {
 
       {error && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border border-red-800 bg-red-50 px-4 py-3 text-xs font-bold text-red-900">
-          <span>{error}</span>
+          <span>{visibleError}</span>
           {error.toLowerCase().includes("pais") && <Link href="/conta" className="underline">Completar perfil</Link>}
           {error.toLowerCase().includes("11 jogadores") && <button type="button" className="underline" onClick={() => setShowRankedDraft(true)}>Abrir draft da divisão</button>}
         </div>
       )}
 
-      {loading || !data ? (
+      {loading ? (
         <section className="grid min-h-[420px] place-items-center border border-black bg-white">
           <div className="text-center"><span className="mx-auto block h-8 w-8 animate-spin border-2 border-black border-t-[var(--accent)]" /><p className="mt-3 text-xs font-black uppercase">Carregando sua temporada</p></div>
+        </section>
+      ) : !data ? (
+        <section className="grid min-h-[420px] place-items-center border border-black bg-white p-6">
+          <div className="max-w-lg text-center">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--accent)]">Temporadas indisponiveis</p>
+            <h2 className="mt-2 font-display text-3xl font-black uppercase">Nao foi possivel carregar</h2>
+            <p className="mt-3 text-sm text-[var(--muted)]">
+              {visibleError || "Confira sua conexao e tente novamente."}
+            </p>
+            {missingSeasonTables && (
+              <p className="mt-3 border border-black bg-[var(--paper)] p-3 text-xs font-bold">
+                Execute o arquivo <code>scripts/supabase-seasons.sql</code> no SQL Editor do Supabase.
+              </p>
+            )}
+            <button
+              type="button"
+              className="mt-5 min-h-11 bg-[var(--accent)] px-6 text-xs font-black uppercase"
+              onClick={() => void load()}
+            >
+              Tentar novamente
+            </button>
+          </div>
         </section>
       ) : (
         !data.season || showRankedDraft ? (
