@@ -120,7 +120,8 @@ test("craques mantem rating nas funcoes dominadas", () => {
     ["neymar", ["LM", "MEI"]],
     ["cristiano-ronaldo", ["ST", "CF"]],
     ["lionel-messi", ["MEI", "ST", "CF", "RW", "RM"]],
-    ["kevin-de-bruyne", ["CM", "MEI"]]
+    ["kevin-de-bruyne", ["CM", "MEI"]],
+    ["kylian-mbappe", ["ST", "LW", "CF"]]
   ];
   for (const [canonicalPlayerId, positions] of roleChecks) {
     const versions = players.filter((player) => player.canonicalPlayerId === canonicalPlayerId);
@@ -143,6 +144,20 @@ test("metadados historicos corrigidos", () => {
   assert.equal(nottingham.find((player) => player.name === "John Robertson")?.nationality, "Escocia");
   assert.equal(players.find((player) => player.name === "Andriy Shevchenko" && player.clubSeasonId === "dynamo-kyiv-1998-99")?.nationality, "Ucrania");
   assert.equal(players.find((player) => player.name === "Gianluca Vialli" && player.clubSeasonId === "sampdoria-1991-92")?.nationality, "Italia");
+  assert.ok(players.filter((player) => player.canonicalPlayerId === "aymeric-laporte").every((player) => player.nationality === "Espanha"));
+  assert.equal(players.some((player) => player.nationality === "Holanda"), false);
+
+  const nationalTeamsByPlayer = new Map<string, Set<string>>();
+  for (const player of players) {
+    const nationalTeams = nationalTeamsByPlayer.get(player.canonicalPlayerId) ?? new Set<string>();
+    nationalTeams.add(player.nationality);
+    nationalTeamsByPlayer.set(player.canonicalPlayerId, nationalTeams);
+  }
+  assert.equal(
+    [...nationalTeamsByPlayer.entries()].filter(([, nationalTeams]) => nationalTeams.size > 1).length,
+    0,
+    "Um mesmo jogador nao pode ter selecoes diferentes entre temporadas"
+  );
 });
 
 test("grupo simula os seis confrontos da tabela", () => {

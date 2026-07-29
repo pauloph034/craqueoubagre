@@ -4,6 +4,15 @@ const path = require("path");
 const playersPath = path.join(process.cwd(), "src/data/players.json");
 const players = JSON.parse(fs.readFileSync(playersPath, "utf8"));
 
+// The game uses the senior national team represented by the player, not birthplace.
+const nationalTeamByCanonicalPlayer = {
+  "aymeric-laporte": "Espanha"
+};
+
+const normalizedNationalTeamNames = {
+  Holanda: "Paises Baixos"
+};
+
 const nationalityByClubAndName = {
   "nottingham-forest-1979-80": {
     "Peter Shilton": "Inglaterra",
@@ -147,12 +156,20 @@ const playerRoleUpdates = {
   neymar: ["MEI", "LM", "CF", "RW"],
   "cristiano-ronaldo": ["ST", "CF", "RW"],
   "lionel-messi": ["MEI", "ST", "CF", "RW", "RM"],
-  "kevin-de-bruyne": ["CM", "MEI"]
+  "kevin-de-bruyne": ["CM", "MEI"],
+  "kylian-mbappe": ["ST", "LW", "CF"]
 };
 
 let changes = 0;
 
 for (const player of players) {
+  const nationalTeam = nationalTeamByCanonicalPlayer[player.canonicalPlayerId]
+    ?? normalizedNationalTeamNames[player.nationality];
+  if (nationalTeam && player.nationality !== nationalTeam) {
+    player.nationality = nationalTeam;
+    changes += 1;
+  }
+
   const nationality = nationalityByClubAndName[player.clubSeasonId]?.[player.name];
   if (nationality && player.nationality !== nationality) {
     player.nationality = nationality;
