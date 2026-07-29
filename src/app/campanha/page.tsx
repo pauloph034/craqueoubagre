@@ -276,7 +276,7 @@ function KnockoutBracket({ bracket, champion, customTeamName, emblemId }: { brac
         {champion && (
           <div className="border border-black bg-[var(--accent)] px-4 py-3 text-black">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black">Campeao</p>
-            <div className="max-w-[260px] text-sm font-black text-black"><TeamNameWithCrest name={champion} emblemId={champion === customTeamName ? emblemId : undefined} size="sm" textClassName="!text-black" showUnknown allowWrap /></div>
+            <div className="max-w-[260px] text-sm font-black text-black"><TeamNameWithCrest showCrest={false} name={champion} emblemId={champion === customTeamName ? emblemId : undefined} size="sm" textClassName="!text-black" showUnknown allowWrap /></div>
           </div>
         )}
       </div>
@@ -312,11 +312,11 @@ function FinalBracketMatch({ match, customTeamName, emblemId }: { match: Bracket
   return (
     <article className="rounded-md border border-emerald-300/14 bg-white/[0.055] px-3 py-2 text-sm shadow-[0_0_18px_rgba(17,255,184,.08)]">
       <div className={`grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2 border-b border-white/10 pb-1.5 ${match.winnerName === match.homeName ? "text-white" : "text-slate-400"}`}>
-        <TeamNameWithCrest name={match.homeName} emblemId={match.homeName === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
+        <TeamNameWithCrest showCrest={false} name={match.homeName} emblemId={match.homeName === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
         <span className="text-right font-mono font-black text-gold">{match.homeGoals}</span>
       </div>
       <div className={`grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2 pt-1.5 ${match.winnerName === match.awayName ? "text-white" : "text-slate-400"}`}>
-        <TeamNameWithCrest name={match.awayName} emblemId={match.awayName === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
+        <TeamNameWithCrest showCrest={false} name={match.awayName} emblemId={match.awayName === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
         <span className="text-right font-mono font-black text-gold">{match.awayGoals}</span>
       </div>
     </article>
@@ -328,7 +328,7 @@ function WaitingCard({ phase, opponentName, teamName, onStart }: { phase: string
     <article className="border border-black bg-white p-6">
       <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">{phase}</p>
       <h2 className="mt-2 flex flex-wrap items-center gap-2 text-3xl font-black">
-        {opponentName ? <><span>{teamName} x</span><TeamNameWithCrest name={opponentName} size="md" textClassName="font-black" /></> : "Preparando tabela"}
+        {opponentName ? <><span>{teamName} x</span><TeamNameWithCrest showCrest={false} name={opponentName} size="md" textClassName="font-black" /></> : "Preparando tabela"}
       </h2>
       <p className="mt-4 text-slate-300">Clique para iniciar quando estiver pronto.</p>
       {onStart && <Button className="mt-5" onClick={onStart}>Comecar partida</Button>}
@@ -366,7 +366,7 @@ function CampaignSidebar({
                 <div className="min-w-0">
                   <p className="text-xs uppercase text-slate-400">{item.phase}</p>
                   <p className="flex min-w-0 items-center gap-1 font-black">
-                    {hideFutureKnockout ? "A definir" : <><span className="truncate">{teamName} x</span><TeamNameWithCrest name={opponentName} size="sm" textClassName="font-black" /></>}
+                    {hideFutureKnockout ? "A definir" : <><span className="truncate">{teamName} x</span><TeamNameWithCrest showCrest={false} name={opponentName} size="sm" textClassName="font-black" /></>}
                   </p>
                 </div>
                 <span className="whitespace-nowrap text-right font-mono text-xl font-black leading-none text-gold">
@@ -433,7 +433,7 @@ function CompactWaitingPanel({ phase, opponentName, teamName, onStart }: { phase
       <div className="min-w-0">
         <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">{phase}</p>
         <h3 className="mt-1 flex flex-wrap items-center gap-2 text-xl font-black">
-          {opponentName ? <><span>{teamName} x</span><TeamNameWithCrest name={opponentName} size="sm" textClassName="font-black" /></> : "Proximo confronto"}
+          {opponentName ? <><span>{teamName} x</span><TeamNameWithCrest showCrest={false} name={opponentName} size="sm" textClassName="font-black" /></> : "Proximo confronto"}
         </h3>
         <p className="mt-1 text-sm text-slate-300">Clique para iniciar. Os proximos confrontos ficam ocultos ate a classificacao.</p>
       </div>
@@ -481,7 +481,7 @@ function CompactMatchPanel({
         <div className="min-w-0">
           <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">{match.phase}</p>
           <h3 className="mt-1 flex flex-wrap items-center gap-2 text-lg font-black leading-tight">
-            <span>{teamName} x</span><TeamNameWithCrest name={match.opponentName} size="sm" textClassName="font-black" />
+            <span>{teamName} x</span><TeamNameWithCrest showCrest={false} name={match.opponentName} size="sm" textClassName="font-black" />
           </h3>
         </div>
         <div className="grid gap-2 sm:justify-items-end">
@@ -566,11 +566,11 @@ function BracketPair({ pair, customTeamName, emblemId }: { pair: KnockoutPairVie
   return (
     <article className={`relative rounded-md border p-2 text-[11px] font-black uppercase shadow-[0_0_18px_rgba(17,255,184,.1)] ${pair.live ? "border-gold/60 bg-gold/12" : "border-emerald-300/18 bg-white/[0.055]"}`}>
       <p className={`flex items-center justify-between gap-2 border-b border-white/10 pb-1 ${pair.winner === pair.home ? "text-white" : "text-slate-400"}`}>
-        <TeamNameWithCrest name={pair.home} emblemId={pair.home === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
+        <TeamNameWithCrest showCrest={false} name={pair.home} emblemId={pair.home === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
         {pair.homeGoals !== undefined && <span className="shrink-0 font-mono text-gold">{pair.homeGoals}</span>}
       </p>
       <p className={`flex items-center justify-between gap-2 pt-1 ${pair.winner === pair.away ? "text-white" : "text-slate-400"}`}>
-        <TeamNameWithCrest name={pair.away} emblemId={pair.away === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
+        <TeamNameWithCrest showCrest={false} name={pair.away} emblemId={pair.away === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
         {pair.awayGoals !== undefined && <span className="shrink-0 font-mono text-gold">{pair.awayGoals}</span>}
       </p>
       <span className="absolute -right-4 top-1/2 hidden h-px w-4 bg-emerald-300/45 sm:block" />
@@ -711,7 +711,7 @@ function LiveMatchCard({
           <div className="min-w-0">
             <p className="text-[11px] font-black uppercase tracking-[0.22em] text-emerald-300">{match.phase}</p>
             <h2 className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-lg font-black md:text-2xl">
-              <span className="truncate">{teamName} x</span><TeamNameWithCrest name={match.opponentName} size="md" textClassName="font-black" />
+              <span className="truncate">{teamName} x</span><TeamNameWithCrest showCrest={false} name={match.opponentName} size="md" textClassName="font-black" />
             </h2>
             {match.tacticalContext && (
               <p className="mt-2 text-xs text-slate-400">
@@ -815,7 +815,7 @@ function GroupTable({
               {group.rows.map((row, index) => (
                 <div key={row.name} className={`grid grid-cols-[1.5rem_minmax(0,1fr)_2rem] items-center gap-2 rounded border px-2 py-2 text-sm ${row.name === teamName || row.name === displayTeamName ? "border-gold/60 bg-gold/10" : row.qualified ? "border-emerald-300/35 bg-emerald-300/10" : "border-white/10 bg-white/[0.03]"}`}>
                   <span className="font-mono text-xs text-slate-400">{index + 1}</span>
-                  <TeamNameWithCrest name={row.name === teamName ? displayTeamName ?? row.name : row.name} size="sm" textClassName="font-bold" />
+                  <TeamNameWithCrest showCrest={false} name={row.name === teamName ? displayTeamName ?? row.name : row.name} size="sm" textClassName="font-bold" />
                   <span className="text-right font-mono font-black text-gold">{row.pts}</span>
                 </div>
               ))}

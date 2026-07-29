@@ -1702,7 +1702,7 @@ function RoomSpeedControl({ speed, onSpeedChange }: { speed: "normal" | "rapida"
 function BracketTeam({ name, emblemId, goals, winner, last = false }: { name: string; emblemId?: string; goals?: number; winner: boolean; last?: boolean }) {
   return (
     <div className={cn("grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2", !last && "border-b border-white/10 pb-1.5", last && "pt-1.5", winner ? "text-white" : "text-slate-400")}>
-      <TeamNameWithCrest name={name} emblemId={emblemId} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
+      <TeamNameWithCrest showCrest={false} name={name} emblemId={emblemId} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
       <span className="text-right font-mono font-black text-gold">{typeof goals === "number" ? goals : "-"}</span>
     </div>
   );

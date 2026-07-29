@@ -43,7 +43,7 @@ export default function ResultPage() {
             {summary.champion && <p className="mt-2 text-xl font-black text-gold">Seu clube levantou a Liga dos Craques.</p>}
             {!summary.champion && summary.tournamentChampion && (
               <p className="mt-2 flex flex-wrap items-center gap-2 text-xl font-black text-gold">
-                <span>Campeao da Liga dos Craques:</span><TeamNameWithCrest name={displayTournamentChampion ?? summary.tournamentChampion} size="sm" textClassName="font-black" />
+                <span>Campeao da Liga dos Craques:</span><TeamNameWithCrest showCrest={false} name={displayTournamentChampion ?? summary.tournamentChampion} size="sm" textClassName="font-black" />
               </p>
             )}
           </div>
@@ -88,7 +88,7 @@ export default function ResultPage() {
                 <div>
                   <p className="text-xs uppercase text-slate-400">{match.phase}</p>
                   <p className="flex min-w-0 flex-wrap items-center gap-2 font-black">
-                    <span>{displayTeamName} x</span><TeamNameWithCrest name={displayTeamAlias(match.opponentName, summary.config.teamName, displayTeamName, summary.config.userName) ?? match.opponentName} size="sm" textClassName="font-black" />
+                    <span>{displayTeamName} x</span><TeamNameWithCrest showCrest={false} name={displayTeamAlias(match.opponentName, summary.config.teamName, displayTeamName, summary.config.userName) ?? match.opponentName} size="sm" textClassName="font-black" />
                   </p>
                 </div>
                 <p className="font-mono text-2xl font-black text-gold">{match.userGoals}-{match.opponentGoals}</p>
@@ -121,7 +121,7 @@ function KnockoutBracket({ bracket, champion, customTeamName, emblemId }: { brac
         {champion && (
           <div className="border border-black bg-[var(--accent)] px-4 py-3 text-black">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black">Campeao</p>
-            <div className="max-w-[260px] text-sm font-black text-black"><TeamNameWithCrest name={champion} emblemId={champion === customTeamName ? emblemId : undefined} size="sm" textClassName="!text-black" showUnknown allowWrap /></div>
+            <div className="max-w-[260px] text-sm font-black text-black"><TeamNameWithCrest showCrest={false} name={champion} emblemId={champion === customTeamName ? emblemId : undefined} size="sm" textClassName="!text-black" showUnknown allowWrap /></div>
           </div>
         )}
       </div>
@@ -156,11 +156,11 @@ function FinalBracketMatch({ match, customTeamName, emblemId }: { match: Bracket
   return (
     <article className="border border-black bg-white px-3 py-2 text-sm">
       <div className={`grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2 border-b border-white/10 pb-1.5 ${match.winnerName === match.homeName ? "text-white" : "text-slate-400"}`}>
-        <TeamNameWithCrest name={match.homeName} emblemId={match.homeName === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
+        <TeamNameWithCrest showCrest={false} name={match.homeName} emblemId={match.homeName === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
         <span className="text-right font-mono font-black text-gold">{match.homeGoals}</span>
       </div>
       <div className={`grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2 pt-1.5 ${match.winnerName === match.awayName ? "text-white" : "text-slate-400"}`}>
-        <TeamNameWithCrest name={match.awayName} emblemId={match.awayName === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
+        <TeamNameWithCrest showCrest={false} name={match.awayName} emblemId={match.awayName === customTeamName ? emblemId : undefined} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
         <span className="text-right font-mono font-black text-gold">{match.awayGoals}</span>
       </div>
     </article>

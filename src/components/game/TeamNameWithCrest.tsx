@@ -13,13 +13,15 @@ type TeamNameWithCrestProps = {
   showUnknown?: boolean;
   emblemId?: string;
   allowWrap?: boolean;
+  showCrest?: boolean;
 };
 
 const emblemSizes = { sm: 26, md: 38, lg: 58, xl: 92 };
 
-export function TeamNameWithCrest({ name, size = "sm", className, textClassName, showUnknown = false, emblemId, allowWrap = false }: TeamNameWithCrestProps) {
+export function TeamNameWithCrest({ name, size = "sm", className, textClassName, showUnknown = false, emblemId, allowWrap = false, showCrest = true }: TeamNameWithCrestProps) {
   const team = getFootballTeamByName(name);
   const usesGenericEmblem = Boolean(emblemId || !team || team.logo === TEAM_PLACEHOLDER_LOGO);
+  if (!showCrest) return <span className={cn(allowWrap ? "break-words leading-tight" : "truncate", textClassName)}>{name}</span>;
   if (!team && !showUnknown) return <span className={cn(allowWrap ? "break-words leading-tight" : "truncate", textClassName)}>{name}</span>;
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-2 align-middle", className)}>
