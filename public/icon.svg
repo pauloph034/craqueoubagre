@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="Bola de futebol">
-  <rect width="192" height="192" rx="42" fill="#050816"/>
-  <circle cx="96" cy="96" r="66" fill="#f4f8fb" stroke="#28b8ff" stroke-width="7"/>
-  <path d="M96 43 124 63 113 97H79L68 63Z" fill="#071126"/>
-  <path d="m124 63 28 9 6 32-25 19-20-26zM68 63l-28 9-6 32 25 19 20-26zM79 97h34l14 31-31 21-31-21z" fill="#071126"/>
-  <path d="M96 43v-13M40 72 27 62M152 72l13-10M65 128l-17 17M127 128l17 17" stroke="#cbd5e1" stroke-width="6" stroke-linecap="round"/>
-  <circle cx="96" cy="96" r="66" fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="2"/>
+  <rect width="192" height="192" rx="38" fill="#f2ecdd"/>
+  <circle cx="96" cy="96" r="70" fill="#f8f4e8" stroke="#18a770" stroke-width="9"/>
+  <path d="M96 39 126 61 115 98H77L66 61Z" fill="#18a770"/>
+  <path d="m126 61 31 10 7 34-28 21-21-28zM66 61 35 71l-7 34 28 21 21-28zM77 98h38l15 34-34 23-34-23z" fill="#18a770"/>
+  <path d="M96 39V24M35 71 22 61M157 71l13-10M62 132l-18 18M130 132l18 18" stroke="#18a770" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="96" cy="96" r="70" fill="none" stroke="#0b6f4b" stroke-width="3"/>
 </svg>
