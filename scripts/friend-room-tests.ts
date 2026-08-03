@@ -267,7 +267,7 @@ test("salas antigas inativas saem da lista compartilhada", () => {
   assert.equal(normalizeFriendRooms([{ ...room, createdAt: oldDate, updatedAt: oldDate, lastSeenAt: Object.fromEntries(room.players.map((player) => [player.id, oldSeenAt])) }]).length, 0);
 });
 
-test("draft online permite 3 rerolls por escolha sem gastar no primeiro sorteio", () => {
+test("draft online permite somente 3 rerolls durante todo o draft", () => {
   let room = createFriendRoom({
     name: "Rerolls",
     hostName: "Paulo",
