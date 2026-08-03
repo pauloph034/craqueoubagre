@@ -111,6 +111,58 @@ function mergePlayers(incoming: RoomPlayer[], current: RoomPlayer[]) {
   return Array.from(byId.values());
 }
 
+function sameSquad(a: RoomPlayer, b: RoomPlayer) {
+  if (a.squad.length !== b.squad.length) return false;
+  return a.squad.every((pick, index) => {
+    const other = b.squad[index];
+    return Boolean(other && pick.canonicalPlayerId === other.canonicalPlayerId && pick.slotId === other.slotId);
+  });
+}
+
+function keepHeartbeat(incoming: FriendRoom, saved: FriendRoom) {
+  return normalizeFriendRoom({
+    ...saved,
+    lastSeenAt: { ...(saved.lastSeenAt ?? {}), ...(incoming.lastSeenAt ?? {}) }
+  });
+}
+
+function authorizeDraftMutation(incoming: FriendRoom, saved: FriendRoom, actorId: string) {
+  if (saved.status !== "drafting") return incoming;
+  const activePlayer = saved.players[saved.turnIndex];
+  if (!activePlayer || activePlayer.id !== actorId) return keepHeartbeat(incoming, saved);
+
+  const incomingActor = incoming.players.find((player) => player.id === actorId);
+  if (!incomingActor) return keepHeartbeat(incoming, saved);
+  const changedAnotherPlayer = saved.players.some((player) => {
+    if (player.id === actorId) return false;
+    const candidate = incoming.players.find((item) => item.id === player.id);
+    return !candidate || !sameSquad(candidate, player);
+  });
+  if (changedAnotherPlayer) return keepHeartbeat(incoming, saved);
+
+  const added = incomingActor.squad.length - activePlayer.squad.length;
+  if (added < 0 || added > 1) return keepHeartbeat(incoming, saved);
+  if (!activePlayer.squad.every((pick) => incomingActor.squad.some((item) => item.canonicalPlayerId === pick.canonicalPlayerId))) {
+    return keepHeartbeat(incoming, saved);
+  }
+
+  const oldRerolls = saved.rerollsByPlayer?.[actorId] ?? 0;
+  const newRerolls = incoming.rerollsByPlayer?.[actorId] ?? 0;
+  if (newRerolls < oldRerolls || newRerolls > 3 || newRerolls - oldRerolls > 1) {
+    return keepHeartbeat(incoming, saved);
+  }
+
+  if (added === 0 && (incoming.turnIndex !== saved.turnIndex || incoming.status !== "drafting")) {
+    return keepHeartbeat(incoming, saved);
+  }
+  if (added === 1 && incomingActor.squad.length > 11) return keepHeartbeat(incoming, saved);
+  if (incoming.status === "reviewing" && !incoming.players.every((player) => player.squad.length === 11)) {
+    return keepHeartbeat(incoming, saved);
+  }
+  if (!["drafting", "reviewing"].includes(incoming.status)) return keepHeartbeat(incoming, saved);
+  return incoming;
+}
+
 function mergeMatches(incoming: RoomMatch[], current: RoomMatch[]) {
   const byId = new Map<string, RoomMatch>();
   for (const match of current) byId.set(match.id, match);
@@ -157,7 +209,13 @@ export async function PUT(request: Request) {
     if (!participant) return saved;
     const namesAllowed = validatePublicName(room.name).allowed &&
       room.players.every((player) => validatePublicName(player.userName).allowed && validatePublicName(player.teamName).allowed);
-    return namesAllowed ? room : saved;
+    if (!namesAllowed) return saved;
+    if (!saved) return room;
+    const actor = saved.players.find((player) =>
+      player.userName.trim().toLowerCase() === playerName.toLowerCase() &&
+      player.teamName.trim().toLowerCase() === teamName.toLowerCase()
+    );
+    return actor ? authorizeDraftMutation(room, saved, actor.id) : saved;
   }).filter((room): room is FriendRoom => Boolean(room));
   const rooms = mergeRooms(incomingRooms, current);
   await writeRooms(rooms);

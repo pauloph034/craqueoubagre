@@ -1495,6 +1495,7 @@ function RoomBracket({
   const [matchSpeed, setMatchSpeed] = useState<"normal" | "rapida" | "ultra">("normal");
   const [interactionChoices, setInteractionChoices] = useState<Record<string, string>>({});
   const onPlayMatchRef = useRef(onPlayMatch);
+  const onProgressRoundRef = useRef(onProgressRound);
   const visibleEvents = presentation?.events.slice(0, presentation.visible) ?? [];
   const lastVisibleEvent = visibleEvents.at(-1);
   const interactionPending = Boolean(
@@ -1520,6 +1521,10 @@ function RoomBracket({
   }, [onPlayMatch]);
 
   useEffect(() => {
+    onProgressRoundRef.current = onProgressRound;
+  }, [onProgressRound]);
+
+  useEffect(() => {
     if (!presentation || interactionPending) return;
     if (presentation.committed) return;
     if (presentation.visible < presentation.events.length) {
@@ -1534,6 +1539,25 @@ function RoomBracket({
     }, 900);
     return () => window.clearTimeout(finish);
   }, [interactionPending, matchSpeed, presentation]);
+
+  useEffect(() => {
+    if (!presentation?.committed || room.status !== "bracket") return;
+
+    // A sincronizacao pode perder uma gravacao concorrente. Reenviar o mesmo
+    // resultado e seguro porque a simulacao usa uma seed deterministica.
+    if (playerMatch?.id === presentation.match.id) {
+      const retry = window.setTimeout(() => onPlayMatchRef.current(presentation.playerId), 1500);
+      return () => window.clearTimeout(retry);
+    }
+
+    if (!pendingHumans) {
+      const advance = window.setTimeout(() => {
+        setPresentation(undefined);
+        onProgressRoundRef.current();
+      }, 900);
+      return () => window.clearTimeout(advance);
+    }
+  }, [pendingHumans, playerMatch?.id, presentation, room.status]);
 
   function startMatchPresentation() {
     if (!currentPlayer || !playerMatch || presentation) return;

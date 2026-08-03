@@ -301,10 +301,8 @@ export function placeRoomPlayer(room: FriendRoom, playerId: string, slotId: stri
     turnIndex: shouldAdvance ? nextDraftTurnIndex(playersNext, normalized.turnIndex) : normalized.turnIndex,
     currentDraw: undefined,
     pendingPickId: undefined,
-    rerollsByPlayer: {
-      ...normalized.rerollsByPlayer,
-      [playerId]: 0
-    },
+    // Os 3 rerolls pertencem ao draft inteiro do jogador, nao a cada escolha.
+    rerollsByPlayer: normalized.rerollsByPlayer,
     picksInTurn: shouldAdvance ? 0 : nextPicksInTurn,
     turnOptions: [],
     turnStartedAt: Date.now()
