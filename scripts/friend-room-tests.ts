@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { players } from "../src/data/loaders";
-import { autoCompleteRoomDraft, autoPickRoomTurn, chooseRoomCoach, createFriendRoom, drawRoomCoaches, drawRoomTeam, joinRoom, normalizeFriendRooms, placeRoomPlayer, playPlayerRoomMatch, previewPlayerRoomMatch, progressRoomRound, replaceRoomPick, selectRoomPlayer, setRoomPlayerReady, startRoomDraft, startRoomCoachStage, type FriendRoom, type RoomDraw } from "../src/lib/friend-rooms";
+import { autoCompleteRoomDraft, autoPickRoomPlayer, autoPickRoomTurn, chooseRoomCoach, createFriendRoom, drawRoomCoaches, drawRoomTeam, joinRoom, normalizeFriendRooms, placeRoomPlayer, playPlayerRoomMatch, previewPlayerRoomMatch, progressRoomRound, replaceRoomPick, selectRoomPlayer, setRoomPlayerReady, startRoomDraft, startRoomCoachStage, type FriendRoom, type RoomDraw } from "../src/lib/friend-rooms";
 
 function test(name: string, fn: () => void) {
   fn();
@@ -211,7 +211,7 @@ test("auto completar preenche participantes e mata-mata com 16 times", () => {
     visibility: "publica",
     difficulty: "almanaque",
     draftMode: "todos",
-    simultaneousMinutes: 3,
+    simultaneousMinutes: 4,
     turnSeconds: 45
   });
   room = joinRoom(room, "Ana", "Ana FC");
@@ -293,6 +293,61 @@ test("draft online permite somente 3 rerolls durante todo o draft", () => {
   assert.equal(room.rerollsByPlayer[player.id], 3);
   assert.equal(room.currentDraw?.clubSeasonId, finalClub);
   assert.ok(firstClub);
+});
+
+test("draft por turnos respeita rodadas 3 mais 3 e fecha com 2", () => {
+  let room = createFriendRoom({
+    name: "Turnos",
+    hostName: "Paulo",
+    hostTeamName: "Sergipe FC",
+    visibility: "publica",
+    difficulty: "classico",
+    draftMode: "turnos",
+    simultaneousMinutes: 2,
+    turnSeconds: 30
+  });
+  room = joinRoom(room, "Ana", "Ana FC");
+  room = joinRoom(room, "Bruno", "Bruno FC");
+  for (const player of room.players) room = setRoomPlayerReady(room, player.id, true);
+  room = startRoomDraft(room);
+
+  for (let step = 0; step < 120 && room.status === "drafting"; step++) {
+    const beforeAllNine = room.players.every((player) => player.squad.length >= 9);
+    const actorIndex = room.turnIndex;
+    room = autoPickRoomTurn(room);
+    if (!beforeAllNine) assert.ok(room.players[actorIndex]!.squad.length <= 9);
+    assert.ok(room.players.every((player) => player.squad.length <= 11));
+  }
+
+  assert.equal(room.players.every((player) => player.squad.length === 11), true);
+  assert.equal(room.status, "reviewing");
+});
+
+test("draft simultaneo mantem sorteios e escolhas separados por jogador", () => {
+  let room = createFriendRoom({
+    name: "Simultaneo",
+    hostName: "Paulo",
+    hostTeamName: "Sergipe FC",
+    visibility: "publica",
+    difficulty: "classico",
+    draftMode: "todos",
+    simultaneousMinutes: 2,
+    turnSeconds: 30
+  });
+  room = joinRoom(room, "Ana", "Ana FC");
+  for (const player of room.players) room = setRoomPlayerReady(room, player.id, true);
+  room = startRoomDraft(room);
+  const first = room.players[0]!;
+  const second = room.players[1]!;
+
+  room = drawRoomTeam(room, first.id);
+  room = drawRoomTeam(room, second.id);
+  assert.ok(room.currentDrawByPlayer?.[first.id]);
+  assert.ok(room.currentDrawByPlayer?.[second.id]);
+  room = autoPickRoomPlayer(room, first.id);
+  assert.equal(room.players[0]!.squad.length, 1);
+  assert.equal(room.players[1]!.squad.length, 0);
+  assert.ok(room.currentDrawByPlayer?.[second.id]);
 });
 
 test("revisao online dura 30 segundos e permite substituir por jogador compativel", () => {

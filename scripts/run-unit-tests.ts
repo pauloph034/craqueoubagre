@@ -21,6 +21,8 @@ import { completionXp, matchXp } from "../src/game-engine/seasons/season-xp";
 import { nextDivision, pointsForResult, seasonOutcome } from "../src/game-engine/seasons/season-progress";
 import { isPublicNameAllowed } from "../src/server/name-policy";
 import { buildProgression, buildRankings, levelForXp, maskUsername } from "../src/server/progression";
+import { countRewardTrophies } from "../src/lib/trophies";
+import { matchDecisionMoments, recommendedMatchDecision, resolveMatchDecision } from "../src/game-engine/match-decisions";
 import type { CampaignSummary, DraftPick, MatchResult, Player, Position } from "../src/types/game";
 import type { RankedMatch } from "../src/types/seasons";
 
@@ -434,5 +436,24 @@ test("limite diario usa meia-noite de Sao Paulo", () => {
   const allowance = dailyAllowance(matches, new Date("2026-07-29T16:00:00.000Z"));
   assert.equal(allowance.used, 2);
   assert.equal(allowance.remaining, 6);
+});
+
+test("decisoes de partida sao contextuais e limitadas", () => {
+  const plans = Array.from({ length: 30 }, (_, index) => matchDecisionMoments(`match-${index}`, 1, 1, true));
+  assert.ok(plans.every((plan) => plan.length <= 2));
+  assert.ok(plans.some((plan) => plan.length === 0));
+  assert.ok(plans.some((plan) => plan.length > 0));
+  assert.equal(recommendedMatchDecision("posture", 2, 1, "4-3-3"), "recuar");
+  const outcome = resolveMatchDecision({ seed: "stable", type: "tempo", value: "controlar", userGoals: 1, opponentGoals: 0, formation: "4-3-3" });
+  assert.ok(outcome.detail.length > 20);
+});
+
+test("ajustes administrativos somam e retiram tacas sem apagar historico", () => {
+  const rewards = [
+    { id: "1", username: "paulo", rewardId: "season-trophy-elite-1", division: "lenda", seasonNumber: 1, unlockedAt: "" },
+    { id: "2", username: "paulo", rewardId: "admin-trophy-grant-2", division: "lenda", seasonNumber: 0, unlockedAt: "" },
+    { id: "3", username: "paulo", rewardId: "admin-trophy-remove-3", division: "lenda", seasonNumber: 0, unlockedAt: "" }
+  ] as const;
+  assert.equal(countRewardTrophies([...rewards], "paulo"), 1);
 });
 
