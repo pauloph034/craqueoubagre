@@ -323,6 +323,45 @@ test("draft por turnos respeita rodadas 3 mais 3 e fecha com 2", () => {
   assert.equal(room.status, "reviewing");
 });
 
+test("revisao online permite somente uma troca por jogador", () => {
+  let room = createFriendRoom({
+    name: "Troca unica",
+    hostName: "Paulo",
+    hostTeamName: "Sergipe FC",
+    visibility: "publica",
+    difficulty: "classico",
+    draftMode: "turnos",
+    simultaneousMinutes: 2,
+    turnSeconds: 30
+  });
+  const playerId = room.players[0]!.id;
+  room = setRoomPlayerReady(room, playerId, true);
+  room = startRoomDraft(room);
+  for (let step = 0; step < 80 && room.status === "drafting"; step++) room = autoPickRoomTurn(room);
+  assert.equal(room.status, "reviewing");
+
+  const original = room.players[0]!.squad[0]!;
+  let firstReplacement: FriendRoom | undefined;
+  for (const candidate of players) {
+    const next = replaceRoomPick(room, playerId, original.slotId!, candidate.id);
+    if (next.players[0]!.squad[0]!.canonicalPlayerId !== original.canonicalPlayerId) {
+      firstReplacement = next;
+      break;
+    }
+  }
+  assert.ok(firstReplacement);
+  assert.equal(firstReplacement.reviewSwapUsedByPlayer[playerId], true);
+  const acceptedCanonical = firstReplacement.players[0]!.squad[0]!.canonicalPlayerId;
+
+  let afterSecondAttempt = firstReplacement;
+  for (const candidate of players) {
+    if (candidate.canonicalPlayerId === acceptedCanonical) continue;
+    afterSecondAttempt = replaceRoomPick(firstReplacement, playerId, original.slotId!, candidate.id);
+    break;
+  }
+  assert.equal(afterSecondAttempt.players[0]!.squad[0]!.canonicalPlayerId, acceptedCanonical);
+});
+
 test("draft simultaneo mantem sorteios e escolhas separados por jogador", () => {
   let room = createFriendRoom({
     name: "Simultaneo",
