@@ -102,6 +102,7 @@ export type FriendRoom = {
   turnStartedAt?: number;
   draftEndsAt?: number;
   reviewEndsAt?: number;
+  reviewSwapUsedByPlayer: Record<string, boolean>;
   coachOptionsByPlayer: Record<string, RoomCoach[]>;
   selectedCoachByPlayer: Record<string, string>;
   bracket: RoomMatch[];
@@ -170,6 +171,7 @@ export function createFriendRoom(input: CreateRoomInput): FriendRoom {
     rerollsByPlayer: {},
     picksInTurn: 0,
     reviewEndsAt: undefined,
+    reviewSwapUsedByPlayer: {},
     coachOptionsByPlayer: {},
     selectedCoachByPlayer: {},
     bracket: [],
@@ -212,6 +214,7 @@ export function startRoomDraft(room: FriendRoom) {
     draftEndsAt: room.draftMode === "todos" ? Date.now() + room.simultaneousMinutes * 60_000 : undefined,
     turnStartedAt: room.draftMode === "turnos" ? Date.now() : undefined,
     reviewEndsAt: undefined,
+    reviewSwapUsedByPlayer: {},
     coachOptionsByPlayer: {},
     selectedCoachByPlayer: {},
     bracket: [],
@@ -315,7 +318,8 @@ export function placeRoomPlayer(room: FriendRoom, playerId: string, slotId: stri
       picksInTurn: 0,
       turnOptions: [],
       turnStartedAt: undefined,
-      reviewEndsAt: Date.now() + 30_000
+      reviewEndsAt: Date.now() + 30_000,
+      reviewSwapUsedByPlayer: Object.fromEntries(playersNext.map((player) => [player.id, false]))
     });
   }
 
@@ -411,6 +415,7 @@ export function moveRoomPick(room: FriendRoom, playerId: string, fromSlotId: str
 export function replaceRoomPick(room: FriendRoom, playerId: string, slotId: string, replacementId: string) {
   const normalized = normalizeRoom(room);
   if (normalized.status !== "reviewing") return normalized;
+  if (normalized.reviewSwapUsedByPlayer[playerId]) return normalized;
   const player = normalized.players.find((item) => item.id === playerId);
   if (!player || !player.squad.some((pick) => pick.slotId === slotId)) return normalized;
   const sourcePlayer = players.find((item) => item.id === replacementId);
@@ -427,7 +432,11 @@ export function replaceRoomPick(room: FriendRoom, playerId: string, slotId: stri
             squad: item.squad.map((pick) => (pick.slotId === slotId ? placed : pick))
           }
         : item
-    )
+    ),
+    reviewSwapUsedByPlayer: {
+      ...normalized.reviewSwapUsedByPlayer,
+      [playerId]: true
+    }
   });
 }
 
@@ -564,6 +573,7 @@ export function resetRoomToLobby(room: FriendRoom) {
     turnStartedAt: undefined,
     draftEndsAt: undefined,
     reviewEndsAt: undefined,
+    reviewSwapUsedByPlayer: {},
     coachOptionsByPlayer: {},
     selectedCoachByPlayer: {},
     bracket: [],
@@ -1069,6 +1079,7 @@ export function normalizeFriendRoom(room: FriendRoom): FriendRoom {
     turnStartedAt: room.turnStartedAt,
     draftEndsAt: room.draftEndsAt,
     reviewEndsAt: room.reviewEndsAt,
+    reviewSwapUsedByPlayer: normalizeReviewSwapMap(room.reviewSwapUsedByPlayer, players),
     coachOptionsByPlayer: normalizeCoachMap(room.coachOptionsByPlayer),
     selectedCoachByPlayer: room.selectedCoachByPlayer ?? {},
     bracket,
@@ -1167,6 +1178,10 @@ function normalizeRerollMap(map: Record<string, number> | undefined, roomPlayers
   const clean: Record<string, number> = {};
   for (const player of roomPlayers) clean[player.id] = Math.min(roomRerollsPerDraft, Math.max(0, map?.[player.id] ?? 0));
   return clean;
+}
+
+function normalizeReviewSwapMap(map: Record<string, boolean> | undefined, roomPlayers: RoomPlayer[]) {
+  return Object.fromEntries(roomPlayers.map((player) => [player.id, Boolean(map?.[player.id])]));
 }
 
 function normalizePresenceMap(map: Record<string, number> | undefined, roomPlayers: RoomPlayer[]) {
