@@ -8,6 +8,7 @@ import {
   listRankedSeasons
 } from "@/server/db";
 import { requireAdmin } from "@/server/session";
+import { countRewardTrophies } from "@/lib/trophies";
 import { NextResponse } from "next/server";
 
 export async function GET() {
@@ -23,7 +24,7 @@ export async function GET() {
   ]);
   const soloMatches = campaigns.reduce((sum, campaign) => sum + campaign.matches.length, 0);
   const matches = soloMatches + rankedMatches.length;
-  const rankedTrophies = rankedRewards.filter((reward) => reward.rewardId.startsWith("season-trophy")).length;
+  const rankedTrophies = countRewardTrophies(rankedRewards);
   return NextResponse.json({
     metrics: {
       visits: metrics.visits,
@@ -31,7 +32,7 @@ export async function GET() {
       campaigns: campaigns.length + rankedSeasons.length,
       matches,
       estimatedHours: matches * 5 / 60,
-      trophies: campaigns.filter((campaign) => campaign.champion).length + rankedTrophies,
+      trophies: Math.max(0, campaigns.filter((campaign) => campaign.champion).length + rankedTrophies),
       players: players.length,
       teams: clubSeasons.filter((season) => season.isActive).length
     }

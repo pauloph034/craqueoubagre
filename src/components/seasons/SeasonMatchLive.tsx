@@ -1,18 +1,13 @@
 "use client";
 
 import { MatchDecisionPrompt, PenaltyTakerPrompt, type MatchDecisionType } from "@/components/game/MatchInteractivePrompt";
+import { matchDecisionMoments, resolveMatchDecision } from "@/game-engine/match-decisions";
 import type { DraftPick, MatchEvent } from "@/types/game";
 import type { RankedMatch } from "@/types/seasons";
 import { Pause, Play, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 const speedMs = { 1: 550, 2: 300, 4: 160 } as const;
-
-const decisionMinutes: Array<{ minute: number; type: MatchDecisionType }> = [
-  { minute: 30, type: "tempo" },
-  { minute: 45, type: "posture" },
-  { minute: 70, type: "formation" }
-];
 
 export function SeasonMatchLive({
   rankedMatch,
@@ -30,11 +25,15 @@ export function SeasonMatchLive({
   const [minute, setMinute] = useState(0);
   const [speed, setSpeed] = useState<1 | 2 | 4>(2);
   const [paused, setPaused] = useState(false);
-  const [decisions, setDecisions] = useState<Partial<Record<MatchDecisionType, { value: string; label: string }>>>({});
+  const [decisions, setDecisions] = useState<Partial<Record<MatchDecisionType, { value: string; label: string; feedback: string }>>>({});
   const [penaltyTakers, setPenaltyTakers] = useState<Record<string, string>>({});
   const events = useMemo(() => rankedMatch.match.events.filter((event) => event.minute <= minute), [rankedMatch, minute]);
   const userGoals = events.filter((event) => (event.type === "goal" || event.type === "penalty_scored") && event.team === "user").length;
   const opponentGoals = events.filter((event) => (event.type === "goal" || event.type === "penalty_scored") && event.team === "opponent").length;
+  const decisionMinutes = useMemo(
+    () => matchDecisionMoments(rankedMatch.match.id, rankedMatch.match.userGoals, rankedMatch.match.opponentGoals, rankedMatch.match.phase !== "Fase de grupos"),
+    [rankedMatch.match.id, rankedMatch.match.opponentGoals, rankedMatch.match.phase, rankedMatch.match.userGoals]
+  );
   const pendingPenalty = events.find((event, index) => event.team === "user" && event.requiresTakerSelection && !penaltyTakers[eventKey(event, index)]);
   const pendingDecision = decisionMinutes.find((item) => minute >= item.minute && !decisions[item.type])?.type;
   const interactionPending = Boolean(pendingPenalty || pendingDecision);
@@ -66,14 +65,14 @@ export function SeasonMatchLive({
     });
     decisionMinutes.forEach((item) => {
       const decision = decisions[item.type];
-      if (decision) rows.push({ key: `decision-${item.type}`, minute: item.minute, text: `Decisao tatica: ${decision.label}` });
+      if (decision) rows.push({ key: `decision-${item.type}`, minute: item.minute, text: `${decision.label}: ${decision.feedback}` });
     });
     if (minute >= 45 && !events.some((event) => event.minute === 45 && event.text === "Intervalo")) {
       rows.push({ key: "halftime", minute: 45, text: "Intervalo" });
     }
     if (minute >= 90) rows.push({ key: "fulltime", minute: 90, text: "Fim de jogo" });
     return rows.sort((a, b) => a.minute - b.minute);
-  }, [decisions, events, minute, penaltyTakers, rankedMatch.opponentName, teamName]);
+  }, [decisionMinutes, decisions, events, minute, penaltyTakers, rankedMatch.opponentName, teamName]);
 
   useEffect(() => {
     if (paused || interactionPending || minute >= 90) return;
@@ -130,7 +129,11 @@ export function SeasonMatchLive({
             <MatchDecisionPrompt
               type={pendingDecision}
               currentFormation={formation}
-              onChoose={(value, label) => setDecisions((current) => ({ ...current, [pendingDecision]: { value, label } }))}
+              score={{ userGoals, opponentGoals }}
+              onChoose={(value, label) => {
+                const outcome = resolveMatchDecision({ seed: `${rankedMatch.match.id}-${minute}`, type: pendingDecision, value, userGoals, opponentGoals, formation });
+                setDecisions((current) => ({ ...current, [pendingDecision]: { value, label, feedback: outcome.detail } }));
+              }}
             />
           </div>
         )}

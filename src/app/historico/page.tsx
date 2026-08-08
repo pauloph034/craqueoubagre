@@ -3,13 +3,16 @@
 import { AdBanner } from "@/components/AdBanner";
 import { EditorialPageHeader, EmptyState } from "@/components/ui/editorial";
 import { useGameStore } from "@/stores/game-store";
+import type { CampaignSummary } from "@/types/game";
 import type { RankedReward } from "@/types/seasons";
+import { countRewardTrophies, isVisibleTrophyReward } from "@/lib/trophies";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 
 export default function HistoryPage() {
   const { history, loadHistory, currentUser, loadAccount } = useGameStore();
   const [rankedRewards, setRankedRewards] = useState<RankedReward[]>([]);
+  const [serverCampaigns, setServerCampaigns] = useState<CampaignSummary[]>([]);
   useEffect(() => loadHistory(), [loadHistory]);
   useEffect(() => {
     if (!currentUser) void loadAccount();
@@ -24,10 +27,21 @@ export default function HistoryPage() {
       .then((data: { rewards?: RankedReward[] }) => setRankedRewards(data.rewards ?? []))
       .catch(() => setRankedRewards([]));
   }, [currentUser]);
+  useEffect(() => {
+    if (!currentUser) {
+      setServerCampaigns([]);
+      return;
+    }
+    fetch("/api/campaigns", { cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() : { campaigns: [] })
+      .then((data: { campaigns?: CampaignSummary[] }) => setServerCampaigns(data.campaigns ?? []))
+      .catch(() => setServerCampaigns([]));
+  }, [currentUser]);
 
   const gallery = useMemo(() => {
     type Shelf = { userName: string; teamName: string; campaignTrophies: number; seasonTrophies: RankedReward[]; campaigns: number };
-    const rows = history.reduce<Record<string, Shelf>>((acc, item) => {
+    const campaigns = Array.from(new Map([...serverCampaigns, ...history].map((item) => [item.id, item])).values());
+    const rows = campaigns.reduce<Record<string, Shelf>>((acc, item) => {
       const userName = item.config.userName ?? "Jogador";
       const key = `${userName}__${item.config.teamName}`;
       acc[key] ??= { userName, teamName: item.config.teamName, campaignTrophies: 0, seasonTrophies: [], campaigns: 0 };
@@ -35,17 +49,16 @@ export default function HistoryPage() {
       if (item.champion) acc[key].campaignTrophies += 1;
       return acc;
     }, {});
-    const seasonTrophies = rankedRewards.filter((reward) => reward.rewardId.startsWith("season-trophy"));
-    if (currentUser && seasonTrophies.length) {
+    if (currentUser && rankedRewards.length) {
       const teamName = currentUser.teamName?.trim() || `${currentUser.username} FC`;
       const key = `${currentUser.username}__${teamName}`;
       rows[key] ??= { userName: currentUser.username, teamName, campaignTrophies: 0, seasonTrophies: [], campaigns: 0 };
-      rows[key].seasonTrophies = seasonTrophies;
+      rows[key].seasonTrophies = rankedRewards.filter(isVisibleTrophyReward);
     }
     return Object.values(rows)
-      .map((row) => ({ ...row, trophies: row.campaignTrophies + row.seasonTrophies.length }))
+      .map((row) => ({ ...row, trophies: Math.max(0, row.campaignTrophies + countRewardTrophies(rankedRewards, row.userName)) }))
       .sort((a, b) => b.trophies - a.trophies || b.campaigns - a.campaigns);
-  }, [currentUser, history, rankedRewards]);
+  }, [currentUser, history, rankedRewards, serverCampaigns]);
 
   return (
     <main className="editorial-shell py-6">
@@ -73,7 +86,7 @@ export default function HistoryPage() {
                     {[
                       ...Array.from({ length: item.campaignTrophies }, (_, index) => ({ id: `campaign-${index}`, src: "/images/liga-dos-craques-trophy.png", label: `Liga #${index + 1}` })),
                       ...item.seasonTrophies.map((reward) => ({ id: reward.id, src: "/assets/temporadas/taca-divisoes.png", label: `Divisão ${reward.division}` }))
-                    ].map((trophy, index) => (
+                    ].slice(0, item.trophies).map((trophy, index) => (
                       <div key={trophy.id} className="group relative w-16 shrink-0 text-center sm:w-[4.5rem]">
                         <Image
                           src={trophy.src}

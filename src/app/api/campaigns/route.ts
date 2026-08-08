@@ -1,7 +1,16 @@
-import { saveCampaignSummary } from "@/server/db";
+import { listCampaignSummaries, saveCampaignSummary } from "@/server/db";
 import { getCurrentUser } from "@/server/session";
 import type { CampaignSummary } from "@/types/game";
 import { NextResponse } from "next/server";
+
+export async function GET() {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ campaigns: [] });
+  const campaigns = (await listCampaignSummaries()).filter(
+    (summary) => summary.config.userName.toLowerCase() === user.username.toLowerCase()
+  );
+  return NextResponse.json({ campaigns });
+}
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();

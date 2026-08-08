@@ -7,6 +7,7 @@ import {
   type MatchDecisionType
 } from "@/components/game/MatchInteractivePrompt";
 import { Button } from "@/components/ui/button";
+import { matchDecisionMoments, resolveMatchDecision } from "@/game-engine/match-decisions";
 import { useGameStore } from "@/stores/game-store";
 import type { BracketMatch, GroupStanding, MatchEvent, MatchResult } from "@/types/game";
 import Image from "next/image";
@@ -83,6 +84,9 @@ export default function CampaignPage() {
   const currentScheduleItem = schedule[step];
   const finishingKnockoutReplay = phase === "campaignFinished" && Boolean(activeMatch && replayPending && isKnockoutPhase(activeMatch.phase) && qualifiedTeams.length > 0);
   const currentTimelineItem = timeline[Math.max(0, revealed - 1)];
+  const decisionScore = visibleMatch && currentTimelineItem
+    ? scoreAtMinute(visibleMatch.events, currentTimelineItem.minute)
+    : { userGoals: 0, opponentGoals: 0 };
   const currentInteractionKey = activeMatchId && currentTimelineItem ? `${activeMatchId}:${currentTimelineItem.id}` : undefined;
   const interactionPending = Boolean(
     currentInteractionKey &&
@@ -204,7 +208,11 @@ export default function CampaignPage() {
           <MatchDecisionPrompt
             type={currentTimelineItem.decisionType}
             currentFormation={config.formation}
-            onChoose={(_, label) => setInteractionChoices((choices) => ({ ...choices, [currentInteractionKey]: label }))}
+            score={decisionScore}
+            onChoose={(value, label) => {
+              const outcome = resolveMatchDecision({ seed: currentInteractionKey, type: currentTimelineItem.decisionType!, value, userGoals: decisionScore.userGoals, opponentGoals: decisionScore.opponentGoals, formation: config.formation });
+              setInteractionChoices((choices) => ({ ...choices, [currentInteractionKey]: `${label} - ${outcome.detail}` }));
+            }}
           />
         </div>
       )}
@@ -891,15 +899,23 @@ function GroupTable({
 
 function buildTimeline(match: MatchResult): TimelineItem[] {
   const endMinute = match.events.some((event) => event.minute > 90) ? 120 : 90;
+  const decisions = matchDecisionMoments(match.id, match.userGoals, match.opponentGoals, isKnockoutPhase(match.phase));
   return [
     { id: "kickoff", minute: 1, label: "Bola rolando", kind: "kickoff" as const },
     ...match.events.map((event, index) => ({ id: `event-${event.minute}-${index}`, minute: event.minute, label: event.text, kind: "event" as const, event })),
-    { id: "decision-30", minute: 30, label: "Decisao tática", kind: "decision" as const, decisionType: "tempo" as const },
     { id: "halftime", minute: 45, label: "Intervalo", kind: "halftime" as const },
-    { id: "decision-45", minute: 45, label: "Decisao do intervalo", kind: "decision" as const, decisionType: "posture" as const },
-    { id: "decision-70", minute: 70, label: "Ajuste para a reta final", kind: "decision" as const, decisionType: "formation" as const },
+    ...decisions.map((decision) => ({ id: `decision-${decision.minute}-${decision.type}`, minute: decision.minute, label: decision.type === "formation" ? "Ajuste para a reta final" : "Decisao tatica", kind: "decision" as const, decisionType: decision.type })),
     { id: "fulltime", minute: endMinute, label: "Fim de jogo", kind: "fulltime" as const }
   ].sort((a, b) => a.minute - b.minute || timelineOrder(a.kind) - timelineOrder(b.kind));
+}
+
+function scoreAtMinute(events: MatchEvent[], minute: number) {
+  return events.reduce((score, event) => {
+    if (event.minute > minute || !isScoringEvent(event)) return score;
+    if (event.team === "user") score.userGoals += 1;
+    else score.opponentGoals += 1;
+    return score;
+  }, { userGoals: 0, opponentGoals: 0 });
 }
 
 function timelineOrder(kind: TimelineItem["kind"]) {

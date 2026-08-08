@@ -1,7 +1,6 @@
 "use client";
 
 import { AdBanner } from "@/components/AdBanner";
-import { HomeIntroLoader } from "@/components/AppLoadingScreen";
 import { NationalityFlag } from "@/components/game/NationalityFlag";
 import { SoccerFieldMarkings } from "@/components/game/SoccerFieldMarkings";
 import { Button } from "@/components/ui/button";
@@ -24,9 +23,7 @@ export default function HomePage() {
   }, [resetSolo]);
 
   return (
-    <>
-      <HomeIntroLoader />
-      <main className="editorial-shell py-5 sm:py-7">
+    <main className="editorial-shell py-5 sm:py-7">
       <section className="grid min-h-[calc(100dvh-8rem)] items-center gap-8 py-5 lg:grid-cols-[1fr_.9fr] lg:gap-14 lg:py-10">
         <div className="flex min-h-[400px] flex-col justify-center">
           <p className="editorial-kicker mb-6">Liga dos Craques · Temporada aberta</p>
@@ -66,8 +63,7 @@ export default function HomePage() {
       </section>
 
       <div className="mt-5"><AdBanner variant="house-ad" /></div>
-      </main>
-    </>
+    </main>
   );
 }
 

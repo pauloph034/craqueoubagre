@@ -1,5 +1,5 @@
-import { normalizeFriendRoom, normalizeFriendRooms, type FriendRoom, type RoomMatch, type RoomPlayer, type RoomStatus } from "@/lib/friend-rooms";
-import { hasSupabaseConfig, listSharedFriendRooms, saveSharedFriendRooms } from "@/server/db";
+import { normalizeFriendRoom, normalizeFriendRooms, progressRoomRound, type FriendRoom, type RoomMatch, type RoomPlayer, type RoomStatus } from "@/lib/friend-rooms";
+import { deleteSharedFriendRoom, hasSupabaseConfig, listSharedFriendRooms, saveSharedFriendRooms } from "@/server/db";
 import { validatePublicName } from "@/server/name-policy";
 import { getCurrentUser } from "@/server/session";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -11,7 +11,13 @@ const roomsFile = path.join(dataDir, "friend-rooms.json");
 async function readRooms() {
   if (hasSupabaseConfig()) {
     const sharedRooms = await listSharedFriendRooms();
-    if (sharedRooms) return normalizeFriendRooms(sharedRooms).filter(isFreshRoom);
+    if (sharedRooms) {
+      const normalized = normalizeFriendRooms(sharedRooms);
+      const fresh = normalized.filter(isFreshRoom);
+      const staleIds = normalized.filter((room) => !isFreshRoom(room)).map((room) => room.id);
+      if (staleIds.length) await Promise.all(staleIds.map((roomId) => deleteSharedFriendRoom(roomId)));
+      return fresh;
+    }
   }
   try {
     const raw = await readFile(roomsFile, "utf8");
@@ -63,7 +69,7 @@ function mergeRoomState(incoming: FriendRoom, current: FriendRoom) {
   const incomingIsCurrent = incomingRevision >= currentRevision;
   const base = incomingIsCurrent && incomingRank >= currentRank ? incoming : current;
   const status = incoming.status === "finished" || current.status === "finished" ? "finished" : incomingRank >= currentRank ? incoming.status : current.status;
-  return normalizeFriendRoom({
+  const merged = normalizeFriendRoom({
     ...base,
     status,
     lastSeenAt: { ...(current.lastSeenAt ?? {}), ...(incoming.lastSeenAt ?? {}) },
@@ -71,10 +77,13 @@ function mergeRoomState(incoming: FriendRoom, current: FriendRoom) {
     turnIndex: base.turnIndex ?? 0,
     turnOptions: base.turnOptions ?? [],
     currentDraw: base.currentDraw,
+    currentDrawByPlayer: { ...(current.currentDrawByPlayer ?? {}), ...(incoming.currentDrawByPlayer ?? {}) },
     pendingPickId: base.pendingPickId,
+    pendingPickByPlayer: { ...(current.pendingPickByPlayer ?? {}), ...(incoming.pendingPickByPlayer ?? {}) },
     rerollsByPlayer: base.rerollsByPlayer ?? {},
     picksInTurn: base.picksInTurn ?? 0,
     turnStartedAt: base.turnStartedAt,
+    draftEndsAt: base.draftEndsAt,
     reviewEndsAt: base.reviewEndsAt,
     coachOptionsByPlayer: { ...(current.coachOptionsByPlayer ?? {}), ...(incoming.coachOptionsByPlayer ?? {}) },
     selectedCoachByPlayer: { ...(current.selectedCoachByPlayer ?? {}), ...(incoming.selectedCoachByPlayer ?? {}) },
@@ -84,6 +93,9 @@ function mergeRoomState(incoming: FriendRoom, current: FriendRoom) {
     revision: Math.max(incomingRevision, currentRevision) + 1,
     updatedAt: latestDate(incoming.updatedAt || incoming.createdAt, current.updatedAt || current.createdAt)
   });
+  // O ultimo resultado humano pode chegar junto com outro resultado. Avancar
+  // no servidor evita que todos os clientes fiquem esperando uma nova acao.
+  return merged.status === "bracket" ? progressRoomRound(merged) : merged;
 }
 
 function isFreshRoom(room: FriendRoom) {
@@ -111,14 +123,6 @@ function mergePlayers(incoming: RoomPlayer[], current: RoomPlayer[]) {
   return Array.from(byId.values());
 }
 
-function sameSquad(a: RoomPlayer, b: RoomPlayer) {
-  if (a.squad.length !== b.squad.length) return false;
-  return a.squad.every((pick, index) => {
-    const other = b.squad[index];
-    return Boolean(other && pick.canonicalPlayerId === other.canonicalPlayerId && pick.slotId === other.slotId);
-  });
-}
-
 function keepHeartbeat(incoming: FriendRoom, saved: FriendRoom) {
   return normalizeFriendRoom({
     ...saved,
@@ -129,20 +133,14 @@ function keepHeartbeat(incoming: FriendRoom, saved: FriendRoom) {
 function authorizeDraftMutation(incoming: FriendRoom, saved: FriendRoom, actorId: string) {
   if (saved.status !== "drafting") return incoming;
   const activePlayer = saved.players[saved.turnIndex];
-  if (!activePlayer || activePlayer.id !== actorId) return keepHeartbeat(incoming, saved);
+  if (saved.draftMode === "turnos" && (!activePlayer || activePlayer.id !== actorId)) return keepHeartbeat(incoming, saved);
 
   const incomingActor = incoming.players.find((player) => player.id === actorId);
-  if (!incomingActor) return keepHeartbeat(incoming, saved);
-  const changedAnotherPlayer = saved.players.some((player) => {
-    if (player.id === actorId) return false;
-    const candidate = incoming.players.find((item) => item.id === player.id);
-    return !candidate || !sameSquad(candidate, player);
-  });
-  if (changedAnotherPlayer) return keepHeartbeat(incoming, saved);
-
-  const added = incomingActor.squad.length - activePlayer.squad.length;
+  const savedActor = saved.players.find((player) => player.id === actorId);
+  if (!incomingActor || !savedActor) return keepHeartbeat(incoming, saved);
+  const added = incomingActor.squad.length - savedActor.squad.length;
   if (added < 0 || added > 1) return keepHeartbeat(incoming, saved);
-  if (!activePlayer.squad.every((pick) => incomingActor.squad.some((item) => item.canonicalPlayerId === pick.canonicalPlayerId))) {
+  if (!savedActor.squad.every((pick) => incomingActor.squad.some((item) => item.canonicalPlayerId === pick.canonicalPlayerId))) {
     return keepHeartbeat(incoming, saved);
   }
 
@@ -152,7 +150,16 @@ function authorizeDraftMutation(incoming: FriendRoom, saved: FriendRoom, actorId
     return keepHeartbeat(incoming, saved);
   }
 
-  if (added === 0 && (incoming.turnIndex !== saved.turnIndex || incoming.status !== "drafting")) {
+  const savedDrawId = (saved.draftMode === "todos" ? saved.currentDrawByPlayer?.[actorId] : saved.currentDraw)?.clubSeasonId;
+  const incomingDrawId = (incoming.draftMode === "todos" ? incoming.currentDrawByPlayer?.[actorId] : incoming.currentDraw)?.clubSeasonId;
+  const changedDraw = Boolean(savedDrawId && incomingDrawId && savedDrawId !== incomingDrawId);
+  if (added === 0) {
+    if (savedDrawId && !incomingDrawId) return keepHeartbeat(incoming, saved);
+    if (!savedDrawId && incomingDrawId && newRerolls !== oldRerolls) return keepHeartbeat(incoming, saved);
+    if (changedDraw && newRerolls !== oldRerolls + 1) return keepHeartbeat(incoming, saved);
+  }
+
+  if (added === 0 && saved.draftMode === "turnos" && (incoming.turnIndex !== saved.turnIndex || incoming.status !== "drafting")) {
     return keepHeartbeat(incoming, saved);
   }
   if (added === 1 && incomingActor.squad.length > 11) return keepHeartbeat(incoming, saved);
@@ -160,7 +167,23 @@ function authorizeDraftMutation(incoming: FriendRoom, saved: FriendRoom, actorId
     return keepHeartbeat(incoming, saved);
   }
   if (!["drafting", "reviewing"].includes(incoming.status)) return keepHeartbeat(incoming, saved);
-  return incoming;
+  const players = saved.players.map((player) => (player.id === actorId ? incomingActor : player));
+  const currentDrawByPlayer = { ...(saved.currentDrawByPlayer ?? {}) };
+  const pendingPickByPlayer = { ...(saved.pendingPickByPlayer ?? {}) };
+  if (saved.draftMode === "todos") {
+    currentDrawByPlayer[actorId] = incoming.currentDrawByPlayer?.[actorId];
+    pendingPickByPlayer[actorId] = incoming.pendingPickByPlayer?.[actorId];
+  }
+  return normalizeFriendRoom({
+    ...incoming,
+    players,
+    lastSeenAt: { ...(saved.lastSeenAt ?? {}), ...(incoming.lastSeenAt ?? {}) },
+    currentDrawByPlayer,
+    pendingPickByPlayer,
+    rerollsByPlayer: { ...(saved.rerollsByPlayer ?? {}), [actorId]: newRerolls },
+    revision: Math.max(saved.revision ?? 0, incoming.revision ?? 0) + 1,
+    updatedAt: new Date().toISOString()
+  });
 }
 
 function mergeMatches(incoming: RoomMatch[], current: RoomMatch[]) {
@@ -215,9 +238,54 @@ export async function PUT(request: Request) {
       player.userName.trim().toLowerCase() === playerName.toLowerCase() &&
       player.teamName.trim().toLowerCase() === teamName.toLowerCase()
     );
-    return actor ? authorizeDraftMutation(room, saved, actor.id) : saved;
+    if (actor) return authorizeDraftMutation(room, saved, actor.id);
+    if (saved.status === "lobby" && saved.players.length < 16) {
+      return normalizeFriendRoom({
+        ...room,
+        revision: Math.max(saved.revision ?? 0, room.revision ?? 0) + 1,
+        updatedAt: new Date().toISOString()
+      });
+    }
+    return saved;
   }).filter((room): room is FriendRoom => Boolean(room));
   const rooms = mergeRooms(incomingRooms, current);
+  await writeRooms(rooms);
+  return Response.json({ rooms });
+}
+
+export async function DELETE(request: Request) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return Response.json({ error: "Nao autenticado." }, { status: 401 });
+  const payload = (await request.json().catch(() => ({}))) as { roomId?: string };
+  if (!payload.roomId) return Response.json({ error: "Sala invalida." }, { status: 400 });
+
+  const playerName = currentUser.playerName?.trim() || currentUser.username;
+  const teamName = currentUser.teamName?.trim() || `${playerName} FC`;
+  const current = await readRooms();
+  let deleteRoomId: string | undefined;
+  const rooms = current.flatMap((room) => {
+    if (room.id !== payload.roomId) return [room];
+    const leaving = room.players.find(
+      (player) => player.userName.trim().toLowerCase() === playerName.toLowerCase() && player.teamName.trim().toLowerCase() === teamName.toLowerCase()
+    );
+    if (!leaving) return [room];
+    const players = room.players.filter((player) => player.id !== leaving.id);
+    if (!players.length) {
+      deleteRoomId = room.id;
+      return [];
+    }
+    const lastSeenAt = { ...(room.lastSeenAt ?? {}) };
+    delete lastSeenAt[leaving.id];
+    return [normalizeFriendRoom({
+      ...room,
+      players,
+      hostName: room.hostName === leaving.userName ? players[0]!.userName : room.hostName,
+      lastSeenAt,
+      revision: (room.revision ?? 0) + 1,
+      updatedAt: new Date().toISOString()
+    })];
+  });
+  if (deleteRoomId) await deleteSharedFriendRoom(deleteRoomId);
   await writeRooms(rooms);
   return Response.json({ rooms });
 }

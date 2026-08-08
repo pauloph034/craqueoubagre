@@ -26,7 +26,17 @@ export default function RankingPage() {
         {!loading && entries.length === 0 && <div className="p-4"><EmptyState title="Tabela vazia" description="Ainda não existem campanhas classificadas." /></div>}
         {entries.map((entry, index) => (
           <article key={`${entry.username}-${entry.teamName}-${index}`} className="grid min-h-16 grid-cols-[32px_44px_minmax(0,1fr)_auto] items-center gap-3 border-b border-black/15 px-4 py-2 last:border-0">
-            <div className={`grid h-8 w-8 place-items-center text-sm font-black ${index === 0 ? "bg-[var(--accent)] text-white" : index < 3 ? "bg-black text-white" : "text-[var(--muted)]"}`}>
+            <div
+              className={`grid h-8 w-8 place-items-center border border-black text-sm font-black ${
+                index === 0
+                  ? "bg-[var(--accent)] text-white"
+                  : index === 1
+                    ? "bg-[#d8d5cc] text-black"
+                    : index === 2
+                      ? "bg-[#c88a55] text-black"
+                      : "border-transparent text-[var(--muted)]"
+              }`}
+            >
               {index + 1}
             </div>
             <TeamEmblem emblemId={entry.emblemId} teamName={entry.teamName} size={42} />

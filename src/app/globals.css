@@ -142,6 +142,24 @@ body.room-focus-mode .app-shell-footer {
   display: none;
 }
 
+.room-result-backdrop {
+  animation: room-result-fade 220ms ease-out both;
+}
+
+.room-result-panel {
+  animation: room-result-rise 420ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+@keyframes room-result-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes room-result-rise {
+  from { opacity: 0; transform: translateY(24px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 button,
 a,
 input,
@@ -212,127 +230,7 @@ select:focus-visible {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.app-loading-screen {
-  position: fixed;
-  inset: 0;
-  z-index: 10000;
-  display: grid;
-  place-items: center;
-  background: var(--background);
-}
-
-.route-balance-loader {
-  position: relative;
-  height: 60px;
-  aspect-ratio: 2;
-}
-
-.route-balance-loader::before {
-  content: "";
-  position: absolute;
-  inset: 100% 75% -3px 0;
-  background: var(--foreground);
-  animation: route-loader-board 1s linear infinite alternate;
-}
-
-.route-balance-loader::after {
-  content: "";
-  position: absolute;
-  inset: auto 42.5% 0;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: var(--accent);
-  animation:
-    route-loader-bounce 1s cubic-bezier(0, 700, 1, 700) infinite alternate,
-    route-loader-travel 1s linear infinite alternate;
-}
-
-.home-loading-screen {
-  background: var(--background);
-  animation: home-loading-dismiss 1.8s step-end forwards;
-}
-
-.home-goal-loader {
-  width: 80px;
-  height: 70px;
-  border: 5px solid var(--foreground);
-  padding: 0 8px;
-  box-sizing: border-box;
-  background:
-    linear-gradient(var(--background) 0 0) 0 0 / 8px 20px,
-    linear-gradient(var(--background) 0 0) 100% 0 / 8px 20px,
-    radial-gradient(farthest-side, var(--accent) 90%, transparent) 0 5px / 8px 8px content-box,
-    var(--foreground);
-  background-repeat: no-repeat;
-  animation: home-loader-goal 2s infinite linear;
-}
-
-@keyframes route-loader-board {
-  0%,
-  30% {
-    translate: 0 -2px;
-    rotate: 20deg;
-  }
-  70%,
-  100% {
-    translate: 300% -2px;
-    rotate: -20deg;
-  }
-}
-
-@keyframes route-loader-bounce {
-  0%,
-  2% {
-    bottom: 0;
-  }
-  98%,
-  100% {
-    bottom: 0.1%;
-  }
-}
-
-@keyframes route-loader-travel {
-  0% {
-    translate: -220%;
-  }
-  100% {
-    translate: 220%;
-  }
-}
-
-@keyframes home-loader-goal {
-  25% {
-    background-position: 0 0, 100% 100%, 100% calc(100% - 5px);
-  }
-  50% {
-    background-position: 0 100%, 100% 100%, 0 calc(100% - 5px);
-  }
-  75% {
-    background-position: 0 100%, 100% 0, 100% 5px;
-  }
-}
-
-@keyframes home-loading-dismiss {
-  0%,
-  99% {
-    visibility: visible;
-    opacity: 1;
-    pointer-events: auto;
-  }
-  100% {
-    visibility: hidden;
-    opacity: 0;
-    pointer-events: none;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .route-balance-loader::before,
-  .route-balance-loader::after,
-  .home-goal-loader {
-    animation-duration: 3s;
-  }
-
   .hero-play-button,
   .hero-play-button::after {
     transition: none;
@@ -815,7 +713,7 @@ textarea {
 
 @media (max-width: 639px) {
   .editorial-shell {
-    width: min(100% - 32px, var(--content-max));
+    width: min(100% - 24px, var(--content-max));
   }
 
   .editorial-grid {

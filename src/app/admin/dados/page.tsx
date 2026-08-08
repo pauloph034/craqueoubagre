@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { achievements, clubSeasons, opponents, players } from "@/data/loaders";
 import { cn } from "@/lib/utils";
 import { useGameStore } from "@/stores/game-store";
-import { BarChart3, Clock3, Database, KeyRound, Lock, Search, ShieldCheck, Trash2, Trophy, UserCog, Users, type LucideIcon } from "lucide-react";
+import { BarChart3, Clock3, Database, KeyRound, Lock, Minus, Plus, Search, ShieldCheck, Trash2, Trophy, UserCog, Users, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -30,6 +30,8 @@ export default function AdminDataPage() {
   const [dashboard, setDashboard] = useState<DashboardMetrics>();
   const [query, setQuery] = useState("");
   const [temporaryAccess, setTemporaryAccess] = useState<{ username: string; password: string }>();
+  const [trophiesByUser, setTrophiesByUser] = useState<Record<string, number>>({});
+  const [trophyStatus, setTrophyStatus] = useState("");
 
   useEffect(() => {
     void loadAccount();
@@ -38,13 +40,32 @@ export default function AdminDataPage() {
 
   useEffect(() => {
     if (currentUser?.role !== "admin") return;
-    fetch("/api/admin/dashboard")
-      .then((response) => response.json())
-      .then((data: { metrics?: DashboardMetrics }) => {
-        if (data.metrics) setDashboard(data.metrics);
-      })
-      .catch(() => undefined);
+    void Promise.all([
+      fetch("/api/admin/dashboard", { cache: "no-store" }).then((response) => response.json()),
+      fetch("/api/admin/trophies", { cache: "no-store" }).then((response) => response.json())
+    ]).then(([data, trophyData]: [{ metrics?: DashboardMetrics }, { trophies?: Record<string, number> }]) => {
+      if (data.metrics) setDashboard(data.metrics);
+      if (trophyData.trophies) setTrophiesByUser(trophyData.trophies);
+    }).catch(() => undefined);
   }, [currentUser?.role]);
+
+  async function adjustTrophy(username: string, action: "add" | "remove") {
+    if (action === "remove" && !window.confirm(`Retirar uma taca de ${username}?`)) return;
+    setTrophyStatus("");
+    const response = await fetch("/api/admin/trophies", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, action })
+    });
+    const data = (await response.json()) as { trophies?: Record<string, number>; error?: string };
+    if (!response.ok || !data.trophies) {
+      setTrophyStatus(data.error ?? "Nao foi possivel atualizar as tacas.");
+      return;
+    }
+    setTrophiesByUser(data.trophies);
+    setDashboard((current) => current ? { ...current, trophies: Object.values(data.trophies!).reduce((sum, value) => sum + value, 0) } : current);
+    setTrophyStatus(action === "add" ? "Taca adicionada." : "Taca retirada.");
+  }
 
   const filteredUsers = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -123,11 +144,12 @@ export default function AdminDataPage() {
               <p className="mt-1 text-xs text-slate-300">O jogador entra com essa senha e troca por uma nova em Conta.</p>
             </div>
           )}
+          {trophyStatus && <p className="mt-3 border border-black bg-[var(--background)] px-3 py-2 text-xs font-black text-black">{trophyStatus}</p>}
 
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[760px] border-separate border-spacing-y-2 text-left text-sm">
+            <table className="w-full min-w-[900px] border-separate border-spacing-y-2 text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                <tr><th>ID</th><th>Nome</th><th>Time</th><th>Perfil</th><th>Criado</th><th className="text-right">Acoes</th></tr>
+                <tr><th>ID</th><th>Nome</th><th>Time</th><th>Perfil</th><th>Tacas</th><th>Criado</th><th className="text-right">Acoes</th></tr>
               </thead>
               <tbody>
                 {filteredUsers.map((user) => {
@@ -141,6 +163,13 @@ export default function AdminDataPage() {
                         <span className={cn("rounded-full px-3 py-1 text-xs font-black", user.role === "admin" ? "bg-gold/15 text-gold" : "bg-cyan-300/10 text-cyan-100")}>
                           {user.role === "admin" ? "Admin" : "Jogador"}
                         </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2">
+                          <button type="button" title="Retirar taca" className="grid h-8 w-8 place-items-center border border-black bg-white disabled:opacity-30" disabled={(trophiesByUser[user.username] ?? 0) <= 0} onClick={() => void adjustTrophy(user.username, "remove")}><Minus className="h-3.5 w-3.5" /></button>
+                          <span className="min-w-7 text-center font-mono font-black">{trophiesByUser[user.username] ?? 0}</span>
+                          <button type="button" title="Adicionar taca" className="grid h-8 w-8 place-items-center border border-black bg-[var(--accent)]" onClick={() => void adjustTrophy(user.username, "add")}><Plus className="h-3.5 w-3.5" /></button>
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-slate-300">{new Date(user.createdAt).toLocaleDateString("pt-BR")}</td>
                       <td className="px-3 py-3">

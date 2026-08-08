@@ -15,9 +15,11 @@ import { Button } from "@/components/ui/button";
 import { getFormationSlots } from "@/config/formations";
 import { clubSeasons as clubSeasonData, players as playerData } from "@/data/loaders";
 import { calculatePositionFit } from "@/game-engine/position-fit";
+import { matchDecisionMoments, resolveMatchDecision } from "@/game-engine/match-decisions";
 import { countCoachNationalityMatches } from "@/game-engine/coach-nationality";
 import { positionLabel } from "@/game-engine/position-labels";
 import {
+  autoPickRoomPlayer,
   autoPickRoomTurn,
   chooseRoomCoach,
   createFriendRoom,
@@ -53,8 +55,9 @@ import {
 } from "@/lib/friend-rooms";
 import { cn } from "@/lib/utils";
 import { useGameStore } from "@/stores/game-store";
-import type { Position, TacticalStyle } from "@/types/game";
+import type { CampaignSummary, Position, TacticalStyle } from "@/types/game";
 import { Check, Clock, Dices, Lock, Play, Plus, ShieldCheck, Trophy, Users, Volume2 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
@@ -105,13 +108,15 @@ async function persistSharedRooms(rooms: FriendRoom[]) {
   return Array.isArray(payload.rooms) ? payload.rooms : rooms;
 }
 
-function mergeRoomLists(primary: FriendRoom[], secondary: FriendRoom[]) {
-  const byId = new Map<string, FriendRoom>();
-  for (const room of primary) byId.set(room.id, room);
-  for (const room of secondary) {
-    if (!byId.has(room.id)) byId.set(room.id, room);
-  }
-  return Array.from(byId.values()).slice(0, 40);
+async function leaveSharedRoom(roomId: string) {
+  const response = await fetch("/api/friend-rooms", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ roomId })
+  });
+  if (!response.ok) throw new Error("Nao foi possivel sair da sala.");
+  const payload = (await response.json()) as { rooms?: FriendRoom[] };
+  return Array.isArray(payload.rooms) ? payload.rooms : [];
 }
 
 function mergeLatestRooms(incoming: FriendRoom[], current: FriendRoom[]) {
@@ -128,6 +133,66 @@ function mergeLatestRooms(incoming: FriendRoom[], current: FriendRoom[]) {
 
 function roomUpdatedTime(room: FriendRoom) {
   return Date.parse(room.updatedAt ?? room.createdAt ?? "") || 0;
+}
+
+function onlineChampionSummary(room: FriendRoom, player: RoomPlayer, username: string): CampaignSummary {
+  const squad = player.squad.flatMap((pick) => {
+    const sourcePlayer = playerData.find((item) => item.id === pick.id || item.canonicalPlayerId === pick.canonicalPlayerId);
+    const clubSeason = clubSeasonData.find((item) => item.id === pick.clubSeasonId);
+    return sourcePlayer && clubSeason && pick.slotId && pick.slotPosition
+      ? [{ slotId: pick.slotId, slotPosition: pick.slotPosition, player: sourcePlayer, clubSeason, effectiveRating: pick.effectiveRating ?? pick.overall, fitType: "primary" as const }]
+      : [];
+  });
+  const matches = room.bracket
+    .filter((match) => match.status === "done" && (match.homePlayerId === player.id || match.awayPlayerId === player.id))
+    .map((match) => {
+      const isHome = match.homePlayerId === player.id;
+      return {
+        id: `online-${room.id}-${match.id}`,
+        phase: match.phase,
+        opponentName: isHome ? match.awayName : match.homeName,
+        opponentBadge: "",
+        userGoals: (isHome ? match.homeGoals : match.awayGoals) ?? 0,
+        opponentGoals: (isHome ? match.awayGoals : match.homeGoals) ?? 0,
+        events: [],
+        stats: { possession: 50, shots: 0, shotsOnTarget: 0, corners: 0, opponentPossession: 50, opponentShots: 0, opponentShotsOnTarget: 0, opponentCorners: 0 },
+        bestPlayer: player.squad[0]?.name ?? "Elenco"
+      };
+    });
+  const coachId = room.selectedCoachByPlayer[player.id];
+  const coach = (room.coachOptionsByPlayer[player.id] ?? []).find((item) => item.id === coachId);
+  return {
+    id: `online-${room.id}-${player.id}`,
+    date: room.updatedAt ?? new Date().toISOString(),
+    config: {
+      seed: `online-${room.id}`,
+      userName: username,
+      teamName: player.teamName,
+      formation: player.formation,
+      tacticalStyle: player.tacticalStyle,
+      difficulty: room.difficulty === "almanaque" ? "lenda" : "classico"
+    },
+    squad,
+    coach,
+    matches,
+    stageReached: "Campeao da sala",
+    champion: true,
+    tournamentChampion: player.teamName,
+    tournamentBracket: room.bracket.filter((match) => match.status === "done").map((match) => ({
+      id: match.id,
+      phase: match.phase,
+      homeName: match.homeName,
+      awayName: match.awayName,
+      homeGoals: match.homeGoals ?? 0,
+      awayGoals: match.awayGoals ?? 0,
+      winnerName: match.winnerName ?? ""
+    })),
+    score: 700 + matches.filter((match) => match.userGoals > match.opponentGoals).length * 100,
+    achievements: ["primeiro-titulo"],
+    rerollsUsed: room.rerollsByPlayer[player.id] ?? 0,
+    swapsUsed: 0,
+    undoUsed: false
+  };
 }
 
 export default function FriendRoomsPage() {
@@ -148,11 +213,13 @@ export default function FriendRoomsPage() {
     password: "",
     difficulty: "classico" as "classico" | "almanaque",
     draftMode: "turnos" as RoomDraftMode,
-    simultaneousMinutes: 2 as 2 | 3,
+    simultaneousMinutes: 2 as 2 | 4 | 6,
     turnSeconds: 30 as 20 | 30 | 45
   });
   const lastTurnSignature = useRef("");
   const roomsRef = useRef<FriendRoom[]>([]);
+  const persistSequenceRef = useRef(0);
+  const savedOnlineTrophiesRef = useRef(new Set<string>());
 
   const applyRooms = useCallback((nextRooms: FriendRoom[], activeId?: string) => {
     const cleanRooms = nextRooms.filter(isFreshRoom).slice(0, 40);
@@ -163,18 +230,10 @@ export default function FriendRoomsPage() {
   }, []);
 
   const refreshRooms = useCallback(
-    async (migrateLocal = false) => {
+    async () => {
       try {
         const sharedRooms = await fetchSharedRooms();
-        let nextRooms = sharedRooms;
-        if (migrateLocal) {
-          const localRooms = loadFriendRooms();
-          const missingLocalRooms = localRooms.filter((localRoom) => !sharedRooms.some((sharedRoom) => sharedRoom.id === localRoom.id));
-          if (missingLocalRooms.length) {
-            nextRooms = await persistSharedRooms(mergeRoomLists(sharedRooms, missingLocalRooms));
-          }
-        }
-        applyRooms(mergeLatestRooms(nextRooms, roomsRef.current));
+        applyRooms(sharedRooms);
       } catch {
         applyRooms(mergeLatestRooms(loadFriendRooms(), roomsRef.current));
       }
@@ -188,7 +247,7 @@ export default function FriendRoomsPage() {
   }, [currentUser, loadAccount]);
 
   useEffect(() => {
-    void refreshRooms(true);
+    void refreshRooms();
     const timer = window.setInterval(() => {
       void refreshRooms();
     }, 2000);
@@ -206,6 +265,31 @@ export default function FriendRoomsPage() {
   const roomFocusMode = roomScreen === "room" && Boolean(activeRoom && activeRoom.status !== "lobby");
 
   useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(() => setMessage(""), 2600);
+    return () => window.clearTimeout(timer);
+  }, [message]);
+
+  useEffect(() => {
+    if (!currentUser || activeRoom?.status !== "finished" || !activeRoom.champion) return;
+    const champion = activeRoom.champion;
+    const playerName = currentUser.playerName?.trim() || currentUser.username;
+    const teamName = currentUser.teamName?.trim() || `${playerName} FC`;
+    const winner = activeRoom.players.find((player) => samePlayer(player, playerName, teamName) && sameText(player.teamName, champion));
+    if (!winner) return;
+    const rewardId = `online-${activeRoom.id}-${winner.id}`;
+    if (savedOnlineTrophiesRef.current.has(rewardId)) return;
+    savedOnlineTrophiesRef.current.add(rewardId);
+    void fetch("/api/campaigns", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ summary: onlineChampionSummary(activeRoom, winner, currentUser.username) })
+    }).then((response) => {
+      if (!response.ok) savedOnlineTrophiesRef.current.delete(rewardId);
+    }).catch(() => savedOnlineTrophiesRef.current.delete(rewardId));
+  }, [activeRoom, currentUser]);
+
+  useEffect(() => {
     document.body.classList.toggle("room-focus-mode", roomFocusMode);
     return () => document.body.classList.remove("room-focus-mode");
   }, [roomFocusMode]);
@@ -213,9 +297,13 @@ export default function FriendRoomsPage() {
   const commitRooms = useCallback(
     (nextRooms: FriendRoom[], activeId?: string) => {
       const cleanRooms = nextRooms.slice(0, 40);
+      const sequence = ++persistSequenceRef.current;
       applyRooms(cleanRooms, activeId);
       void persistSharedRooms(cleanRooms)
-        .then((sharedRooms) => applyRooms(mergeLatestRooms(sharedRooms, roomsRef.current), activeId))
+        .then((sharedRooms) => {
+          if (sequence !== persistSequenceRef.current) return;
+          applyRooms(sharedRooms, activeId);
+        })
         .catch(() => setMessage("Sala salva neste navegador, mas ainda nao sincronizou com as outras abas."));
     },
     [applyRooms]
@@ -279,6 +367,21 @@ export default function FriendRoomsPage() {
     setMessage("Voce entrou na sala.");
   }
 
+  async function handleLeaveRoom() {
+    if (!activeRoom) {
+      setRoomScreen("rooms");
+      return;
+    }
+    const roomId = activeRoom.id;
+    applyRooms(roomsRef.current.filter((room) => room.id !== roomId));
+    setRoomScreen("rooms");
+    try {
+      applyRooms(await leaveSharedRoom(roomId));
+    } catch {
+      void refreshRooms();
+    }
+  }
+
   function updateActiveRoom(updater: (room: FriendRoom) => FriendRoom) {
     if (!activeRoom) return;
     commitRoom(updater(activeRoom));
@@ -307,18 +410,28 @@ export default function FriendRoomsPage() {
   }
 
   const turnRemaining =
-    activeRoom?.status === "drafting" && activeRoom.turnStartedAt
-      ? Math.max(0, activeRoom.turnSeconds - Math.floor((now - activeRoom.turnStartedAt) / 1000))
-      : undefined;
+    activeRoom?.status === "drafting" && activeRoom.draftMode === "todos" && activeRoom.draftEndsAt
+      ? Math.max(0, Math.ceil((activeRoom.draftEndsAt - now) / 1000))
+      : activeRoom?.status === "drafting" && activeRoom.turnStartedAt
+        ? Math.max(0, activeRoom.turnSeconds - Math.floor((now - activeRoom.turnStartedAt) / 1000))
+        : undefined;
   const reviewRemaining =
     activeRoom?.status === "reviewing" && activeRoom.reviewEndsAt
       ? Math.max(0, Math.ceil((activeRoom.reviewEndsAt - now) / 1000))
       : undefined;
 
   useEffect(() => {
-    if (!activeRoom || activeRoom.status !== "drafting" || turnRemaining !== 0) return;
-    commitRoom(autoPickRoomTurn(activeRoom));
-  }, [activeRoom, commitRoom, turnRemaining]);
+    if (!activeRoom || activeRoom.status !== "drafting" || turnRemaining !== 0 || !currentUser) return;
+    const playerName = currentUser.playerName?.trim() || currentUser.username;
+    const teamName = currentUser.teamName ?? `${playerName} FC`;
+    const player = activeRoom.players.find((item) => samePlayer(item, playerName, teamName));
+    if (!player) return;
+    if (activeRoom.draftMode === "todos") {
+      if (player.squad.length < 11) commitRoom(autoPickRoomPlayer(activeRoom, player.id));
+      return;
+    }
+    if (activeRoom.players[activeRoom.turnIndex]?.id === player.id) commitRoom(autoPickRoomTurn(activeRoom));
+  }, [activeRoom, commitRoom, currentUser, turnRemaining]);
 
   useEffect(() => {
     if (!activeRoom || activeRoom.status !== "reviewing" || reviewRemaining !== 0) return;
@@ -328,11 +441,16 @@ export default function FriendRoomsPage() {
 
   useEffect(() => {
     if (!activeRoom || activeRoom.status !== "drafting" || activeRoom.draftMode !== "turnos") return;
+    if (!currentUser) return;
+    const playerName = currentUser.playerName?.trim() || currentUser.username;
+    const teamName = currentUser.teamName ?? `${playerName} FC`;
+    const player = activeRoom.players.find((item) => samePlayer(item, playerName, teamName));
+    if (!player || activeRoom.players[activeRoom.turnIndex]?.id !== player.id) return;
     const signature = `${activeRoom.id}-${activeRoom.turnIndex}-${activeRoom.turnStartedAt}`;
     if (signature === lastTurnSignature.current) return;
     lastTurnSignature.current = signature;
     playTurnSound();
-  }, [activeRoom]);
+  }, [activeRoom, currentUser]);
 
   if (!accountChecked) {
     return (
@@ -371,7 +489,7 @@ export default function FriendRoomsPage() {
     return (
       <main className={cn("editorial-shell", gameStarted ? "max-w-7xl py-4" : "max-w-6xl py-6")}>
         {message && (
-          <div className="mb-4 rounded-md border border-electric/30 bg-electric/10 px-4 py-3 text-sm font-bold text-sky-100">
+          <div className="fixed right-4 top-16 z-[80] max-w-sm border border-black bg-[var(--success)] px-4 py-3 text-sm font-bold text-white shadow-lg">
             {message}
           </div>
         )}
@@ -382,7 +500,7 @@ export default function FriendRoomsPage() {
           accountPlayerName={accountPlayerName}
           accountTeamName={accountTeamName}
           focused={gameStarted}
-          onBackToRooms={() => setRoomScreen("rooms")}
+          onBackToRooms={() => void handleLeaveRoom()}
           onStartDraft={handleStartDraft}
           onDrawTeam={(playerId) => updateActiveRoom((room) => drawRoomTeam(room, playerId))}
           onSelectPick={(playerId, pickId) => updateActiveRoom((room) => selectRoomPlayer(room, playerId, pickId))}
@@ -420,7 +538,7 @@ export default function FriendRoomsPage() {
       </section>
 
       {message && (
-        <div className="mt-4 rounded-2xl border border-electric/30 bg-electric/10 px-4 py-3 text-sm font-bold text-sky-100">
+        <div className="fixed right-4 top-16 z-[80] max-w-sm border border-black bg-[var(--success)] px-4 py-3 text-sm font-bold text-white shadow-lg">
           {message}
         </div>
       )}
@@ -466,7 +584,7 @@ function CreateRoomPanel({
     password: string;
     difficulty: "classico" | "almanaque";
     draftMode: RoomDraftMode;
-    simultaneousMinutes: 2 | 3;
+    simultaneousMinutes: 2 | 4 | 6;
     turnSeconds: 20 | 30 | 45;
   };
   accountUserName: string;
@@ -477,7 +595,7 @@ function CreateRoomPanel({
     password: string;
     difficulty: "classico" | "almanaque";
     draftMode: RoomDraftMode;
-    simultaneousMinutes: 2 | 3;
+    simultaneousMinutes: 2 | 4 | 6;
     turnSeconds: 20 | 30 | 45;
   }) => void;
   onCreate: () => void;
@@ -513,14 +631,27 @@ function CreateRoomPanel({
         <input className={cn(inputClass, "mt-3")} value={form.password} type="password" placeholder="ex: arena123" onChange={(event) => onChange({ ...form, password: event.target.value })} />
       )}
 
-      <ControlBlock label="Tempo por jogada">
-        {[20, 30, 45].map((value) => (
-          <SegmentButton key={value} active={form.turnSeconds === value} onClick={() => onChange({ ...form, turnSeconds: value as 20 | 30 | 45 })}>{value}s</SegmentButton>
-        ))}
+      <ControlBlock label="Formato do draft">
+        <SegmentButton active={form.draftMode === "turnos"} onClick={() => onChange({ ...form, draftMode: "turnos" })}>3 por vez</SegmentButton>
+        <SegmentButton active={form.draftMode === "todos"} onClick={() => onChange({ ...form, draftMode: "todos" })}>Todos juntos</SegmentButton>
       </ControlBlock>
 
-      <div className="mt-4 rounded-md border border-emerald-300/15 bg-night/55 px-3 py-2 text-sm text-slate-300">
-        Draft por turnos: cada jogador escolhe 3 atletas por vez e fecha o time com 2 escolhas finais.
+      {form.draftMode === "turnos" ? (
+        <ControlBlock label="Tempo por jogada">
+          {[20, 30, 45].map((value) => (
+            <SegmentButton key={value} active={form.turnSeconds === value} onClick={() => onChange({ ...form, turnSeconds: value as 20 | 30 | 45 })}>{value}s</SegmentButton>
+          ))}
+        </ControlBlock>
+      ) : (
+        <ControlBlock label="Tempo para montar o time">
+          {[2, 4, 6].map((value) => (
+            <SegmentButton key={value} active={form.simultaneousMinutes === value} onClick={() => onChange({ ...form, simultaneousMinutes: value as 2 | 4 | 6 })}>{value} min</SegmentButton>
+          ))}
+        </ControlBlock>
+      )}
+
+      <div className="mt-4 border border-black/20 bg-[var(--surface-muted)] px-3 py-2 text-sm text-black">
+        {form.draftMode === "turnos" ? "Cada jogador escolhe 3 atletas por vez e fecha o time com 2 escolhas finais." : "Todos montam o próprio time ao mesmo tempo e podem acompanhar as escalações dos adversários."}
       </div>
 
       <Button className="mt-5 w-full bg-[var(--success)] text-white hover:bg-black" onClick={onCreate}>
@@ -815,17 +946,21 @@ function DraftPanel({
   onSelectPick: (playerId: string, pickId: string) => void;
   onPlacePick: (playerId: string, slotId: string) => void;
 }) {
-  const turnPlayer = room.players[room.turnIndex];
   const currentPlayerId = currentPlayer?.id;
-  const isMyTurn = Boolean(currentPlayerId && turnPlayer?.id === currentPlayerId);
-  const fieldPlayer = isMyTurn ? currentPlayer : turnPlayer ?? currentPlayer ?? room.players[0];
-  const pendingPick = isMyTurn ? room.currentDraw?.roster.find((pick) => pick.id === room.pendingPickId) : undefined;
+  const turnPlayer = room.draftMode === "todos" ? currentPlayer : room.players[room.turnIndex];
+  const isMyTurn = Boolean(currentPlayerId && (room.draftMode === "todos" || turnPlayer?.id === currentPlayerId));
+  const [previewPlayerId, setPreviewPlayerId] = useState<string>();
+  const previewPlayer = room.players.find((player) => player.id === previewPlayerId);
+  const fieldPlayer = previewPlayer ?? (isMyTurn ? currentPlayer : turnPlayer ?? currentPlayer ?? room.players[0]);
+  const activeDraw = room.draftMode === "todos" && currentPlayerId ? room.currentDrawByPlayer?.[currentPlayerId] : room.currentDraw;
+  const activePendingPickId = room.draftMode === "todos" && currentPlayerId ? room.pendingPickByPlayer?.[currentPlayerId] : room.pendingPickId;
+  const pendingPick = isMyTurn && !previewPlayer ? activeDraw?.roster.find((pick) => pick.id === activePendingPickId) : undefined;
   const rerollsUsed = turnPlayer ? room.rerollsByPlayer?.[turnPlayer.id] ?? 0 : 0;
   const rerollsLeft = Math.max(0, 3 - rerollsUsed);
   const batchStartSize = Math.max(0, (turnPlayer?.squad.length ?? 0) - room.picksInTurn);
   const batchLimit = batchStartSize >= 9 ? 2 : 3;
   const batchRemaining = Math.max(1, batchLimit - room.picksInTurn);
-  const turnText = batchLimit === 2 ? "Rodada final: escolha 2 jogadores" : "Escolha 3 jogadores nesta vez";
+  const turnText = room.draftMode === "todos" ? "Monte os 11 antes do tempo acabar" : batchLimit === 2 ? "Rodada final: escolha 2 jogadores" : "Escolha 3 jogadores nesta vez";
   const [isDrawing, setIsDrawing] = useState(false);
   const [isRevealingDraw, setIsRevealingDraw] = useState(false);
   const [rollingIndex, setRollingIndex] = useState(0);
@@ -836,7 +971,7 @@ function DraftPanel({
   const previousDrawKeyRef = useRef<string>("");
   const skipNextRevealRef = useRef(false);
   const rollingClub = useMemo(() => clubSeasonData[rollingIndex % clubSeasonData.length], [rollingIndex]);
-  const drawKey = room.currentDraw ? `${turnPlayer?.id ?? "player"}:${turnPlayer?.squad.length ?? 0}:${room.picksInTurn}:${room.currentDraw.clubSeasonId}` : "";
+  const drawKey = activeDraw ? `${turnPlayer?.id ?? "player"}:${turnPlayer?.squad.length ?? 0}:${room.picksInTurn}:${activeDraw.clubSeasonId}` : "";
 
   useEffect(() => {
     return () => {
@@ -898,54 +1033,63 @@ function DraftPanel({
   }
 
   return (
-    <div className="grid items-start gap-5 xl:grid-cols-[minmax(420px,.95fr)_minmax(380px,1.05fr)]">
+    <div className="grid items-start gap-4 xl:grid-cols-[minmax(380px,.9fr)_minmax(420px,1.1fr)]">
       <RoomSquadField
         player={fieldPlayer}
         pendingPick={pendingPick}
-        interactive={isMyTurn}
+        interactive={isMyTurn && !previewPlayer}
         onPlace={(slotId) => currentPlayerId && onPlacePick(currentPlayerId, slotId)}
       />
       <aside className="space-y-4 xl:sticky xl:top-20">
-        <div className="overflow-hidden rounded-2xl border border-white/12 bg-white/[0.065] shadow-card">
-          <div className="border-b border-white/10 bg-[linear-gradient(135deg,rgba(16,185,129,.16),rgba(7,24,50,.88))] p-4">
+        {room.draftMode === "todos" && currentPlayer && (
+          <div className="flex flex-wrap items-center gap-2 border border-black bg-white p-2 text-black">
+            <span className="mr-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--muted)]">Ver escalação</span>
+            <button type="button" className={cn("border px-2 py-1 text-xs font-black", !previewPlayer ? "border-black bg-black text-white" : "border-black/20")} onClick={() => setPreviewPlayerId(undefined)}>Meu time</button>
+            {room.players.filter((player) => player.id !== currentPlayer.id).map((player) => (
+              <button key={player.id} type="button" className={cn("max-w-32 truncate border px-2 py-1 text-xs font-black", previewPlayerId === player.id ? "border-black bg-black text-white" : "border-black/20")} onClick={() => setPreviewPlayerId(player.id)}>{player.teamName}</button>
+            ))}
+          </div>
+        )}
+        <div className="overflow-hidden border border-black bg-white">
+          <div className="border-b border-black/15 bg-[var(--surface-muted)] p-4 text-black">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">Vez de escolher</p>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--success)]">Vez de escolher</p>
                 <h3 className="mt-1 truncate text-2xl font-black">{turnPlayer?.teamName ?? "Jogador"}</h3>
               </div>
               <TimerPill seconds={turnRemaining ?? room.turnSeconds} icon={<Volume2 size={16} />} />
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-[0.14em] text-slate-300">
-              <span className="rounded-full border border-white/10 bg-night/60 px-3 py-1.5">{fieldPlayer?.formation ?? "4-3-3"}</span>
-              <span className="rounded-full border border-white/10 bg-night/60 px-3 py-1.5">{room.difficulty === "almanaque" ? "De almanaque" : "Classico"}</span>
-              <span className="rounded-full border border-gold/25 bg-gold/10 px-3 py-1.5 text-gold">{turnText} - faltam {batchRemaining}</span>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-[0.14em] text-[var(--muted)]">
+              <span className="border border-black/15 bg-white px-3 py-1.5">{fieldPlayer?.formation ?? "4-3-3"}</span>
+              <span className="border border-black/15 bg-white px-3 py-1.5">{room.difficulty === "almanaque" ? "De almanaque" : "Classico"}</span>
+              <span className="border border-[var(--success)]/35 bg-[var(--success)]/10 px-3 py-1.5 text-[var(--success)]">{turnText}{room.draftMode === "turnos" ? ` - faltam ${batchRemaining}` : ""}</span>
             </div>
-            <p className="mt-3 text-sm text-slate-300">
+            <p className="mt-3 text-sm text-[var(--muted)]">
               {isMyTurn ? (pendingPick ? "Clique em uma posicao destacada no campo ou troque o jogador na lista." : "Sorteie um time, escolha um jogador e depois a posicao.") : "Aguardando esse jogador escolher."}
             </p>
           </div>
           <div className="p-4">
             {(isDrawing || isRevealingDraw) && rollingClub ? (
               <RollingTeamCard club={rollingClub} />
-            ) : !room.currentDraw ? (
-              <div className="rounded-2xl border border-dashed border-white/14 bg-white/[0.04] p-5 text-center">
-                <p className="text-sm font-semibold text-slate-300">{isMyTurn ? "Nenhum time sorteado para esta escolha." : "O jogador da vez ainda nao sorteou o time."}</p>
+            ) : !activeDraw ? (
+              <div className="border border-dashed border-black/25 bg-[var(--surface-muted)] p-5 text-center">
+                <p className="text-sm font-semibold text-[var(--muted)]">{isMyTurn ? "Nenhum time sorteado para esta escolha." : "O jogador da vez ainda nao sorteou o time."}</p>
                 <Button className="mt-4 w-full" disabled={!isMyTurn || isDrawing} onClick={runDrawAnimation}>
                   <Dices size={18} /> Sortear time
                 </Button>
               </div>
             ) : (
               <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-night/55 px-3 py-2">
-                  <span className="text-xs font-black uppercase tracking-[0.18em] text-slate-300">Rerolls: <strong className="text-gold">{rerollsLeft}</strong>/3</span>
+                <div className="flex flex-wrap items-center justify-between gap-3 border border-black/15 bg-[var(--surface-muted)] px-3 py-2">
+                  <span className="text-xs font-black uppercase tracking-[0.18em] text-black">Rerolls: <strong className="text-[var(--success)]">{rerollsLeft}</strong>/3</span>
                   <Button variant="secondary" disabled={!isMyTurn || isDrawing || rerollsLeft <= 0} onClick={runDrawAnimation}>
                     <Dices size={18} /> Sortear novamente
                   </Button>
                 </div>
                 <DrawnTeamRoster
-                  draw={room.currentDraw}
+                  draw={activeDraw}
                   player={turnPlayer}
-                  selectedPickId={room.pendingPickId}
+                  selectedPickId={activePendingPickId}
                   disabled={!isMyTurn}
                   onPick={(pickId) => currentPlayerId && onSelectPick(currentPlayerId, pickId)}
                 />
@@ -977,18 +1121,18 @@ function DrawnTeamRoster({
     .slice()
     .sort((a, b) => Number(!isRoomPickEligible(player, a)) - Number(!isRoomPickEligible(player, b)) || roomPositionOrder(a.position) - roomPositionOrder(b.position) || (a.shirtNumber ?? 99) - (b.shirtNumber ?? 99));
   return (
-    <div className="overflow-hidden rounded-2xl border border-emerald-400/25 bg-emerald-950/25">
+    <div className="overflow-hidden border border-black/20 bg-white">
       <div
-        className="flex items-center gap-4 border-b border-emerald-400/20 px-4 py-4"
+        className="flex items-center gap-4 border-b border-black/15 px-4 py-3"
         style={{
-          background: `linear-gradient(135deg, ${draw.primaryColor}44, rgba(7,24,50,.88) 52%, ${draw.secondaryColor}33)`
+          background: `linear-gradient(90deg, ${draw.primaryColor}22, var(--surface-muted) 48%, ${draw.secondaryColor}18)`
         }}
       >
         <GenericBadge club={draw} size={68} />
         <div className="min-w-0">
           <p className="text-xs font-black uppercase tracking-[0.2em] text-gold">{draw.rarity}</p>
-          <h4 className="mt-1 truncate text-xl font-black text-white">{draw.clubName} {draw.season}</h4>
-          <p className="text-sm text-slate-300">{draw.country}</p>
+          <h4 className="mt-1 truncate text-xl font-black text-black">{draw.clubName} {draw.season}</h4>
+          <p className="text-sm text-[var(--muted)]">{draw.country}</p>
         </div>
       </div>
       <div className="game-scrollbar min-h-[240px] max-h-[min(560px,65dvh)] touch-pan-y overflow-y-auto overscroll-contain">
@@ -1000,20 +1144,20 @@ function DrawnTeamRoster({
         <button
           key={pick.id}
           className={cn(
-            "grid w-full grid-cols-[3.5rem_minmax(0,1fr)_4.25rem_5.25rem] items-center gap-3 border-b border-emerald-400/10 px-4 py-3 text-left text-sm transition last:border-b-0",
+            "grid w-full grid-cols-[3rem_minmax(0,1fr)_3.75rem_3.5rem] items-center gap-3 border-b border-black/10 px-3 py-2.5 text-left text-sm transition last:border-b-0",
             selectedPickId === pick.id && "bg-gold/15 ring-1 ring-inset ring-gold/70",
-            blocked ? "cursor-not-allowed opacity-45" : "bg-emerald-400/[0.06] hover:bg-electric/10"
+            blocked ? "cursor-not-allowed opacity-45" : "bg-white hover:bg-[var(--success)]/10"
           )}
           disabled={blocked}
           onClick={() => onPick(pick.id)}
         >
-          <span className="font-mono text-xs font-black text-emerald-300">#{pick.shirtNumber ?? "--"}</span>
+          <span className="font-mono text-xs font-black text-[var(--success)]">#{pick.shirtNumber ?? "--"}</span>
           <div className="min-w-0">
-            <p className="truncate font-black text-white">{pick.name}</p>
-            <p className="truncate text-xs text-slate-400">{pick.nationality ?? pick.clubName}</p>
+            <p className="truncate font-black text-black">{pick.name}</p>
+            <p className="truncate text-xs text-[var(--muted)]">{pick.nationality ?? pick.clubName}</p>
           </div>
-          <span className="justify-self-center rounded-full border border-emerald-300/15 bg-night/45 px-2 py-1 font-mono text-[11px] font-black text-emerald-300">{positionLabel(pick.position)}</span>
-          <span className="text-right font-mono text-lg font-black text-gold tabular-nums">{alreadyPicked ? "XI" : pick.overall}</span>
+          <span className="justify-self-center border border-black/15 bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] font-black text-[var(--success)]">{positionLabel(pick.position)}</span>
+          <span className="text-right font-mono text-lg font-black text-[var(--warning)] tabular-nums">{alreadyPicked ? "XI" : pick.overall}</span>
         </button>
       );})}
       </div>
@@ -1062,17 +1206,17 @@ function RoomSquadField({
   const progress = Math.round(((player?.squad.length ?? 0) / 11) * 100);
 
   return (
-    <section className="rounded-2xl border border-white/12 bg-emerald-950/30 p-3 shadow-card">
-      <div className="mb-3 rounded-2xl border border-white/10 bg-night/65 px-4 py-3 shadow-glow">
+    <section className="border border-black bg-white p-3">
+      <div className="mb-3 border border-black/15 bg-[var(--surface-muted)] px-4 py-3">
         <div className="grid items-center gap-4 sm:grid-cols-[auto_1fr_auto]">
           <div className="rounded-2xl border border-gold/20 bg-gold/10 px-3 py-2">
             <span className="block text-[10px] font-black uppercase tracking-[0.18em] text-gold">Rating</span>
-            <span className="font-mono text-2xl font-black leading-none text-white">{rating}</span>
+            <span className="font-mono text-2xl font-black leading-none text-black">{rating}</span>
           </div>
           <div className="min-w-0">
             <div className="flex items-center justify-between gap-3">
               <span className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Elenco</span>
-              <span className="font-mono text-sm font-black text-white">{player?.squad.length ?? 0}/11</span>
+              <span className="font-mono text-sm font-black text-black">{player?.squad.length ?? 0}/11</span>
             </div>
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
               <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-electric to-gold transition-all" style={{ width: `${progress}%` }} />
@@ -1080,11 +1224,11 @@ function RoomSquadField({
           </div>
           <div className="rounded-full border border-electric/25 bg-electric/10 px-3 py-2 text-center">
             <span className="block text-[10px] font-black uppercase tracking-[0.18em] text-electric">Time</span>
-            <span className="block max-w-40 truncate text-sm font-black text-white">{player?.teamName ?? "Aguardando"}</span>
+            <span className="block max-w-40 truncate text-sm font-black text-black">{player?.teamName ?? "Aguardando"}</span>
           </div>
         </div>
       </div>
-      <div className="relative mx-auto aspect-[7/10] max-h-[680px] min-h-[430px] overflow-hidden rounded-2xl border border-white/20 field-lines sm:min-h-[500px]">
+      <div className="relative mx-auto aspect-[7/10] max-h-[590px] min-h-[390px] overflow-hidden border border-black/20 field-lines sm:min-h-[460px]">
         <SoccerFieldMarkings />
         <ChemistryLinks
           slots={slots}
@@ -1147,17 +1291,17 @@ function RoomSquadField({
 
 function DraftProgress({ players, currentPlayerId }: { players: RoomPlayer[]; currentPlayerId?: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-night/50 p-4">
+    <div className="border border-black bg-white p-4 text-black">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300">Jogadores</p>
-        <span className="text-xs font-bold text-slate-400">{players.length}/16</span>
+        <span className="text-xs font-bold text-[var(--muted)]">{players.length}/16</span>
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
         {players.map((player) => (
-          <div key={player.id} className={cn("grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border px-3 py-2 text-sm", player.id === currentPlayerId ? "border-gold bg-gold/10" : "border-white/10 bg-white/[0.035]")}>
+          <div key={player.id} className={cn("grid grid-cols-[1fr_auto] items-center gap-3 border px-3 py-2 text-sm", player.id === currentPlayerId ? "border-[var(--warning)] bg-[var(--warning)]/10" : "border-black/15 bg-[var(--surface-muted)]")}>
             <span className="min-w-0">
-              <span className="block truncate font-black text-white">{player.teamName}</span>
-              <span className="block truncate text-xs text-slate-400">{player.ready ? "Pronto" : "Montando elenco"}</span>
+              <span className="block truncate font-black text-black">{player.teamName}</span>
+              <span className="block truncate text-xs text-[var(--muted)]">{player.ready ? "Pronto" : "Montando elenco"}</span>
             </span>
             <span className="font-mono text-xs font-black text-gold">{player.squad.length}/11</span>
           </div>
@@ -1294,22 +1438,22 @@ function RoomCoachPanel({
   const selectedCoach = options.find((coach) => coach.id === selectedCoachId);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[.92fr_1.08fr]">
+    <div className="grid gap-4 lg:grid-cols-[.9fr_1.1fr]">
       <RoomSquadField player={currentPlayer ?? room.players[0]} />
       <aside className="space-y-4">
-        <div className="rounded-lg border border-white/12 bg-white/[0.07] p-5 shadow-card">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Tecnico</p>
+        <div className="border border-black bg-white p-5">
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-[var(--success)]">Tecnico</p>
           <h3 className="mt-2 text-3xl font-black">{currentPlayer?.teamName ?? "Aguardando"}</h3>
-          <p className="mt-2 text-sm text-slate-300">Sorteie 3 tecnicos e escolha 1 para comandar seu time no mata-mata.</p>
+          <p className="mt-2 text-sm text-[var(--muted)]">Sorteie 3 tecnicos e escolha 1 para comandar seu time no mata-mata.</p>
           {currentPlayer && options.length === 0 && (
             <Button className="mt-4 w-full" onClick={() => onDrawCoaches(currentPlayer.id)}>
               <Dices size={18} /> Sortear 3 tecnicos
             </Button>
           )}
           {selectedCoach && (
-            <div className="mt-4 rounded-md border border-emerald-300/25 bg-emerald-300/10 px-4 py-3">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Escolhido</p>
-              <p className="mt-1 font-black text-white">{selectedCoach.name} - {selectedCoach.clubName} {shortSeason(selectedCoach.season)}</p>
+            <div className="mt-4 border border-[var(--success)] bg-[var(--success)] px-4 py-3 text-white">
+              <p className="text-xs font-black uppercase tracking-[0.18em]">Escolhido</p>
+              <p className="mt-1 font-black">{selectedCoach.name} - {selectedCoach.clubName} {shortSeason(selectedCoach.season)}</p>
             </div>
           )}
         </div>
@@ -1351,25 +1495,25 @@ function CoachCard({ coach, squad, selected, disabled, onChoose }: { coach: Room
       disabled={disabled}
       onClick={onChoose}
       className={cn(
-        "rounded-lg border p-4 text-left shadow-card transition",
-        selected ? "border-gold bg-gold/15" : disabled ? "border-white/10 bg-white/[0.04] opacity-55" : "border-emerald-300/20 bg-emerald-950/25 hover:border-electric"
+        "border p-4 text-left transition",
+        selected ? "border-[var(--success)] bg-[var(--success)]/10" : disabled ? "border-black/15 bg-[var(--surface-muted)] opacity-55" : "border-black/20 bg-white hover:border-[var(--success)]"
       )}
     >
       <div className="flex items-center justify-between gap-4">
         <GenericBadge club={badgeClub} size={52} />
-        <span className="grid h-12 min-w-12 shrink-0 place-items-center rounded-xl border border-gold/45 bg-gold/15 px-3 font-mono text-xl font-black text-gold">{coach.rating}</span>
+        <span className="grid h-12 min-w-12 shrink-0 place-items-center border border-black bg-black px-3 font-mono text-xl font-black text-white">{coach.rating}</span>
       </div>
       <div className="mt-4 min-w-0">
-        <p className="text-2xl font-black leading-tight text-white">{coach.name}</p>
-        <p className="mt-2 text-sm leading-relaxed text-slate-300">{coach.clubName} {shortSeason(coach.season)} - {tacticalStyleLabel(coach.style)}</p>
+        <p className="text-2xl font-black leading-tight text-black">{coach.name}</p>
+        <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{coach.clubName} {shortSeason(coach.season)} - {tacticalStyleLabel(coach.style)}</p>
         <div className="mt-3 flex items-center gap-2">
           <NationalityFlag nationality={coach.nationality} />
-          <span className="text-sm font-bold text-white">{coach.nationality}</span>
+          <span className="text-sm font-bold text-black">{coach.nationality}</span>
         </div>
       </div>
-      <p className="mt-4 text-sm leading-relaxed text-slate-400">{coach.description}</p>
-      <p className="mt-3 text-xs font-black uppercase tracking-[0.12em] text-emerald-300">
-        {countCoachNationalityMatches(squad.map((pick) => pick.nationality), coach.nationality)} jogadores recebem +2
+      <p className="mt-4 text-sm leading-relaxed text-[var(--muted)]">{coach.description}</p>
+      <p className="mt-3 inline-flex border border-black bg-[var(--success)] px-3 py-2 text-xs font-black uppercase tracking-[0.08em] text-white">
+        +2 overall para {countCoachNationalityMatches(squad.map((pick) => pick.nationality), coach.nationality)} jogadores
       </p>
     </button>
   );
@@ -1494,6 +1638,7 @@ function RoomBracket({
   const [presentation, setPresentation] = useState<{ playerId: string; match: RoomMatch; events: RoomTimelineEvent[]; visible: number; committed?: boolean }>();
   const [matchSpeed, setMatchSpeed] = useState<"normal" | "rapida" | "ultra">("normal");
   const [interactionChoices, setInteractionChoices] = useState<Record<string, string>>({});
+  const [showResultOverlay, setShowResultOverlay] = useState(true);
   const onPlayMatchRef = useRef(onPlayMatch);
   const onProgressRoundRef = useRef(onProgressRound);
   const visibleEvents = presentation?.events.slice(0, presentation.visible) ?? [];
@@ -1506,8 +1651,16 @@ function RoomBracket({
   const scoreEvent = interactionPending && lastVisibleEvent?.kind === "penalty" ? visibleEvents.at(-2) : lastVisibleEvent;
   const presentationHomeGoals = scoreEvent?.homeGoals ?? 0;
   const presentationAwayGoals = scoreEvent?.awayGoals ?? 0;
+  const currentIsHome = presentation?.match.homePlayerId === currentPlayer?.id;
+  const decisionScore = currentIsHome
+    ? { userGoals: presentationHomeGoals, opponentGoals: presentationAwayGoals }
+    : { userGoals: presentationAwayGoals, opponentGoals: presentationHomeGoals };
   const presentationMinute = presentation ? Math.max(1, lastVisibleEvent?.minute ?? 1) : 1;
   const presentationProgress = Math.min(100, Math.round((presentationMinute / 90) * 100));
+
+  useEffect(() => {
+    if (room.status === "finished") setShowResultOverlay(true);
+  }, [room.champion, room.status]);
 
   useEffect(() => {
     if (!presentation) return;
@@ -1577,6 +1730,9 @@ function RoomBracket({
 
   return (
     <div className="mt-5">
+      {room.status === "finished" && currentPlayer && showResultOverlay && (
+        <RoomResultOverlay room={room} player={currentPlayer} isHost={isHost} onClose={() => setShowResultOverlay(false)} onResetLobby={onResetLobby} />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Chaveamento</p>
@@ -1593,27 +1749,27 @@ function RoomBracket({
         )}
       </div>
       {room.status === "bracket" && (
-        <div className="mt-4 border border-sky-200/10 bg-black/25 p-4">
+        <div className="mt-4 border border-black bg-white p-4 text-black">
           <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300">Rodada atual: {currentPhase}</p>
           {presentation ? (
-            <div className="mt-3 overflow-hidden border border-electric/15 bg-night/45">
+            <div className="mt-3 overflow-hidden border border-black/20 bg-white">
               <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="truncate text-lg font-black text-white">{presentation.match.homeName} x {presentation.match.awayName}</p>
+                  <p className="truncate text-lg font-black text-black">{presentation.match.homeName} x {presentation.match.awayName}</p>
                   <p className="mt-1 text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Simulando partida</p>
-                  <p className="mt-1 text-xs text-slate-400">{tacticalRoomSummary(presentation.match)}</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">{tacticalRoomSummary(presentation.match)}</p>
                 </div>
                 <div className="grid gap-2 sm:justify-items-end">
                   <div className="flex flex-wrap items-center gap-3">
                     <RoomSpeedControl speed={matchSpeed} onSpeedChange={setMatchSpeed} />
                     <span className="border border-black bg-[var(--accent)] px-3 py-2 font-mono text-sm font-black text-black">{presentationMinute}&apos;</span>
-                    <span className="font-mono text-3xl font-black text-gold">{presentationHomeGoals} - {presentationAwayGoals}</span>
+                    <span className="font-mono text-3xl font-black text-[var(--warning)]">{presentationHomeGoals} - {presentationAwayGoals}</span>
                   </div>
                   {presentation.committed && canProgressRound && (
                     <Button className="w-full sm:w-auto" onClick={progressRoundFromScore}>Proxima partida</Button>
                   )}
                   {presentation.committed && pendingHumans && (
-                    <span className="text-xs font-bold text-slate-300">Aguardando os outros jogadores</span>
+                    <span className="text-xs font-bold text-[var(--muted)]">Aguardando os outros jogadores</span>
                   )}
                 </div>
               </div>
@@ -1642,7 +1798,11 @@ function RoomBracket({
                   <MatchDecisionPrompt
                     type={lastVisibleEvent.decisionType}
                     currentFormation={currentPlayer?.formation ?? "4-3-3"}
-                    onChoose={(_, label) => setInteractionChoices((choices) => ({ ...choices, [lastVisibleEvent.id]: label }))}
+                    score={decisionScore}
+                    onChoose={(value, label) => {
+                      const outcome = resolveMatchDecision({ seed: `${room.id}-${presentation.match.id}-${lastVisibleEvent.id}`, type: lastVisibleEvent.decisionType!, value, userGoals: decisionScore.userGoals, opponentGoals: decisionScore.opponentGoals, formation: currentPlayer?.formation ?? "4-3-3" });
+                      setInteractionChoices((choices) => ({ ...choices, [lastVisibleEvent.id]: `${label} - ${outcome.detail}` }));
+                    }}
                   />
                 </div>
               )}
@@ -1668,17 +1828,17 @@ function RoomBracket({
                 <p className="text-2xl font-black">
                   {playerMatch.homeName} x {playerMatch.awayName}
                 </p>
-                <p className="mt-1 text-sm text-slate-300">A partida vai rodar minuto a minuto. Quem terminar antes aguarda os outros jogadores da rodada.</p>
+                <p className="mt-1 text-sm text-[var(--muted)]">A partida vai rodar minuto a minuto. Quem terminar antes aguarda os outros jogadores da rodada.</p>
               </div>
               <Button className="px-6" onClick={startMatchPresentation}>
                 <Play size={18} /> Iniciar partida
               </Button>
             </div>
           ) : pendingHumans ? (
-            <p className="mt-3 text-sm font-semibold text-slate-300">Sua partida desta rodada ja terminou ou voce foi eliminado. Aguardando os outros jogadores terminarem.</p>
+            <p className="mt-3 text-sm font-semibold text-[var(--muted)]">Sua partida desta rodada ja terminou ou voce foi eliminado. Acompanhe o chaveamento enquanto os outros jogadores terminam.</p>
           ) : canProgressRound ? (
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-slate-300">Todos os jogadores humanos terminaram. Prossiga para resolver os jogos restantes e abrir a proxima rodada.</p>
+              <p className="text-sm font-semibold text-[var(--muted)]">Todos terminaram. Prossiga para resolver os jogos restantes e abrir a proxima rodada.</p>
               <Button className="px-6" onClick={onProgressRound}>Prosseguir rodada</Button>
             </div>
           ) : null}
@@ -1687,9 +1847,9 @@ function RoomBracket({
       <div className="mt-5 overflow-x-auto pb-2">
         <div className="grid min-w-[900px] grid-cols-[1.1fr_.95fr_.85fr_.72fr] gap-3">
           {phases.map((phase) => (
-            <div key={phase.name} className="border border-emerald-300/[0.08] bg-night/35 p-3">
+            <div key={phase.name} className="border border-black/20 bg-white p-3">
                <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-black">{phase.label}</p>
-              <div className="grid min-h-[560px]" style={{ gridTemplateRows: "repeat(16, minmax(0, 1fr))" }}>
+              <div className="grid min-h-[500px]" style={{ gridTemplateRows: "repeat(16, minmax(0, 1fr))" }}>
                 {room.bracket.filter((match) => match.phase === phase.name).map((match, index) => (
                   <div key={match.id} style={{ gridRow: `${bracketRowStart(phase.name, index)} / span 2` }}>
                     <RoomBracketMatch match={match} room={room} />
@@ -1697,7 +1857,7 @@ function RoomBracket({
                 ))}
                 {room.bracket.filter((match) => match.phase === phase.name).length === 0 && (
                   <div style={{ gridRow: `${bracketRowStart(phase.name, 0)} / span 2` }}>
-                    <article className="rounded-md border border-dashed border-white/12 bg-white/[0.035] px-3 py-2 text-sm font-black text-slate-500">A definir</article>
+                    <article className="border border-dashed border-black/25 bg-[var(--surface-muted)] px-3 py-2 text-sm font-black text-[var(--muted)]">A definir</article>
                   </div>
                 )}
               </div>
@@ -1715,7 +1875,7 @@ function RoomBracketMatch({ match, room }: { match: RoomMatch; room: FriendRoom 
   const homeEmblemId = room.players.find((player) => player.id === match.homePlayerId || sameText(player.teamName, match.homeName))?.emblemId;
   const awayEmblemId = room.players.find((player) => player.id === match.awayPlayerId || sameText(player.teamName, match.awayName))?.emblemId;
   return (
-    <article className={cn("relative rounded-md border px-3 py-2 text-sm", done ? "border-emerald-300/16 bg-white/[0.055]" : "border-gold/25 bg-gold/[0.06]")}>
+    <article className={cn("relative border px-3 py-2 text-sm", done ? "border-black/20 bg-white" : "border-[var(--warning)]/45 bg-[var(--warning)]/10")}>
       <BracketTeam name={match.homeName} emblemId={homeEmblemId} goals={match.homeGoals} winner={done && match.winnerName === match.homeName} />
       <BracketTeam name={match.awayName} emblemId={awayEmblemId} goals={match.awayGoals} winner={done && match.winnerName === match.awayName} last />
       {match.phase !== "Final" && (
@@ -1771,16 +1931,111 @@ function RoomFinalSquadCard({ room, player }: { room: FriendRoom; player: RoomPl
   );
 }
 
+function RoomResultOverlay({
+  room,
+  player,
+  isHost,
+  onClose,
+  onResetLobby
+}: {
+  room: FriendRoom;
+  player: RoomPlayer;
+  isHost: boolean;
+  onClose: () => void;
+  onResetLobby: () => void;
+}) {
+  const matches = room.bracket.filter(
+    (match) => match.status === "done" && (match.homePlayerId === player.id || match.awayPlayerId === player.id || sameText(match.homeName, player.teamName) || sameText(match.awayName, player.teamName))
+  );
+  const totals = matches.reduce(
+    (acc, match) => {
+      const home = match.homePlayerId === player.id || sameText(match.homeName, player.teamName);
+      const goalsFor = (home ? match.homeGoals : match.awayGoals) ?? 0;
+      const goalsAgainst = (home ? match.awayGoals : match.homeGoals) ?? 0;
+      acc.goalsFor += goalsFor;
+      acc.goalsAgainst += goalsAgainst;
+      if (goalsFor > goalsAgainst) acc.wins += 1;
+      return acc;
+    },
+    { wins: 0, goalsFor: 0, goalsAgainst: 0 }
+  );
+  const champion = sameText(room.champion ?? "", player.teamName);
+
+  return (
+    <div className="room-result-backdrop fixed inset-0 z-[100] grid overflow-y-auto bg-black/75 p-4 sm:p-8" role="dialog" aria-modal="true" aria-label="Resultado final da sala">
+      <section className="room-result-panel m-auto w-full max-w-5xl border border-black bg-[var(--background)] text-black shadow-2xl">
+        <div className="grid items-center border-b border-black md:grid-cols-[1.2fr_.8fr]">
+          <div className="p-6 sm:p-9">
+            <p className="editorial-kicker">Resultado do mata-mata</p>
+            <h2 className="mt-3 font-display text-5xl font-black uppercase leading-[.88] sm:text-7xl">
+              {champion ? "Campeao" : "Campanha encerrada"}
+            </h2>
+            <p className="mt-4 text-2xl font-black">{player.teamName}</p>
+            <p className="mt-2 max-w-xl text-sm text-[var(--muted)]">
+              {champion ? "Seu time venceu a sala e a taca foi registrada na galeria." : `Eliminado. O campeao da sala foi ${room.champion ?? "definido no mata-mata"}.`}
+            </p>
+            <div className="mt-6 grid grid-cols-2 gap-px border border-black bg-black sm:grid-cols-4">
+              <ResultMetric value={matches.length} label="Jogos" />
+              <ResultMetric value={totals.wins} label="Vitorias" />
+              <ResultMetric value={totals.goalsFor} label="Gols pro" />
+              <ResultMetric value={totals.goalsAgainst} label="Gols sofridos" />
+            </div>
+          </div>
+          <div className={cn("grid min-h-64 place-items-center self-stretch p-6", champion ? "bg-[var(--success)]" : "bg-[var(--surface-muted)]")}>
+            {champion ? (
+              <Image src="/images/liga-dos-craques-trophy.png" alt="Taca de campeao" width={290} height={360} className="h-64 w-auto object-contain drop-shadow-2xl" priority />
+            ) : (
+              <div className="grid h-36 w-36 place-items-center border border-black bg-white">
+                <Trophy className="h-16 w-16 text-black/35" aria-hidden />
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="p-5 sm:p-7">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-display text-2xl font-black uppercase">Seu onze final</h3>
+            <span className="text-xs font-black uppercase tracking-[0.16em] text-[var(--muted)]">{player.formation} · {tacticalStyleLabel(player.tacticalStyle)}</span>
+          </div>
+          <div className="mt-3 grid gap-px border border-black/20 bg-black/20 sm:grid-cols-2 lg:grid-cols-4">
+            {player.squad.map((pick) => (
+              <div key={`${pick.slotId}-${pick.id}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-white px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black">{pick.name}</p>
+                  <p className="text-[9px] font-black uppercase text-[var(--muted)]">{pick.slotLabel ?? positionLabel(pick.slotPosition ?? pick.position)}</p>
+                </div>
+                <strong className="font-mono text-lg text-[var(--success)]">{pick.effectiveRating ?? pick.overall}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <Button variant="secondary" onClick={onClose}>Ver chaveamento</Button>
+            {isHost && <Button onClick={onResetLobby}>Voltar ao lobby</Button>}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ResultMetric({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="bg-white p-3">
+      <p className="font-display text-3xl font-black text-[var(--success)]">{value}</p>
+      <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[var(--muted)]">{label}</p>
+    </div>
+  );
+}
+
 function RoomSpeedControl({ speed, onSpeedChange }: { speed: "normal" | "rapida" | "ultra"; onSpeedChange: (speed: "normal" | "rapida" | "ultra") => void }) {
   return (
-    <div className="flex border border-white/10 bg-night/70 p-1">
+    <div className="flex border border-black/20 bg-[var(--surface-muted)] p-1">
       {(["normal", "rapida", "ultra"] as const).map((item) => (
         <button
           key={item}
           type="button"
           className={cn(
             "rounded-sm px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] transition",
-            speed === item ? "bg-electric text-night" : "text-slate-300 hover:bg-white/10"
+            speed === item ? "bg-[var(--success)] text-white" : "text-black hover:bg-black/5"
           )}
           onClick={() => onSpeedChange(item)}
         >
@@ -1793,7 +2048,7 @@ function RoomSpeedControl({ speed, onSpeedChange }: { speed: "normal" | "rapida"
 
 function BracketTeam({ name, emblemId, goals, winner, last = false }: { name: string; emblemId?: string; goals?: number; winner: boolean; last?: boolean }) {
   return (
-    <div className={cn("grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2", !last && "border-b border-white/10 pb-1.5", last && "pt-1.5", winner ? "text-white" : "text-slate-400")}>
+    <div className={cn("grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2", !last && "border-b border-black/10 pb-1.5", last && "pt-1.5", winner ? "text-black" : "text-[var(--muted)]")}>
       <TeamNameWithCrest showCrest={false} name={name} emblemId={emblemId} size="sm" textClassName="text-[11px] font-black" showUnknown allowWrap />
       <span className="text-right font-mono font-black text-gold">{typeof goals === "number" ? goals : "-"}</span>
     </div>
@@ -1801,6 +2056,10 @@ function BracketTeam({ name, emblemId, goals, winner, last = false }: { name: st
 }
 
 function buildRoomMatchTimeline(room: FriendRoom, match: RoomMatch, currentPlayerId: string): RoomTimelineEvent[] {
+  const currentIsHome = match.homePlayerId === currentPlayerId;
+  const currentGoals = currentIsHome ? match.homeGoals ?? 0 : match.awayGoals ?? 0;
+  const opponentGoals = currentIsHome ? match.awayGoals ?? 0 : match.homeGoals ?? 0;
+  const decisions = matchDecisionMoments(`${room.id}-${match.id}`, currentGoals, opponentGoals, true);
   const timelineItems: Array<{
     id: string;
     minute: number;
@@ -1812,13 +2071,11 @@ function buildRoomMatchTimeline(room: FriendRoom, match: RoomMatch, currentPlaye
   }> = [
     { id: "kickoff", minute: 1, teamName: "", text: "Bola rolando" },
     { id: "flavor-14", minute: 14, teamName: "", text: "Chance perdida" },
-    { id: "decision-30", minute: 30, teamName: "", text: "Decisao tatica", kind: "decision", decisionType: "tempo" },
     { id: "flavor-31", minute: 31, teamName: "", text: "Bola na trave" },
     { id: "halftime", minute: 45, teamName: "", text: "Intervalo" },
-    { id: "decision-45", minute: 45, teamName: "", text: "Decisao do intervalo", kind: "decision", decisionType: "posture" },
     { id: "flavor-57", minute: 57, teamName: "", text: "Defesa do goleiro" },
-    { id: "decision-70", minute: 70, teamName: "", text: "Ajuste para a reta final", kind: "decision", decisionType: "formation" },
-    { id: "flavor-74", minute: 74, teamName: "", text: "Cartao amarelo" }
+    { id: "flavor-74", minute: 74, teamName: "", text: "Cartao amarelo" },
+    ...decisions.map((decision) => ({ id: `decision-${decision.minute}-${decision.type}`, minute: decision.minute, teamName: "", text: decision.type === "formation" ? "Ajuste para a reta final" : "Decisao tatica", kind: "decision" as const, decisionType: decision.type }))
   ];
   let homeGoals = 0;
   let awayGoals = 0;
@@ -2021,10 +2278,22 @@ function HostSettingsPanel({ room, onChange }: { room: FriendRoom; onChange: (se
         <SegmentButton active={room.difficulty === "almanaque"} onClick={() => onChange({ difficulty: "almanaque" })}>De almanaque</SegmentButton>
       </ControlBlock>
       <ControlBlock label="Tempo por escolha">
-        {[20, 30, 45].map((value) => (
-          <SegmentButton key={value} active={room.turnSeconds === value} onClick={() => onChange({ turnSeconds: value as 20 | 30 | 45, draftMode: "turnos" })}>{value}s</SegmentButton>
-        ))}
+        <SegmentButton active={room.draftMode === "turnos"} onClick={() => onChange({ draftMode: "turnos" })}>3 por vez</SegmentButton>
+        <SegmentButton active={room.draftMode === "todos"} onClick={() => onChange({ draftMode: "todos" })}>Todos juntos</SegmentButton>
       </ControlBlock>
+      {room.draftMode === "turnos" ? (
+        <ControlBlock label="Cronometro por vez">
+          {[20, 30, 45].map((value) => (
+            <SegmentButton key={value} active={room.turnSeconds === value} onClick={() => onChange({ turnSeconds: value as 20 | 30 | 45 })}>{value}s</SegmentButton>
+          ))}
+        </ControlBlock>
+      ) : (
+        <ControlBlock label="Tempo total">
+          {[2, 4, 6].map((value) => (
+            <SegmentButton key={value} active={room.simultaneousMinutes === value} onClick={() => onChange({ simultaneousMinutes: value as 2 | 4 | 6 })}>{value} min</SegmentButton>
+          ))}
+        </ControlBlock>
+      )}
     </article>
   );
 }
@@ -2092,7 +2361,7 @@ function formatSeconds(total: number) {
 }
 
 function draftModeLabel(mode: RoomDraftMode) {
-  return mode === "todos" ? "por turnos" : "por turnos";
+  return mode === "todos" ? "todos juntos" : "por turnos";
 }
 
 function tacticalStyleLabel(style: TacticalStyle) {
@@ -2115,9 +2384,11 @@ function initials(name: string) {
 
 function isFreshRoom(room: FriendRoom) {
   if (!room.players.some((player) => !player.isBot)) return false;
+  const seenValues = Object.values(room.lastSeenAt ?? {});
+  if (seenValues.length) return seenValues.some((value) => Date.now() - value < 45_000);
   const reference = Date.parse(room.updatedAt || room.createdAt);
   if (!Number.isFinite(reference)) return true;
-  return Date.now() - reference < 60 * 60 * 1000;
+  return Date.now() - reference < 45_000;
 }
 
 function samePlayer(player: RoomPlayer, userName: string, teamName: string) {

@@ -6,10 +6,7 @@ import { SetupForm } from "@/components/game/SetupForm";
 import { SquadField } from "@/components/game/SquadField";
 import { AdBanner } from "@/components/AdBanner";
 import { Button } from "@/components/ui/button";
-import { GamePanel } from "@/components/ui/surface";
-import { difficultyRules } from "@/config/game-balance";
 import { useGameStore } from "@/stores/game-store";
-import { useTeamMetrics } from "@/stores/game-store";
 import Link from "next/link";
 import { useEffect } from "react";
 
@@ -49,57 +46,13 @@ export default function PlayPage() {
   }
   return (
     <main className="editorial-shell game-workspace py-3">
-      <div className="grid h-full gap-3 lg:grid-cols-[minmax(380px,.86fr)_minmax(420px,1fr)] xl:grid-cols-[minmax(410px,.92fr)_minmax(440px,1fr)_180px] xl:items-start">
-        <SquadField showMetrics={false} />
+      <div className="grid h-full gap-3 lg:grid-cols-[minmax(380px,.86fr)_minmax(440px,1.14fr)] xl:grid-cols-[minmax(430px,.9fr)_minmax(540px,1.1fr)] xl:items-start">
+        <SquadField />
         <DraftPanel />
-        <DraftStatusPanel />
       </div>
-      <div className="mt-3 xl:hidden">
-        <AdBanner variant="leaderboard" />
+      <div className="mt-3">
+        <AdBanner compact />
       </div>
     </main>
-  );
-}
-
-function DraftStatusPanel() {
-  const config = useGameStore((state) => state.config);
-  const squad = useGameStore((state) => state.squad);
-  const rerollsLeft = useGameStore((state) => state.rerollsLeft);
-  const swapsLeft = useGameStore((state) => state.swapsLeft);
-  const metrics = useTeamMetrics();
-  const rules = difficultyRules[config.difficulty];
-  return (
-    <GamePanel className="border-black bg-[var(--surface)] p-4 xl:sticky xl:top-[70px]">
-      <div className="min-w-0">
-        <p className="editorial-kicker">Seu time</p>
-        <h1 className="mt-1 break-words font-display text-xl font-black uppercase leading-tight text-black">{config.teamName}</h1>
-      </div>
-      <div className="mt-5 space-y-4">
-        <div>
-          <div className="flex items-center justify-between">
-            <span className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Elenco</span>
-            <span className="font-mono text-sm font-black text-white">{squad.length}/11</span>
-          </div>
-          <div className="mt-2 h-1 bg-black/10">
-            <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round((squad.length / 11) * 100)}%` }} />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-y border-black/20 py-3">
-          <CompactStat label="Rating" value={rules.hideRatings && squad.length < 11 ? "--" : metrics.rating} />
-          <CompactStat label="Entros." value={`${metrics.chemistry}%`} />
-          <CompactStat label="Rerolls" value={rerollsLeft} />
-          <CompactStat label="Trocas" value={swapsLeft} />
-        </div>
-      </div>
-    </GamePanel>
-  );
-}
-
-function CompactStat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div>
-      <p className="text-[8px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">{label}</p>
-      <p className="mt-0.5 font-display text-lg font-black text-black">{value}</p>
-    </div>
   );
 }
