@@ -10,6 +10,7 @@ import { completionXp, matchXp } from "@/game-engine/seasons/season-xp";
 import { dailyAllowance } from "@/game-engine/seasons/daily-limit";
 import { isSeasonComplete, nextDivision, pointsForResult, seasonOutcome } from "@/game-engine/seasons/season-progress";
 import { maskUsername } from "@/server/progression";
+import { trophyRewardDelta } from "@/lib/trophies";
 import {
   getLatestRankedSeason,
   getRankedMatchByIdempotency,
@@ -325,7 +326,8 @@ export async function seasonParticipants(currentUser: UserAccount, scope: "globa
   const eliteUsers = new Set<string>();
   for (const reward of rewards) {
     const key = reward.username.toLowerCase();
-    if (reward.rewardId.startsWith("season-trophy")) trophyCount.set(key, (trophyCount.get(key) ?? 0) + 1);
+    const trophyDelta = trophyRewardDelta(reward);
+    if (trophyDelta) trophyCount.set(key, (trophyCount.get(key) ?? 0) + trophyDelta);
     if (reward.rewardId === "elite-badge") eliteUsers.add(key);
   }
   const totalXp = new Map<string, number>();
@@ -353,7 +355,7 @@ export async function seasonParticipants(currentUser: UserAccount, scope: "globa
         losses: season.losses,
         points: season.points,
         xp: totalXp.get(key) ?? 0,
-        trophies: trophyCount.get(key) ?? 0,
+        trophies: Math.max(0, trophyCount.get(key) ?? 0),
         elite: eliteUsers.has(key),
         updatedAt: season.updatedAt,
         isCurrentUser: key === currentUser.username.toLowerCase()

@@ -277,7 +277,7 @@ export async function saveCampaignSummary(summary: CampaignSummary) {
   if (hasSupabaseConfig()) {
     await supabaseFetch<SupabaseCampaignRow[]>("cob_campaigns", {
       method: "POST",
-      headers: { Prefer: "return=minimal" },
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify({
         id: summary.id,
         username: summary.config.userName,
@@ -360,6 +360,15 @@ export async function saveSharedFriendRooms(rooms: FriendRoom[]) {
         updated_at: room.updatedAt || new Date().toISOString()
       }))
     )
+  });
+  return true;
+}
+
+export async function deleteSharedFriendRoom(roomId: string) {
+  if (!hasSupabaseConfig()) return false;
+  await supabaseFetch<void>(`cob_friend_rooms?id=eq.${encodeURIComponent(roomId)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" }
   });
   return true;
 }

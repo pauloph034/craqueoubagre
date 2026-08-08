@@ -83,7 +83,7 @@ export type FriendRoom = {
   password?: string;
   difficulty: "classico" | "almanaque";
   draftMode: RoomDraftMode;
-  simultaneousMinutes: 2 | 3;
+  simultaneousMinutes: 2 | 4 | 6;
   turnSeconds: 20 | 30 | 45;
   status: RoomStatus;
   createdAt: string;
@@ -94,7 +94,9 @@ export type FriendRoom = {
   turnIndex: number;
   turnOptions: RoomPick[];
   currentDraw?: RoomDraw;
+  currentDrawByPlayer?: Record<string, RoomDraw | undefined>;
   pendingPickId?: string;
+  pendingPickByPlayer?: Record<string, string | undefined>;
   rerollsByPlayer: Record<string, number>;
   picksInTurn: number;
   turnStartedAt?: number;
@@ -116,7 +118,7 @@ export type CreateRoomInput = {
   password?: string;
   difficulty: "classico" | "almanaque";
   draftMode: RoomDraftMode;
-  simultaneousMinutes: 2 | 3;
+  simultaneousMinutes: 2 | 4 | 6;
   turnSeconds: 20 | 30 | 45;
 };
 
@@ -125,7 +127,7 @@ const phases = ["Oitavas de final", "Quartas de final", "Semifinal", "Final"];
 const defaultFormation = "4-3-3";
 const defaultTacticalStyle: TacticalStyle = "equilibrado";
 const maxEntrants = 16;
-const roomRerollsPerPick = 3;
+const roomRerollsPerDraft = 3;
 const staleRoomMs = 60 * 60 * 1000;
 
 export function loadFriendRooms() {
@@ -150,7 +152,7 @@ export function createFriendRoom(input: CreateRoomInput): FriendRoom {
     visibility: input.visibility,
     password: input.visibility === "privada" ? input.password?.trim() : undefined,
     difficulty: input.difficulty,
-    draftMode: "turnos",
+    draftMode: input.draftMode,
     simultaneousMinutes: input.simultaneousMinutes,
     turnSeconds: input.turnSeconds,
     status: "lobby",
@@ -162,7 +164,9 @@ export function createFriendRoom(input: CreateRoomInput): FriendRoom {
     turnIndex: 0,
     turnOptions: [],
     currentDraw: undefined,
+    currentDrawByPlayer: {},
     pendingPickId: undefined,
+    pendingPickByPlayer: {},
     rerollsByPlayer: {},
     picksInTurn: 0,
     reviewEndsAt: undefined,
@@ -197,14 +201,16 @@ export function startRoomDraft(room: FriendRoom) {
     status: "drafting",
     players: cleanPlayers.map((player) => ({ ...player, squad: [], ready: false })),
     turnIndex: 0,
-    draftMode: "turnos",
+    draftMode: room.draftMode,
     turnOptions: [],
     currentDraw: undefined,
+    currentDrawByPlayer: {},
     pendingPickId: undefined,
+    pendingPickByPlayer: {},
     rerollsByPlayer: {},
     picksInTurn: 0,
-    draftEndsAt: undefined,
-    turnStartedAt: Date.now(),
+    draftEndsAt: room.draftMode === "todos" ? Date.now() + room.simultaneousMinutes * 60_000 : undefined,
+    turnStartedAt: room.draftMode === "turnos" ? Date.now() : undefined,
     reviewEndsAt: undefined,
     coachOptionsByPlayer: {},
     selectedCoachByPlayer: {},
@@ -228,16 +234,29 @@ export function autoCompleteRoomDraft(room: FriendRoom) {
 export function drawRoomTeam(room: FriendRoom, playerId: string) {
   const normalized = normalizeRoom(room);
   if (normalized.status !== "drafting") return normalized;
-  const player = normalized.players[normalized.turnIndex];
-  if (!player || player.id !== playerId || player.squad.length >= 11) return normalized;
+  const player = draftPlayerFor(normalized, playerId);
+  if (!player || player.squad.length >= 11) return normalized;
+  const currentDraw = playerDrawFor(normalized, playerId);
   const rerollsUsed = normalized.rerollsByPlayer[playerId] ?? 0;
-  const isReroll = Boolean(normalized.currentDraw);
-  if (isReroll && rerollsUsed >= roomRerollsPerPick) return normalized;
-  const seed = `${normalized.id}-${player.id}-${player.squad.length}-${normalized.picksInTurn}-${Date.now()}`;
+  const isReroll = Boolean(currentDraw);
+  if (isReroll && rerollsUsed >= roomRerollsPerDraft) return normalized;
+  // A mesma acao concorrente precisa produzir o mesmo time. Isso impede que
+  // respostas repetidas da rede parecam um novo sorteio sem consumir reroll.
+  const drawNumber = isReroll ? rerollsUsed + 1 : rerollsUsed;
+  const seed = `${normalized.id}-${player.id}-${player.squad.length}-${normalized.picksInTurn}-draw-${drawNumber}`;
+  const draw = buildRoomDraw(seed, player);
   return normalizeRoom({
     ...normalized,
-    currentDraw: buildRoomDraw(seed, player),
-    pendingPickId: undefined,
+    currentDraw: normalized.draftMode === "turnos" ? draw : normalized.currentDraw,
+    currentDrawByPlayer:
+      normalized.draftMode === "todos"
+        ? { ...(normalized.currentDrawByPlayer ?? {}), [playerId]: draw }
+        : normalized.currentDrawByPlayer,
+    pendingPickId: normalized.draftMode === "turnos" ? undefined : normalized.pendingPickId,
+    pendingPickByPlayer:
+      normalized.draftMode === "todos"
+        ? { ...(normalized.pendingPickByPlayer ?? {}), [playerId]: undefined }
+        : normalized.pendingPickByPlayer,
     rerollsByPlayer: isReroll
       ? {
           ...normalized.rerollsByPlayer,
@@ -250,45 +269,63 @@ export function drawRoomTeam(room: FriendRoom, playerId: string) {
 export function selectRoomPlayer(room: FriendRoom, playerId: string, pickId: string) {
   const normalized = normalizeRoom(room);
   if (normalized.status !== "drafting") return normalized;
-  const player = normalized.players[normalized.turnIndex];
-  if (!player || player.id !== playerId || player.squad.length >= 11) return normalized;
-  const pick = normalized.currentDraw?.roster.find((item) => item.id === pickId);
+  const player = draftPlayerFor(normalized, playerId);
+  if (!player || player.squad.length >= 11) return normalized;
+  const pick = playerDrawFor(normalized, playerId)?.roster.find((item) => item.id === pickId);
   if (!pick || player.squad.some((item) => item.canonicalPlayerId === pick.canonicalPlayerId)) return normalized;
   if (!hasAvailableRoomSlot(player, pick)) return normalized;
-  return {
+  return normalizeRoom({
     ...normalized,
-    pendingPickId: pick.id
-  };
+    pendingPickId: normalized.draftMode === "turnos" ? pick.id : normalized.pendingPickId,
+    pendingPickByPlayer:
+      normalized.draftMode === "todos"
+        ? { ...(normalized.pendingPickByPlayer ?? {}), [playerId]: pick.id }
+        : normalized.pendingPickByPlayer
+  });
 }
 
 export function placeRoomPlayer(room: FriendRoom, playerId: string, slotId: string) {
   const normalized = normalizeRoom(room);
   if (normalized.status !== "drafting") return normalized;
-  const player = normalized.players[normalized.turnIndex];
-  if (!player || player.id !== playerId || player.squad.length >= 11) return normalized;
-  const pending = normalized.currentDraw?.roster.find((item) => item.id === normalized.pendingPickId);
+  const player = draftPlayerFor(normalized, playerId);
+  if (!player || player.squad.length >= 11) return normalized;
+  const playerIndex = normalized.players.findIndex((item) => item.id === player.id);
+  const pendingId = normalized.draftMode === "todos" ? normalized.pendingPickByPlayer?.[playerId] : normalized.pendingPickId;
+  const pending = playerDrawFor(normalized, playerId)?.roster.find((item) => item.id === pendingId);
   if (!pending || player.squad.some((item) => item.slotId === slotId || item.canonicalPlayerId === pending.canonicalPlayerId)) return normalized;
   const placed = assignPickToSlot(pending, player, slotId);
   if (!placed) return normalized;
 
   const nextPicksInTurn = normalized.picksInTurn + 1;
   const playersNext = normalized.players.map((item, index) => {
-    if (index !== normalized.turnIndex) return item;
+    if (index !== playerIndex) return item;
     const squad = [...item.squad, placed].slice(0, 11);
     return { ...item, squad, ready: squad.length >= 11 };
   });
-  const updatedPlayer = playersNext[normalized.turnIndex]!;
+  const updatedPlayer = playersNext[playerIndex]!;
   if (playersNext.every((item) => item.squad.length >= 11)) {
     return normalizeRoom({
       ...normalized,
       status: "reviewing",
       players: playersNext,
       currentDraw: undefined,
+      currentDrawByPlayer: {},
       pendingPickId: undefined,
+      pendingPickByPlayer: {},
       picksInTurn: 0,
       turnOptions: [],
       turnStartedAt: undefined,
       reviewEndsAt: Date.now() + 30_000
+    });
+  }
+
+  if (normalized.draftMode === "todos") {
+    return normalizeRoom({
+      ...normalized,
+      players: playersNext,
+      currentDrawByPlayer: { ...(normalized.currentDrawByPlayer ?? {}), [playerId]: undefined },
+      pendingPickByPlayer: { ...(normalized.pendingPickByPlayer ?? {}), [playerId]: undefined },
+      rerollsByPlayer: normalized.rerollsByPlayer
     });
   }
 
@@ -324,6 +361,23 @@ export function autoPickRoomTurn(room: FriendRoom) {
   if (!picked || !slot) return next;
   next = selectRoomPlayer(next, activePlayer.id, picked.id);
   return placeRoomPlayer(next, activePlayer.id, slot.id);
+}
+
+export function autoPickRoomPlayer(room: FriendRoom, playerId: string) {
+  const normalized = normalizeRoom(room);
+  const player = draftPlayerFor(normalized, playerId);
+  if (!player) return normalized;
+  let next = playerDrawFor(normalized, playerId) ? normalized : drawRoomTeam(normalized, playerId);
+  const activePlayer = draftPlayerFor(next, playerId);
+  const draw = playerDrawFor(next, playerId);
+  if (!activePlayer || !draw) return next;
+  const slots = getFormationSlots(activePlayer.formation, activePlayer.tacticalStyle);
+  const openSlots = slots.filter((slot) => !activePlayer.squad.some((pick) => pick.slotId === slot.id));
+  const picked = draw.roster.find((pick) => openSlots.some((slot) => canPlaceRoomPick(pick, slot.position)) && !activePlayer.squad.some((item) => item.canonicalPlayerId === pick.canonicalPlayerId));
+  const slot = picked ? openSlots.find((item) => canPlaceRoomPick(picked, item.position)) : undefined;
+  if (!picked || !slot) return next;
+  next = selectRoomPlayer(next, playerId, picked.id);
+  return placeRoomPlayer(next, playerId, slot.id);
 }
 
 export function moveRoomPick(room: FriendRoom, playerId: string, fromSlotId: string, toSlotId: string) {
@@ -387,7 +441,9 @@ export function startRoomCoachStage(room: FriendRoom) {
     turnIndex: 0,
     turnOptions: [],
     currentDraw: undefined,
+    currentDrawByPlayer: {},
     pendingPickId: undefined,
+    pendingPickByPlayer: {},
     rerollsByPlayer: {},
     picksInTurn: 0,
     turnStartedAt: undefined,
@@ -436,7 +492,7 @@ export function chooseRoomCoach(room: FriendRoom, playerId: string, coachId: str
 
 export function chooseSimultaneousPick(room: FriendRoom, playerId: string, pickId?: string) {
   if (pickId) return selectRoomPlayer(room, playerId, pickId);
-  return autoPickRoomTurn(room);
+  return autoPickRoomPlayer(room, playerId);
 }
 
 export function chooseTurnPick(room: FriendRoom, pickId?: string) {
@@ -500,7 +556,9 @@ export function resetRoomToLobby(room: FriendRoom) {
     turnIndex: 0,
     turnOptions: [],
     currentDraw: undefined,
+    currentDrawByPlayer: {},
     pendingPickId: undefined,
+    pendingPickByPlayer: {},
     rerollsByPlayer: {},
     picksInTurn: 0,
     turnStartedAt: undefined,
@@ -578,6 +636,16 @@ function nextDraftTurnIndex(roomPlayers: RoomPlayer[], current: number) {
     if (roomPlayers[index]!.squad.length < target) return index;
   }
   return current;
+}
+
+function draftPlayerFor(room: FriendRoom, playerId: string) {
+  if (room.draftMode === "todos") return room.players.find((player) => player.id === playerId);
+  const active = room.players[room.turnIndex];
+  return active?.id === playerId ? active : undefined;
+}
+
+function playerDrawFor(room: FriendRoom, playerId: string) {
+  return room.draftMode === "todos" ? room.currentDrawByPlayer?.[playerId] : room.currentDraw;
 }
 
 function buildRoomDraw(seed: string, targetPlayer: RoomPlayer): RoomDraw {
@@ -981,8 +1049,8 @@ export function normalizeFriendRoom(room: FriendRoom): FriendRoom {
     hostName: room.hostName?.trim() || players[0]?.userName || "Jogador",
     visibility: room.visibility === "privada" ? "privada" : "publica",
     difficulty: room.difficulty === "almanaque" ? "almanaque" : "classico",
-    draftMode: "turnos",
-    simultaneousMinutes: room.simultaneousMinutes === 3 ? 3 : 2,
+    draftMode: room.draftMode === "todos" ? "todos" : "turnos",
+    simultaneousMinutes: room.simultaneousMinutes === 4 || room.simultaneousMinutes === 6 ? room.simultaneousMinutes : 2,
     turnSeconds: room.turnSeconds === 20 || room.turnSeconds === 45 ? room.turnSeconds : 30,
     status,
     createdAt: room.createdAt || new Date().toISOString(),
@@ -993,7 +1061,9 @@ export function normalizeFriendRoom(room: FriendRoom): FriendRoom {
     turnIndex: Math.min(room.turnIndex ?? 0, Math.max(0, players.length - 1)),
     turnOptions: (room.turnOptions ?? []).map(normalizePick),
     currentDraw: normalizeDraw(room.currentDraw),
+    currentDrawByPlayer: normalizeDrawMap(room.currentDrawByPlayer, players),
     pendingPickId: room.pendingPickId,
+    pendingPickByPlayer: normalizePendingPickMap(room.pendingPickByPlayer, players),
     rerollsByPlayer: normalizeRerollMap(room.rerollsByPlayer, players),
     picksInTurn: Math.max(0, room.picksInTurn ?? 0),
     turnStartedAt: room.turnStartedAt,
@@ -1062,6 +1132,20 @@ function normalizeDraw(draw?: RoomDraw) {
   };
 }
 
+function normalizeDrawMap(map: Record<string, RoomDraw | undefined> | undefined, roomPlayers: RoomPlayer[]) {
+  const playerIds = new Set(roomPlayers.map((player) => player.id));
+  const clean: Record<string, RoomDraw | undefined> = {};
+  for (const [playerId, draw] of Object.entries(map ?? {})) {
+    if (playerIds.has(playerId)) clean[playerId] = normalizeDraw(draw);
+  }
+  return clean;
+}
+
+function normalizePendingPickMap(map: Record<string, string | undefined> | undefined, roomPlayers: RoomPlayer[]) {
+  const playerIds = new Set(roomPlayers.map((player) => player.id));
+  return Object.fromEntries(Object.entries(map ?? {}).filter(([playerId]) => playerIds.has(playerId)));
+}
+
 function normalizeCoachMap(map?: Record<string, RoomCoach[]>) {
   const clean: Record<string, RoomCoach[]> = {};
   for (const [playerId, options] of Object.entries(map ?? {})) {
@@ -1081,7 +1165,7 @@ function normalizeCoachMap(map?: Record<string, RoomCoach[]>) {
 
 function normalizeRerollMap(map: Record<string, number> | undefined, roomPlayers: RoomPlayer[]) {
   const clean: Record<string, number> = {};
-  for (const player of roomPlayers) clean[player.id] = Math.min(roomRerollsPerPick, Math.max(0, map?.[player.id] ?? 0));
+  for (const player of roomPlayers) clean[player.id] = Math.min(roomRerollsPerDraft, Math.max(0, map?.[player.id] ?? 0));
   return clean;
 }
 

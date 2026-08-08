@@ -1,5 +1,6 @@
 import type { CampaignSummary, PlayerProgression, RankingEntry, UserAccount } from "@/types/game";
 import type { RankedReward, RankedSeason } from "@/types/seasons";
+import { countRewardTrophies } from "@/lib/trophies";
 
 const levelNames = [
   { min: 30, name: "Imortal" },
@@ -54,12 +55,7 @@ export function buildProgression(
   const soloMatches = ownCampaigns.flatMap((campaign) => campaign.matches);
   const rankedMatches = ownRankedSeasons.reduce((sum, season) => sum + season.matchesPlayed, 0);
   const wins = soloMatches.filter((match) => match.userGoals > match.opponentGoals).length + ownRankedSeasons.reduce((sum, season) => sum + season.wins, 0);
-  const rankedTrophies = new Set(
-    rankedRewards
-      .filter((reward) => reward.username.toLowerCase() === username.toLowerCase() && reward.rewardId.startsWith("season-trophy"))
-      .map((reward) => reward.id)
-  ).size;
-  const trophies = ownCampaigns.filter((campaign) => campaign.champion).length + rankedTrophies;
+  const trophies = Math.max(0, ownCampaigns.filter((campaign) => campaign.champion).length + countRewardTrophies(rankedRewards, username));
   const goalsFor = soloMatches.reduce((sum, match) => sum + match.userGoals, 0) + ownRankedSeasons.reduce((sum, season) => sum + season.goalsFor, 0);
   const xp = ownCampaigns.reduce((sum, campaign) => sum + xpForCampaign(campaign), 0) + ownRankedSeasons.reduce((sum, season) => sum + season.xpEarned, 0);
   const totalMatches = soloMatches.length + rankedMatches;
