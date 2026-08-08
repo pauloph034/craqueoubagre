@@ -626,6 +626,16 @@ textarea {
   color: var(--success) !important;
 }
 
+.stadium-texture main .coach-rating-badge {
+  background-color: #080808 !important;
+  color: #ffffff !important;
+}
+
+.stadium-texture main .coach-benefit-badge {
+  background-color: var(--success) !important;
+  color: #ffffff !important;
+}
+
 .achievement-emblem {
   clip-path: polygon(50% 0, 92% 20%, 92% 72%, 50% 100%, 8% 72%, 8% 20%);
 }

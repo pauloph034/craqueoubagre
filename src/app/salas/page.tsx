@@ -108,11 +108,11 @@ async function persistSharedRooms(rooms: FriendRoom[]) {
   return Array.isArray(payload.rooms) ? payload.rooms : rooms;
 }
 
-async function leaveSharedRoom(roomId: string) {
+async function leaveSharedRoom(roomId: string, playerId?: string) {
   const response = await fetch("/api/friend-rooms", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ roomId })
+    body: JSON.stringify({ roomId, playerId })
   });
   if (!response.ok) throw new Error("Nao foi possivel sair da sala.");
   const payload = (await response.json()) as { rooms?: FriendRoom[] };
@@ -216,25 +216,45 @@ export default function FriendRoomsPage() {
     simultaneousMinutes: 2 as 2 | 4 | 6,
     turnSeconds: 30 as 20 | 30 | 45
   });
-  const lastTurnSignature = useRef("");
+  const playedTurnSoundsRef = useRef(new Set<string>());
+  const handledAutoPicksRef = useRef(new Set<string>());
   const roomsRef = useRef<FriendRoom[]>([]);
   const persistSequenceRef = useRef(0);
+  const pendingMutationsRef = useRef(0);
+  const createInFlightRef = useRef(false);
+  const hiddenRoomUntilRef = useRef(new Map<string, number>());
+  const [creatingRoom, setCreatingRoom] = useState(false);
   const savedOnlineTrophiesRef = useRef(new Set<string>());
 
   const applyRooms = useCallback((nextRooms: FriendRoom[], activeId?: string) => {
-    const cleanRooms = nextRooms.filter(isFreshRoom).slice(0, 40);
+    const now = Date.now();
+    const hiddenRoomUntil = hiddenRoomUntilRef.current;
+    for (const [roomId, expiresAt] of hiddenRoomUntil) {
+      if (expiresAt <= now) hiddenRoomUntil.delete(roomId);
+    }
+    const cleanRooms = nextRooms
+      .filter(isFreshRoom)
+      .filter((room) => (hiddenRoomUntil.get(room.id) ?? 0) <= now)
+      .slice(0, 40);
     roomsRef.current = cleanRooms;
     setRooms(cleanRooms);
     saveFriendRooms(cleanRooms);
-    setActiveRoomId((current) => activeId ?? (current && cleanRooms.some((room) => room.id === current) ? current : cleanRooms[0]?.id));
+    setActiveRoomId((current) => {
+      const preferredId = activeId ?? current;
+      return preferredId && cleanRooms.some((room) => room.id === preferredId) ? preferredId : cleanRooms[0]?.id;
+    });
   }, []);
 
   const refreshRooms = useCallback(
     async () => {
+      if (pendingMutationsRef.current > 0) return;
+      const sequenceAtStart = persistSequenceRef.current;
       try {
         const sharedRooms = await fetchSharedRooms();
+        if (pendingMutationsRef.current > 0 || sequenceAtStart !== persistSequenceRef.current) return;
         applyRooms(sharedRooms);
       } catch {
+        if (pendingMutationsRef.current > 0 || sequenceAtStart !== persistSequenceRef.current) return;
         applyRooms(mergeLatestRooms(loadFriendRooms(), roomsRef.current));
       }
     },
@@ -295,16 +315,21 @@ export default function FriendRoomsPage() {
   }, [roomFocusMode]);
 
   const commitRooms = useCallback(
-    (nextRooms: FriendRoom[], activeId?: string) => {
+    async (nextRooms: FriendRoom[], activeId?: string) => {
       const cleanRooms = nextRooms.slice(0, 40);
       const sequence = ++persistSequenceRef.current;
+      pendingMutationsRef.current += 1;
       applyRooms(cleanRooms, activeId);
-      void persistSharedRooms(cleanRooms)
-        .then((sharedRooms) => {
-          if (sequence !== persistSequenceRef.current) return;
-          applyRooms(sharedRooms, activeId);
-        })
-        .catch(() => setMessage("Sala salva neste navegador, mas ainda nao sincronizou com as outras abas."));
+      try {
+        const sharedRooms = await persistSharedRooms(cleanRooms);
+        if (sequence === persistSequenceRef.current) applyRooms(sharedRooms, activeId);
+        return sharedRooms;
+      } catch {
+        setMessage("Sala salva neste navegador, mas ainda nao sincronizou com as outras abas.");
+        return cleanRooms;
+      } finally {
+        pendingMutationsRef.current = Math.max(0, pendingMutationsRef.current - 1);
+      }
     },
     [applyRooms]
   );
@@ -313,7 +338,7 @@ export default function FriendRoomsPage() {
     const touchedRoom = { ...room, revision: (room.revision ?? 0) + 1, updatedAt: new Date().toISOString() };
     const currentRooms = roomsRef.current;
     const nextRooms = currentRooms.some((item) => item.id === touchedRoom.id) ? currentRooms.map((item) => (item.id === touchedRoom.id ? touchedRoom : item)) : [touchedRoom, ...currentRooms];
-    commitRooms(nextRooms, touchedRoom.id);
+    void commitRooms(nextRooms, touchedRoom.id);
   }, [commitRooms]);
 
   useEffect(() => {
@@ -331,7 +356,8 @@ export default function FriendRoomsPage() {
     return () => window.clearInterval(timer);
   }, [activeRoomId, commitRoom, currentUser, roomScreen]);
 
-  function handleCreateRoom() {
+  async function handleCreateRoom() {
+    if (createInFlightRef.current) return;
     if (!currentUser) {
       setMessage("Entre com uma conta para criar sala.");
       return;
@@ -340,15 +366,24 @@ export default function FriendRoomsPage() {
       setMessage("Sala privada precisa de senha com pelo menos 3 caracteres.");
       return;
     }
+    createInFlightRef.current = true;
+    setCreatingRoom(true);
     const room = createFriendRoom({
       ...form,
       hostName: currentUser.playerName?.trim() || currentUser.username,
       hostTeamName: currentUser.teamName ?? `${currentUser.playerName?.trim() || currentUser.username} FC`,
       hostEmblemId: currentUser.emblemId
     });
-    commitRooms([room, ...roomsRef.current], room.id);
-    setRoomScreen("room");
-    setMessage("Sala criada.");
+    try {
+      const sharedRooms = await commitRooms([room, ...roomsRef.current], room.id);
+      const createdRoom = sharedRooms.find((item) => item.id === room.id) ?? sharedRooms.find((item) => sameText(item.hostName, room.hostName) && sameText(item.name, room.name));
+      if (createdRoom) setActiveRoomId(createdRoom.id);
+      setRoomScreen("room");
+      setMessage("Sala criada.");
+    } finally {
+      createInFlightRef.current = false;
+      setCreatingRoom(false);
+    }
   }
 
   function handleJoin(room: FriendRoom) {
@@ -373,18 +408,31 @@ export default function FriendRoomsPage() {
       return;
     }
     const roomId = activeRoom.id;
+    const playerName = currentUser?.playerName?.trim() || currentUser?.username || "";
+    const teamName = currentUser?.teamName?.trim() || `${playerName} FC`;
+    const leavingPlayer = activeRoom.players.find((player) => samePlayer(player, playerName, teamName));
+    ++persistSequenceRef.current;
+    hiddenRoomUntilRef.current.set(roomId, Date.now() + 10_000);
     applyRooms(roomsRef.current.filter((room) => room.id !== roomId));
     setRoomScreen("rooms");
     try {
-      applyRooms(await leaveSharedRoom(roomId));
+      applyRooms(await leaveSharedRoom(roomId, leavingPlayer?.id));
     } catch {
       void refreshRooms();
     }
   }
 
   function updateActiveRoom(updater: (room: FriendRoom) => FriendRoom) {
-    if (!activeRoom) return;
-    commitRoom(updater(activeRoom));
+    const latest = roomsRef.current.find((room) => room.id === activeRoom?.id);
+    if (!latest) return;
+    commitRoom(updater(latest));
+  }
+
+  function handlePlacePick(playerId: string, slotId: string) {
+    const latest = roomsRef.current.find((room) => room.id === activeRoom?.id);
+    if (!latest) return;
+    handledAutoPicksRef.current.add(autoPickKey(latest, playerId));
+    commitRoom(placeRoomPlayer(latest, playerId, slotId));
   }
 
   function handleStartDraft() {
@@ -422,15 +470,26 @@ export default function FriendRoomsPage() {
 
   useEffect(() => {
     if (!activeRoom || activeRoom.status !== "drafting" || turnRemaining !== 0 || !currentUser) return;
+    const latest = roomsRef.current.find((room) => room.id === activeRoom.id);
+    if (!latest || latest.status !== "drafting") return;
     const playerName = currentUser.playerName?.trim() || currentUser.username;
     const teamName = currentUser.teamName ?? `${playerName} FC`;
-    const player = activeRoom.players.find((item) => samePlayer(item, playerName, teamName));
+    const player = latest.players.find((item) => samePlayer(item, playerName, teamName));
     if (!player) return;
-    if (activeRoom.draftMode === "todos") {
-      if (player.squad.length < 11) commitRoom(autoPickRoomPlayer(activeRoom, player.id));
+    const remaining = latest.draftMode === "todos" && latest.draftEndsAt
+      ? Math.max(0, latest.draftEndsAt - Date.now())
+      : latest.turnStartedAt
+        ? Math.max(0, latest.turnSeconds * 1000 - (Date.now() - latest.turnStartedAt))
+        : 1;
+    if (remaining > 0) return;
+    const key = autoPickKey(latest, player.id);
+    if (handledAutoPicksRef.current.has(key)) return;
+    handledAutoPicksRef.current.add(key);
+    if (latest.draftMode === "todos") {
+      if (player.squad.length < 11) commitRoom(autoPickRoomPlayer(latest, player.id));
       return;
     }
-    if (activeRoom.players[activeRoom.turnIndex]?.id === player.id) commitRoom(autoPickRoomTurn(activeRoom));
+    if (latest.players[latest.turnIndex]?.id === player.id) commitRoom(autoPickRoomTurn(latest));
   }, [activeRoom, commitRoom, currentUser, turnRemaining]);
 
   useEffect(() => {
@@ -446,9 +505,10 @@ export default function FriendRoomsPage() {
     const teamName = currentUser.teamName ?? `${playerName} FC`;
     const player = activeRoom.players.find((item) => samePlayer(item, playerName, teamName));
     if (!player || activeRoom.players[activeRoom.turnIndex]?.id !== player.id) return;
-    const signature = `${activeRoom.id}-${activeRoom.turnIndex}-${activeRoom.turnStartedAt}`;
-    if (signature === lastTurnSignature.current) return;
-    lastTurnSignature.current = signature;
+    const batchStartSize = Math.max(0, player.squad.length - activeRoom.picksInTurn);
+    const signature = `${activeRoom.id}:${player.id}:${batchStartSize}`;
+    if (playedTurnSoundsRef.current.has(signature)) return;
+    playedTurnSoundsRef.current.add(signature);
     playTurnSound();
   }, [activeRoom, currentUser]);
 
@@ -504,7 +564,7 @@ export default function FriendRoomsPage() {
           onStartDraft={handleStartDraft}
           onDrawTeam={(playerId) => updateActiveRoom((room) => drawRoomTeam(room, playerId))}
           onSelectPick={(playerId, pickId) => updateActiveRoom((room) => selectRoomPlayer(room, playerId, pickId))}
-          onPlacePick={(playerId, slotId) => updateActiveRoom((room) => placeRoomPlayer(room, playerId, slotId))}
+          onPlacePick={handlePlacePick}
           reviewSlotId={reviewSlotId}
           onReviewSlotChange={setReviewSlotId}
           onMovePick={(playerId, fromSlotId, toSlotId) => updateActiveRoom((room) => moveRoomPick(room, playerId, fromSlotId, toSlotId))}
@@ -560,7 +620,7 @@ export default function FriendRoomsPage() {
               onJoin={handleJoin}
             />
           ) : (
-            <CreateRoomPanel form={form} accountUserName={accountPlayerName} accountTeamName={accountTeamName} onChange={setForm} onCreate={handleCreateRoom} />
+            <CreateRoomPanel form={form} accountUserName={accountPlayerName} accountTeamName={accountTeamName} creating={creatingRoom} onChange={setForm} onCreate={handleCreateRoom} />
           )}
         </div>
       </section>
@@ -575,6 +635,7 @@ function CreateRoomPanel({
   form,
   accountUserName,
   accountTeamName,
+  creating,
   onChange,
   onCreate
 }: {
@@ -589,6 +650,7 @@ function CreateRoomPanel({
   };
   accountUserName: string;
   accountTeamName: string;
+  creating: boolean;
   onChange: (form: {
     name: string;
     visibility: RoomVisibility;
@@ -598,7 +660,7 @@ function CreateRoomPanel({
     simultaneousMinutes: 2 | 4 | 6;
     turnSeconds: 20 | 30 | 45;
   }) => void;
-  onCreate: () => void;
+  onCreate: () => Promise<void>;
 }) {
   return (
     <article className="editorial-panel p-5">
@@ -654,8 +716,8 @@ function CreateRoomPanel({
         {form.draftMode === "turnos" ? "Cada jogador escolhe 3 atletas por vez e fecha o time com 2 escolhas finais." : "Todos montam o próprio time ao mesmo tempo e podem acompanhar as escalações dos adversários."}
       </div>
 
-      <Button className="mt-5 w-full bg-[var(--success)] text-white hover:bg-black" onClick={onCreate}>
-        <Plus size={18} /> Criar sala
+      <Button className="mt-5 w-full bg-[var(--success)] text-white hover:bg-black" disabled={creating} onClick={() => void onCreate()}>
+        <Plus size={18} /> {creating ? "Criando..." : "Criar sala"}
       </Button>
     </article>
   );
@@ -1329,10 +1391,11 @@ function ReviewPanel({
   onReplacePick: (playerId: string, slotId: string, replacementId: string) => void;
 }) {
   const fieldPlayer = currentPlayer ?? room.players[0];
+  const replacementUsed = Boolean(currentPlayer && room.reviewSwapUsedByPlayer[currentPlayer.id]);
   const selectedPick = currentPlayer?.squad.find((pick) => pick.slotId === selectedSlotId);
   const selectedSlot = selectedSlotId ? getFormationSlots(fieldPlayer?.formation ?? "4-3-3", fieldPlayer?.tacticalStyle ?? "equilibrado").find((slot) => slot.id === selectedSlotId) : undefined;
   const replacementOptions = useMemo(() => {
-    if (!currentPlayer || !selectedSlot) return [];
+    if (!currentPlayer || !selectedSlot || replacementUsed) return [];
     const usedCanonicals = new Set(currentPlayer.squad.map((pick) => pick.canonicalPlayerId));
     const seed = `${room.id}-${currentPlayer.id}-${selectedSlot.id}-${room.reviewEndsAt ?? 0}`;
     return shuffleReviewOptions(
@@ -1345,7 +1408,7 @@ function ReviewPanel({
         const fit = calculatePositionFit(player, selectedSlot.position);
         return { player, season, effectiveRating: fit.effectiveRating };
       });
-  }, [currentPlayer, room.id, room.reviewEndsAt, selectedSlot]);
+  }, [currentPlayer, replacementUsed, room.id, room.reviewEndsAt, selectedSlot]);
 
   function handleReviewSlot(slotId: string) {
     if (!currentPlayer) return;
@@ -1363,7 +1426,7 @@ function ReviewPanel({
   }
 
   function handleReplacement(replacementId: string) {
-    if (!currentPlayer || !selectedSlotId) return;
+    if (!currentPlayer || !selectedSlotId || replacementUsed) return;
     onReplacePick(currentPlayer.id, selectedSlotId, replacementId);
     onSelectSlot(undefined);
   }
@@ -1374,13 +1437,18 @@ function ReviewPanel({
       <aside className="space-y-4">
         <div className="rounded-lg border border-gold/25 bg-gold/10 p-5 shadow-card">
           <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Ajuste final</p>
-          <h3 className="mt-2 text-3xl font-black">30 segundos para trocar</h3>
-          <p className="mt-2 text-sm text-slate-300">Clique em um jogador na previa da escalacao. A lateral mostra ate 10 substitutos compativeis para aquela posicao.</p>
+          <h3 className="mt-2 text-3xl font-black">Uma troca em 30 segundos</h3>
+          <p className="mt-2 text-sm text-slate-300">Clique em um jogador ja escalado e escolha um dos 10 substitutos compativeis. Depois da troca, o elenco fica confirmado.</p>
           <div className="mt-4">
             <TimerPill seconds={reviewRemaining} icon={<Clock size={16} />} />
           </div>
         </div>
-        {currentPlayer && selectedSlot && (
+        {currentPlayer && replacementUsed && (
+          <div className="border border-[var(--success)] bg-[var(--success)]/10 p-5 text-sm font-black text-black">
+            Troca concluida. Seu elenco esta confirmado.
+          </div>
+        )}
+        {currentPlayer && selectedSlot && !replacementUsed && (
           <div className="rounded-lg border border-emerald-300/20 bg-emerald-950/25 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -1411,7 +1479,7 @@ function ReviewPanel({
             </div>
           </div>
         )}
-        {currentPlayer && !selectedSlot && (
+        {currentPlayer && !selectedSlot && !replacementUsed && (
           <div className="rounded-lg border border-dashed border-white/15 bg-night/45 p-5 text-sm font-semibold text-slate-300">
             Selecione um jogador no campo para ver as opcoes de troca.
           </div>
@@ -1501,7 +1569,7 @@ function CoachCard({ coach, squad, selected, disabled, onChoose }: { coach: Room
     >
       <div className="flex items-center justify-between gap-4">
         <GenericBadge club={badgeClub} size={52} />
-        <span className="grid h-12 min-w-12 shrink-0 place-items-center border border-black bg-black px-3 font-mono text-xl font-black text-white">{coach.rating}</span>
+        <span className="coach-rating-badge grid h-12 min-w-12 shrink-0 place-items-center border border-black bg-black px-3 font-mono text-xl font-black text-white">{coach.rating}</span>
       </div>
       <div className="mt-4 min-w-0">
         <p className="text-2xl font-black leading-tight text-black">{coach.name}</p>
@@ -1512,7 +1580,7 @@ function CoachCard({ coach, squad, selected, disabled, onChoose }: { coach: Room
         </div>
       </div>
       <p className="mt-4 text-sm leading-relaxed text-[var(--muted)]">{coach.description}</p>
-      <p className="mt-3 inline-flex border border-black bg-[var(--success)] px-3 py-2 text-xs font-black uppercase tracking-[0.08em] text-white">
+      <p className="coach-benefit-badge mt-3 inline-flex border border-black bg-[var(--success)] px-3 py-2 text-xs font-black uppercase tracking-[0.08em] text-white">
         +2 overall para {countCoachNationalityMatches(squad.map((pick) => pick.nationality), coach.nationality)} jogadores
       </p>
     </button>
@@ -1657,6 +1725,11 @@ function RoomBracket({
     : { userGoals: presentationAwayGoals, opponentGoals: presentationHomeGoals };
   const presentationMinute = presentation ? Math.max(1, lastVisibleEvent?.minute ?? 1) : 1;
   const presentationProgress = Math.min(100, Math.round((presentationMinute / 90) * 100));
+  const nextPlayerMatchReady = Boolean(
+    presentation?.committed &&
+      playerMatch &&
+      playerMatch.id !== presentation.match.id
+  );
 
   useEffect(() => {
     if (room.status === "finished") setShowResultOverlay(true);
@@ -1765,10 +1838,15 @@ function RoomBracket({
                     <span className="border border-black bg-[var(--accent)] px-3 py-2 font-mono text-sm font-black text-black">{presentationMinute}&apos;</span>
                     <span className="font-mono text-3xl font-black text-[var(--warning)]">{presentationHomeGoals} - {presentationAwayGoals}</span>
                   </div>
-                  {presentation.committed && canProgressRound && (
+                  {nextPlayerMatchReady && (
+                    <Button className="w-full sm:w-auto" onClick={() => setPresentation(undefined)}>
+                      Prosseguir para a proxima partida
+                    </Button>
+                  )}
+                  {presentation.committed && canProgressRound && !nextPlayerMatchReady && (
                     <Button className="w-full sm:w-auto" onClick={progressRoundFromScore}>Proxima partida</Button>
                   )}
-                  {presentation.committed && pendingHumans && (
+                  {presentation.committed && pendingHumans && !nextPlayerMatchReady && (
                     <span className="text-xs font-bold text-[var(--muted)]">Aguardando os outros jogadores</span>
                   )}
                 </div>
@@ -1982,13 +2060,14 @@ function RoomResultOverlay({
             </div>
           </div>
           <div className={cn("grid min-h-64 place-items-center self-stretch p-6", champion ? "bg-[var(--success)]" : "bg-[var(--surface-muted)]")}>
-            {champion ? (
-              <Image src="/images/liga-dos-craques-trophy.png" alt="Taca de campeao" width={290} height={360} className="h-64 w-auto object-contain drop-shadow-2xl" priority />
-            ) : (
-              <div className="grid h-36 w-36 place-items-center border border-black bg-white">
-                <Trophy className="h-16 w-16 text-black/35" aria-hidden />
-              </div>
-            )}
+            <Image
+              src="/images/liga-dos-craques-trophy.png"
+              alt="Taca da Liga dos Craques"
+              width={290}
+              height={360}
+              className={cn("h-64 w-auto object-contain drop-shadow-2xl", !champion && "opacity-80")}
+              priority
+            />
           </div>
         </div>
         <div className="p-5 sm:p-7">
@@ -2393,6 +2472,12 @@ function isFreshRoom(room: FriendRoom) {
 
 function samePlayer(player: RoomPlayer, userName: string, teamName: string) {
   return sameText(player.userName, userName) || sameText(player.teamName, teamName);
+}
+
+function autoPickKey(room: FriendRoom, playerId: string) {
+  const player = room.players.find((item) => item.id === playerId);
+  if (room.draftMode === "todos") return `${room.id}:todos:${playerId}:${room.draftEndsAt ?? 0}:${player?.squad.length ?? 0}`;
+  return `${room.id}:turnos:${room.turnIndex}:${room.turnStartedAt ?? 0}:${playerId}`;
 }
 
 function sameText(a: string, b: string) {

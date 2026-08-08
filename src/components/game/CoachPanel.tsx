@@ -28,7 +28,7 @@ export function CoachPanel() {
             <article key={coach.id} className="flex min-h-[230px] flex-col border border-black/20 bg-white p-3 transition hover:border-[var(--accent)]">
               <div className="flex items-center justify-between gap-4">
                 <TeamCrest src={getFootballTeamByName(coach.clubName)?.logo} teamName={coach.clubName} pixelSize={44} />
-                <div className="grid h-10 min-w-10 shrink-0 place-items-center border border-black bg-[var(--background)] px-2 font-display text-lg font-black text-black">{coach.rating}</div>
+                <div className="coach-rating-badge grid h-10 min-w-10 shrink-0 place-items-center border border-black bg-black px-2 font-display text-lg font-black text-white">{coach.rating}</div>
               </div>
               <div className="mt-4 min-w-0">
                 <h2 className="font-display text-xl font-black uppercase leading-tight text-black">{coach.name}</h2>
@@ -39,8 +39,8 @@ export function CoachPanel() {
                 </div>
               </div>
               <p className="mt-3 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{coach.description}</p>
-              <p className="mt-2 text-xs font-black uppercase text-[var(--accent)]">
-                {countCoachNationalityMatches(squad.map((pick) => pick.player.nationality), coach.nationality)} jogadores recebem +2
+              <p className="coach-benefit-badge mt-2 inline-flex border border-black bg-[var(--success)] px-3 py-2 text-xs font-black uppercase text-white">
+                +2 overall para {countCoachNationalityMatches(squad.map((pick) => pick.player.nationality), coach.nationality)} jogadores
               </p>
               <Button className="mt-auto min-h-9 w-full" onClick={() => confirmCoach(coach.id)}>
                 <UserCheck size={18} /> Escolher tecnico

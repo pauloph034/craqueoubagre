@@ -14,19 +14,50 @@ async function readRooms() {
     if (sharedRooms) {
       const normalized = normalizeFriendRooms(sharedRooms);
       const fresh = normalized.filter(isFreshRoom);
+      const { rooms, duplicateIds } = dedupeRecentlyCreatedRooms(fresh);
       const staleIds = normalized.filter((room) => !isFreshRoom(room)).map((room) => room.id);
-      if (staleIds.length) await Promise.all(staleIds.map((roomId) => deleteSharedFriendRoom(roomId)));
-      return fresh;
+      const obsoleteIds = [...new Set([...staleIds, ...duplicateIds])];
+      if (obsoleteIds.length) await Promise.all(obsoleteIds.map((roomId) => deleteSharedFriendRoom(roomId)));
+      return rooms;
     }
   }
   try {
     const raw = await readFile(roomsFile, "utf8");
     const parsed = JSON.parse(raw) as { rooms?: FriendRoom[] } | FriendRoom[];
     const rooms = Array.isArray(parsed) ? parsed : parsed.rooms ?? [];
-    return normalizeFriendRooms(rooms);
+    return dedupeRecentlyCreatedRooms(normalizeFriendRooms(rooms)).rooms;
   } catch {
     return [];
   }
+}
+
+function normalizedRoomText(value: string) {
+  return value.trim().toLocaleLowerCase("pt-BR").replace(/\s+/g, " ");
+}
+
+function roomCreationKey(room: FriendRoom) {
+  const host = room.players.find((player) => normalizedRoomText(player.userName) === normalizedRoomText(room.hostName));
+  return [normalizedRoomText(room.hostName), normalizedRoomText(host?.teamName ?? ""), normalizedRoomText(room.name), room.visibility].join("|");
+}
+
+function dedupeRecentlyCreatedRooms(source: FriendRoom[]) {
+  const kept: FriendRoom[] = [];
+  const duplicateIds: string[] = [];
+  const ordered = [...source].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+  for (const room of ordered) {
+    const duplicate = kept.find((item) =>
+      item.status === "lobby" &&
+      room.status === "lobby" &&
+      roomCreationKey(item) === roomCreationKey(room) &&
+      Math.abs(Date.parse(item.createdAt) - Date.parse(room.createdAt)) <= 15_000
+    );
+    if (duplicate) duplicateIds.push(room.id);
+    else kept.push(room);
+  }
+  return {
+    rooms: kept.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 40),
+    duplicateIds
+  };
 }
 
 async function writeRooms(rooms: FriendRoom[]) {
@@ -85,6 +116,7 @@ function mergeRoomState(incoming: FriendRoom, current: FriendRoom) {
     turnStartedAt: base.turnStartedAt,
     draftEndsAt: base.draftEndsAt,
     reviewEndsAt: base.reviewEndsAt,
+    reviewSwapUsedByPlayer: mergeBooleanMap(current.reviewSwapUsedByPlayer, incoming.reviewSwapUsedByPlayer),
     coachOptionsByPlayer: { ...(current.coachOptionsByPlayer ?? {}), ...(incoming.coachOptionsByPlayer ?? {}) },
     selectedCoachByPlayer: { ...(current.selectedCoachByPlayer ?? {}), ...(incoming.selectedCoachByPlayer ?? {}) },
     bracket: mergeMatches(incoming.bracket, current.bracket),
@@ -130,7 +162,45 @@ function keepHeartbeat(incoming: FriendRoom, saved: FriendRoom) {
   });
 }
 
+function mergeBooleanMap(current: Record<string, boolean> | undefined, incoming: Record<string, boolean> | undefined) {
+  const keys = new Set([...Object.keys(current ?? {}), ...Object.keys(incoming ?? {})]);
+  return Object.fromEntries(Array.from(keys, (key) => [key, Boolean(current?.[key] || incoming?.[key])]));
+}
+
+function authorizeReviewMutation(incoming: FriendRoom, saved: FriendRoom, actorId: string) {
+  const incomingActor = incoming.players.find((player) => player.id === actorId);
+  const savedActor = saved.players.find((player) => player.id === actorId);
+  if (!incomingActor || !savedActor || incomingActor.squad.length !== savedActor.squad.length) return keepHeartbeat(incoming, saved);
+
+  const savedIds = new Set(savedActor.squad.map((pick) => pick.canonicalPlayerId));
+  const incomingIds = new Set(incomingActor.squad.map((pick) => pick.canonicalPlayerId));
+  const removed = Array.from(savedIds).filter((id) => !incomingIds.has(id));
+  const added = Array.from(incomingIds).filter((id) => !savedIds.has(id));
+  const changedPlayer = removed.length === 1 && added.length === 1;
+  if (removed.length !== added.length || removed.length > 1) return keepHeartbeat(incoming, saved);
+
+  const swapWasUsed = Boolean(saved.reviewSwapUsedByPlayer?.[actorId]);
+  const swapIsUsed = Boolean(incoming.reviewSwapUsedByPlayer?.[actorId]);
+  if ((swapWasUsed && changedPlayer) || (changedPlayer && !swapIsUsed) || (!changedPlayer && swapIsUsed !== swapWasUsed)) {
+    return keepHeartbeat(incoming, saved);
+  }
+  if (!["reviewing", "coach"].includes(incoming.status)) return keepHeartbeat(incoming, saved);
+
+  return normalizeFriendRoom({
+    ...incoming,
+    players: saved.players.map((player) => (player.id === actorId ? incomingActor : player)),
+    lastSeenAt: { ...(saved.lastSeenAt ?? {}), ...(incoming.lastSeenAt ?? {}) },
+    reviewSwapUsedByPlayer: {
+      ...(saved.reviewSwapUsedByPlayer ?? {}),
+      [actorId]: swapWasUsed || changedPlayer
+    },
+    revision: Math.max(saved.revision ?? 0, incoming.revision ?? 0) + 1,
+    updatedAt: new Date().toISOString()
+  });
+}
+
 function authorizeDraftMutation(incoming: FriendRoom, saved: FriendRoom, actorId: string) {
+  if (saved.status === "reviewing") return authorizeReviewMutation(incoming, saved, actorId);
   if (saved.status !== "drafting") return incoming;
   const activePlayer = saved.players[saved.turnIndex];
   if (saved.draftMode === "turnos" && (!activePlayer || activePlayer.id !== actorId)) return keepHeartbeat(incoming, saved);
@@ -248,7 +318,9 @@ export async function PUT(request: Request) {
     }
     return saved;
   }).filter((room): room is FriendRoom => Boolean(room));
-  const rooms = mergeRooms(incomingRooms, current);
+  const mergedRooms = mergeRooms(incomingRooms, current);
+  const { rooms, duplicateIds } = dedupeRecentlyCreatedRooms(mergedRooms);
+  if (duplicateIds.length) await Promise.all(duplicateIds.map((roomId) => deleteSharedFriendRoom(roomId)));
   await writeRooms(rooms);
   return Response.json({ rooms });
 }
@@ -256,7 +328,7 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   const currentUser = await getCurrentUser();
   if (!currentUser) return Response.json({ error: "Nao autenticado." }, { status: 401 });
-  const payload = (await request.json().catch(() => ({}))) as { roomId?: string };
+  const payload = (await request.json().catch(() => ({}))) as { roomId?: string; playerId?: string };
   if (!payload.roomId) return Response.json({ error: "Sala invalida." }, { status: 400 });
 
   const playerName = currentUser.playerName?.trim() || currentUser.username;
@@ -265,8 +337,10 @@ export async function DELETE(request: Request) {
   let deleteRoomId: string | undefined;
   const rooms = current.flatMap((room) => {
     if (room.id !== payload.roomId) return [room];
-    const leaving = room.players.find(
-      (player) => player.userName.trim().toLowerCase() === playerName.toLowerCase() && player.teamName.trim().toLowerCase() === teamName.toLowerCase()
+    const leaving = room.players.find((player) =>
+      (!payload.playerId || player.id === payload.playerId) &&
+      player.userName.trim().toLowerCase() === playerName.toLowerCase() &&
+      player.teamName.trim().toLowerCase() === teamName.toLowerCase()
     );
     if (!leaving) return [room];
     const players = room.players.filter((player) => player.id !== leaving.id);

@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { recommendedMatchDecision, type MatchDecisionType } from "@/game-engine/match-decisions";
+import { type MatchDecisionType } from "@/game-engine/match-decisions";
 
 export type { MatchDecisionType } from "@/game-engine/match-decisions";
 
@@ -35,7 +35,6 @@ export const matchDecisionCopy: Record<
 export function MatchDecisionPrompt({
   type,
   currentFormation,
-  score = { userGoals: 0, opponentGoals: 0 },
   onChoose
 }: {
   type: MatchDecisionType;
@@ -52,8 +51,6 @@ export function MatchDecisionPrompt({
           detail: formation === currentFormation ? "Manter o desenho atual." : "Reorganizar o time para os minutos finais."
         }))
       : copy.options;
-  const recommended = recommendedMatchDecision(type, score.userGoals, score.opponentGoals, currentFormation);
-
   return (
     <section className="match-prompt border border-black bg-[var(--surface)] p-4" aria-live="polite">
       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--success)]">{copy.eyebrow}</p>
@@ -68,7 +65,6 @@ export function MatchDecisionPrompt({
           >
             <span className="block text-sm font-black text-black">{option.label}</span>
             <span className="mt-1 block text-xs leading-snug text-[var(--muted)]">{option.detail}</span>
-            {option.value === recommended && <span className="mt-2 inline-block bg-black px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-white">Recomendado pelo placar</span>}
           </button>
         ))}
       </div>
