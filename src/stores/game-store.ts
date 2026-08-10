@@ -234,7 +234,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   users: [],
   currentUser: undefined,
   authError: undefined,
-  audioEnabled: false,
+  audioEnabled: true,
   volume: 0.5,
   startDraft: (partial) => {
     storage.clearActive();
