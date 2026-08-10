@@ -22,8 +22,10 @@ import { positionLabel } from "@/game-engine/position-labels";
 import {
   autoPickRoomPlayer,
   autoPickRoomTurn,
+  activateRoomSecretCard,
   chooseRoomCoach,
   chooseRoomLegend,
+  chooseRoomSecretCard,
   confirmRoomReview,
   createFriendRoom,
   currentPlayerRoomMatch,
@@ -36,6 +38,8 @@ import {
   placeRoomPlayer,
   previewPlayerRoomMatch,
   progressRoomRound,
+  roomCardSpecialOptions,
+  roomSecretCard,
   replaceRoomPick,
   resolveRoomPenaltyTimeout,
   resetRoomToLobby,
@@ -49,12 +53,14 @@ import {
   updateRoomPlayerSetup,
   updateRoomSettings,
   type FriendRoom,
+  type ActivateRoomCardInput,
   type RoomCoach,
   type RoomDraftMode,
   type RoomDraw,
   type RoomMatch,
   type RoomPick,
   type RoomPlayer,
+  type RoomSecretCardId,
   type RoomVisibility,
   type PenaltyDirection
 } from "@/lib/friend-rooms";
@@ -670,6 +676,8 @@ export default function FriendRoomsPage() {
           onConfirmReview={(playerId) => updateActiveRoom((room) => confirmRoomReview(room, playerId))}
           onDrawCoaches={(playerId) => updateActiveRoom((room) => drawRoomCoaches(room, playerId))}
           onChooseCoach={(playerId, coachId) => updateActiveRoom((room) => chooseRoomCoach(room, playerId, coachId))}
+          onChooseCard={(playerId, cardId) => updateActiveRoom((room) => chooseRoomSecretCard(room, playerId, cardId))}
+          onActivateCard={(playerId, input) => updateActiveRoom((room) => activateRoomSecretCard(room, playerId, input))}
           onPlayerReady={handlePlayerReady}
           onPlayerSetup={handlePlayerSetup}
           onRoomSettings={handleRoomSettings}
@@ -933,6 +941,8 @@ function ActiveRoomPanel({
   onConfirmReview,
   onDrawCoaches,
   onChooseCoach,
+  onChooseCard,
+  onActivateCard,
   onPlayerReady,
   onPlayerSetup,
   onRoomSettings,
@@ -964,6 +974,8 @@ function ActiveRoomPanel({
   onConfirmReview: (playerId: string) => void;
   onDrawCoaches: (playerId: string) => void;
   onChooseCoach: (playerId: string, coachId: string) => void;
+  onChooseCard: (playerId: string, cardId: RoomSecretCardId) => void;
+  onActivateCard: (playerId: string, input?: ActivateRoomCardInput) => void;
   onPlayerReady: (playerId: string, ready: boolean) => void;
   onPlayerSetup: (playerId: string, setup: { formation?: string; tacticalStyle?: TacticalStyle }) => void;
   onRoomSettings: (settings: Partial<Pick<FriendRoom, "name" | "visibility" | "password" | "difficulty" | "draftMode" | "simultaneousMinutes" | "turnSeconds">>) => void;
@@ -1061,8 +1073,12 @@ function ActiveRoomPanel({
         />
       )}
 
+      {room.status === "cards" && (
+        <RoomSecretCardPanel room={room} currentPlayer={currentPlayer} onChooseCard={onChooseCard} />
+      )}
+
       {(room.status === "bracket" || room.status === "finished") && (
-        <RoomBracket room={room} currentPlayer={currentPlayer} isHost={isHost} onPlayMatch={onPlayMatch} onProgressRound={onProgressRound} onResetLobby={onResetLobby} />
+        <RoomBracket room={room} currentPlayer={currentPlayer} isHost={isHost} onActivateCard={onActivateCard} onPlayMatch={onPlayMatch} onProgressRound={onProgressRound} onResetLobby={onResetLobby} />
       )}
     </section>
   );
@@ -1564,7 +1580,7 @@ function PenaltyChallengePanel({
     let frame = 0;
     const startedAt = performance.now();
     const animate = (timestamp: number) => {
-      const phase = ((timestamp - startedAt) % 1800) / 1800;
+      const phase = ((timestamp - startedAt) % 1600) / 1600;
       const wave = phase <= 0.5 ? phase * 2 : (1 - phase) * 2;
       setAccuracy(Math.round(8 + wave * 92));
       frame = window.requestAnimationFrame(animate);
@@ -1901,6 +1917,50 @@ function RoomCoachPanel({
   );
 }
 
+function RoomSecretCardPanel({
+  room,
+  currentPlayer,
+  onChooseCard
+}: {
+  room: FriendRoom;
+  currentPlayer?: RoomPlayer;
+  onChooseCard: (playerId: string, cardId: RoomSecretCardId) => void;
+}) {
+  const selectedId = currentPlayer ? room.selectedCardByPlayer[currentPlayer.id] : undefined;
+  const selected = roomSecretCard(selectedId);
+  const confirmed = Boolean(currentPlayer?.ready);
+  const readyCount = room.players.filter((player) => player.ready).length;
+
+  return (
+    <div className="mx-auto max-w-5xl border border-black bg-white p-5 text-black">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-black pb-4">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--success)]">Carta secreta</p>
+          <h3 className="mt-1 text-3xl font-black">Sua vantagem foi sorteada</h3>
+          <p className="mt-2 max-w-2xl text-sm text-[var(--muted)]">A carta fica oculta para os adversarios e pode ser usada uma unica vez entre as oitavas e a final.</p>
+        </div>
+        <span className="border border-black px-3 py-2 text-xs font-black">{readyCount}/{room.players.length} prontos</span>
+      </div>
+
+      {selected ? (
+        <div className="mt-5 border border-[var(--success)] bg-[var(--success)] p-5 text-white">
+          <p className="text-xs font-black uppercase tracking-[0.18em]">Carta sorteada</p>
+          <p className="mt-2 text-2xl font-black">{selected.name}</p>
+          <p className="mt-1 text-sm">{selected.description}</p>
+          <button
+            type="button"
+            disabled={confirmed || !currentPlayer}
+            onClick={() => currentPlayer && onChooseCard(currentPlayer.id, selected.id)}
+            className="mt-5 border border-white bg-white px-5 py-3 text-xs font-black uppercase text-black disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {confirmed ? "Aguardando os demais jogadores" : "Prosseguir ao mata-mata"}
+          </button>
+        </div>
+      ) : <p className="mt-5 text-sm">Preparando sua carta...</p>}
+    </div>
+  );
+}
+
 function CoachCard({ coach, squad, selected, disabled, onChoose }: { coach: RoomCoach; squad: RoomPick[]; selected: boolean; disabled: boolean; onChoose: () => void }) {
   const club =
     clubSeasonData.find((season) => season.id === coach.clubSeasonId) ??
@@ -2040,10 +2100,141 @@ function shortName(name: string) {
   return parts.at(-1) ?? name;
 }
 
+function RoomCardControl({
+  room,
+  player,
+  match,
+  onActivate
+}: {
+  room: FriendRoom;
+  player: RoomPlayer;
+  match: RoomMatch;
+  onActivate: (playerId: string, input?: ActivateRoomCardInput) => void;
+}) {
+  const cardId = room.selectedCardByPlayer[player.id];
+  const card = roomSecretCard(cardId);
+  const activation = room.cardActivationByPlayer[player.id];
+  const [open, setOpen] = useState(false);
+  const [targetPickId, setTargetPickId] = useState("");
+  const [specialPickId, setSpecialPickId] = useState("");
+  const needsTarget = cardId === "inspired-captain" || cardId === "historic-swap" || cardId === "loaned-star" || cardId === "luxury-bench";
+  const specialOptions = cardId && targetPickId
+    ? roomCardSpecialOptions(room, player.id, cardId, targetPickId)
+    : [];
+  const needsSpecial = cardId === "historic-swap" || cardId === "loaned-star" || cardId === "luxury-bench";
+  const canActivate = Boolean(card && !activation && (!needsTarget || targetPickId) && (!needsSpecial || specialPickId));
+
+  useEffect(() => {
+    setOpen(false);
+    setTargetPickId("");
+    setSpecialPickId("");
+  }, [match.id]);
+
+  if (!card) return null;
+  if (activation) {
+    return (
+      <div className="mt-3 flex items-center justify-between gap-3 border border-[var(--success)] bg-[var(--success)] px-4 py-3 text-white">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/75">Carta revelada</p>
+          <p className="truncate font-black">{card.name}</p>
+        </div>
+        <Check size={18} className="shrink-0" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 border border-black bg-[var(--surface-muted)] text-black">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+      >
+        <span className="min-w-0">
+          <span className="block text-[10px] font-black uppercase tracking-[0.18em] text-[var(--success)]">Sua carta secreta</span>
+          <span className="mt-1 block truncate font-black">{card.name}</span>
+        </span>
+        <span className="shrink-0 border border-black bg-white px-3 py-2 text-xs font-black">{open ? "Fechar" : "Usar"}</span>
+      </button>
+
+      {open && (
+        <div className="border-t border-black p-4">
+          <p className="text-sm leading-6 text-[var(--muted)]">{card.description}</p>
+          {cardId === "stored-penalty" && (
+            <p className="mt-2 text-xs font-bold">A cobranca acontece aos 68 minutos e ainda pode ser defendida.</p>
+          )}
+          {cardId === "luxury-bench" && (
+            <p className="mt-2 text-xs font-bold">A substituicao entra na linha do tempo no intervalo.</p>
+          )}
+
+          {needsTarget && (
+            <div className="mt-4">
+              <label className="text-[10px] font-black uppercase tracking-[0.16em]" htmlFor={`card-target-${player.id}`}>Jogador do seu time</label>
+              <select
+                id={`card-target-${player.id}`}
+                className={`${inputClass} mt-2`}
+                value={targetPickId}
+                onChange={(event) => {
+                  setTargetPickId(event.target.value);
+                  setSpecialPickId("");
+                }}
+              >
+                <option value="">Selecione</option>
+                {player.squad.map((pick) => (
+                  <option key={pick.id} value={pick.id}>{pick.name} - {positionLabel(pick.slotPosition ?? pick.position)} - {pick.effectiveRating ?? pick.overall}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {needsSpecial && targetPickId && (
+            <div className="mt-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em]">
+                {cardId === "historic-swap" ? "Jogador do adversario" : "Escolha entre os sorteados"}
+              </p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                {specialOptions.map((pick) => (
+                  <button
+                    key={pick.id}
+                    type="button"
+                    onClick={() => setSpecialPickId(pick.id)}
+                    className={cn(
+                      "border p-3 text-left",
+                      specialPickId === pick.id ? "border-black bg-[var(--success)] text-white" : "border-black/20 bg-white text-black"
+                    )}
+                  >
+                    <span className="block truncate font-black">{pick.name}</span>
+                    <span className="mt-1 block text-xs">{positionLabel(pick.slotPosition ?? pick.position)} - {pick.effectiveRating ?? pick.overall}</span>
+                  </button>
+                ))}
+              </div>
+              {specialOptions.length === 0 && <p className="mt-2 text-sm text-[var(--muted)]">Nenhum jogador compativel encontrado.</p>}
+            </div>
+          )}
+
+          <Button
+            className="mt-4 w-full"
+            disabled={!canActivate}
+            onClick={() => onActivate(player.id, {
+              targetPickId: targetPickId || undefined,
+              opponentPickId: cardId === "historic-swap" ? specialPickId || undefined : undefined,
+              specialPickId: cardId === "loaned-star" || cardId === "luxury-bench" ? specialPickId || undefined : undefined
+            })}
+          >
+            Ativar carta nesta partida
+          </Button>
+          <p className="mt-2 text-center text-[10px] font-black uppercase tracking-[0.14em] text-[var(--muted)]">Uso unico ate a final</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RoomBracket({
   room,
   currentPlayer,
   isHost,
+  onActivateCard,
   onPlayMatch,
   onProgressRound,
   onResetLobby
@@ -2051,6 +2242,7 @@ function RoomBracket({
   room: FriendRoom;
   currentPlayer?: RoomPlayer;
   isHost: boolean;
+  onActivateCard: (playerId: string, input?: ActivateRoomCardInput) => void;
   onPlayMatch: (playerId: string) => void;
   onProgressRound: () => void;
   onResetLobby: () => void;
@@ -2205,6 +2397,9 @@ function RoomBracket({
       {room.status === "bracket" && (
         <div className="mt-4 border border-black bg-white p-4 text-black">
           <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300">Rodada atual: {currentPhase}</p>
+          {!presentation && playerMatch && currentPlayer && (
+            <RoomCardControl room={room} player={currentPlayer} match={playerMatch} onActivate={onActivateCard} />
+          )}
           {presentation ? (
             <div className="mt-3 overflow-hidden border border-black/20 bg-white">
               <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
@@ -2587,8 +2782,10 @@ function BracketTeam({ name, emblemId, goals, winner, last = false }: { name: st
 
 function buildRoomMatchTimeline(room: FriendRoom, match: RoomMatch, currentPlayerId: string): RoomTimelineEvent[] {
   const currentIsHome = match.homePlayerId === currentPlayerId;
-  const currentGoals = currentIsHome ? match.homeGoals ?? 0 : match.awayGoals ?? 0;
-  const opponentGoals = currentIsHome ? match.awayGoals ?? 0 : match.homeGoals ?? 0;
+  const regularHomeGoals = Math.max(0, (match.homeGoals ?? 0) - (match.homeBonusGoals ?? 0));
+  const regularAwayGoals = Math.max(0, (match.awayGoals ?? 0) - (match.awayBonusGoals ?? 0));
+  const currentGoals = currentIsHome ? regularHomeGoals : regularAwayGoals;
+  const opponentGoals = currentIsHome ? regularAwayGoals : regularHomeGoals;
   const decisions = matchDecisionMoments(`${room.id}-${match.id}`, currentGoals, opponentGoals, true);
   const eventSeed = stableRoomTimelineNumber(`${room.id}-${match.id}-events`);
   const flavorPool = [
@@ -2620,6 +2817,14 @@ function buildRoomMatchTimeline(room: FriendRoom, match: RoomMatch, currentPlaye
     { id: "kickoff", minute: 1, teamName: "", text: "Bola rolando" },
     { id: "halftime", minute: 45, teamName: "", text: "Intervalo" },
     ...flavorEvents,
+    ...(match.cardEvents ?? []).map((event) => ({
+      id: event.id,
+      minute: event.minute,
+      teamName: event.side === "home" ? match.homeName : event.side === "away" ? match.awayName : "",
+      text: event.text,
+      side: event.scored ? event.side : undefined,
+      kind: "event" as const
+    })),
     ...decisions.map((decision) => ({ id: `decision-${decision.minute}-${decision.type}`, minute: decision.minute, teamName: "", text: decision.type === "formation" ? "Ajuste para a reta final" : "Decisao tatica", kind: "decision" as const, decisionType: decision.type }))
   ];
   let homeGoals = 0;
@@ -2628,8 +2833,8 @@ function buildRoomMatchTimeline(room: FriendRoom, match: RoomMatch, currentPlaye
   const penaltySeed = stableRoomTimelineNumber(`${room.id}-${match.id}-penalty`);
   const hasRarePenalty = Boolean(currentSide && penaltySeed % 9 === 0 && (currentSide === "home" ? match.homeGoals : match.awayGoals));
   const goalEvents = [
-    ...Array.from({ length: match.homeGoals ?? 0 }, (_, index) => ({ teamName: match.homeName, order: index, side: "home" as const })),
-    ...Array.from({ length: match.awayGoals ?? 0 }, (_, index) => ({ teamName: match.awayName, order: index, side: "away" as const }))
+    ...Array.from({ length: regularHomeGoals }, (_, index) => ({ teamName: match.homeName, order: index, side: "home" as const })),
+    ...Array.from({ length: regularAwayGoals }, (_, index) => ({ teamName: match.awayName, order: index, side: "away" as const }))
   ].sort((a, b) => `${a.teamName}-${a.order}`.localeCompare(`${b.teamName}-${b.order}`));
   const goalMinutes = spreadGoalMinutes(goalEvents.length);
   let penaltyAssigned = false;
@@ -3022,6 +3227,7 @@ function roomStatusLabel(status: FriendRoom["status"]) {
     challenge: "Desafio 99",
     reviewing: "Ajustes",
     coach: "Tecnico",
+    cards: "Cartas secretas",
     bracket: "Chave",
     finished: "Finalizada"
   }[status];

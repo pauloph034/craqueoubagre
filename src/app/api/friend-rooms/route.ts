@@ -1,4 +1,4 @@
-import { chooseRoomLegend, normalizeFriendRoom, normalizeFriendRooms, progressRoomRound, resolveRoomPenaltyTimeout, shootRoomPenalty, startRoomCoachStage, startRoomPenaltyChallenge, type FriendRoom, type RoomMatch, type RoomPlayer, type RoomStatus } from "@/lib/friend-rooms";
+import { chooseRoomLegend, normalizeFriendRoom, normalizeFriendRooms, progressRoomRound, resolveRoomPenaltyTimeout, resolveRoomSecretCardStage, shootRoomPenalty, startRoomCoachStage, startRoomPenaltyChallenge, type FriendRoom, type RoomMatch, type RoomPlayer, type RoomStatus } from "@/lib/friend-rooms";
 import { deleteSharedFriendRoom, hasSupabaseConfig, listSharedFriendRooms, saveSharedFriendRooms } from "@/server/db";
 import { validatePublicName } from "@/server/name-policy";
 import { getCurrentUser } from "@/server/session";
@@ -129,6 +129,9 @@ function mergeRoomState(incoming: FriendRoom, current: FriendRoom) {
     legendSelectedId: base.legendSelectedId,
     coachOptionsByPlayer: { ...(current.coachOptionsByPlayer ?? {}), ...(incoming.coachOptionsByPlayer ?? {}) },
     selectedCoachByPlayer: { ...(current.selectedCoachByPlayer ?? {}), ...(incoming.selectedCoachByPlayer ?? {}) },
+    cardOptionsByPlayer: { ...(current.cardOptionsByPlayer ?? {}), ...(incoming.cardOptionsByPlayer ?? {}) },
+    selectedCardByPlayer: { ...(current.selectedCardByPlayer ?? {}), ...(incoming.selectedCardByPlayer ?? {}) },
+    cardActivationByPlayer: { ...(current.cardActivationByPlayer ?? {}), ...(incoming.cardActivationByPlayer ?? {}) },
     bracket: mergeMatches(incoming.bracket, current.bracket),
     bracketRound: Math.max(incoming.bracketRound ?? 0, current.bracketRound ?? 0),
     champion: incoming.champion ?? current.champion,
@@ -137,7 +140,8 @@ function mergeRoomState(incoming: FriendRoom, current: FriendRoom) {
   });
   // O ultimo resultado humano pode chegar junto com outro resultado. Avancar
   // no servidor evita que todos os clientes fiquem esperando uma nova acao.
-  return merged.status === "bracket" ? progressRoomRound(merged) : merged;
+  const afterCards = merged.status === "cards" ? resolveRoomSecretCardStage(merged) : merged;
+  return afterCards.status === "bracket" ? progressRoomRound(afterCards) : afterCards;
 }
 
 function isFreshRoom(room: FriendRoom) {
@@ -321,7 +325,7 @@ function mergeMatches(incoming: RoomMatch[], current: RoomMatch[]) {
 }
 
 function statusRank(status: RoomStatus) {
-  return { lobby: 0, drafting: 1, challenge: 2, reviewing: 3, coach: 4, bracket: 5, finished: 6 }[status] ?? 0;
+  return { lobby: 0, drafting: 1, challenge: 2, reviewing: 3, coach: 4, cards: 5, bracket: 6, finished: 7 }[status] ?? 0;
 }
 
 export async function GET() {
