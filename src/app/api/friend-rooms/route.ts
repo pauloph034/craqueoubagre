@@ -1,4 +1,4 @@
-import { chooseRoomLegend, normalizeFriendRoom, normalizeFriendRooms, progressRoomRound, resolveRoomPenaltyTimeout, shootRoomPenalty, startRoomPenaltyChallenge, type FriendRoom, type RoomMatch, type RoomPlayer, type RoomStatus } from "@/lib/friend-rooms";
+import { chooseRoomLegend, normalizeFriendRoom, normalizeFriendRooms, progressRoomRound, resolveRoomPenaltyTimeout, shootRoomPenalty, startRoomCoachStage, startRoomPenaltyChallenge, type FriendRoom, type RoomMatch, type RoomPlayer, type RoomStatus } from "@/lib/friend-rooms";
 import { deleteSharedFriendRoom, hasSupabaseConfig, listSharedFriendRooms, saveSharedFriendRooms } from "@/server/db";
 import { validatePublicName } from "@/server/name-policy";
 import { getCurrentUser } from "@/server/session";
@@ -204,22 +204,27 @@ function authorizeReviewMutation(incoming: FriendRoom, saved: FriendRoom, actorI
 
   const swapWasUsed = Boolean(saved.reviewSwapUsedByPlayer?.[actorId]);
   const swapIsUsed = Boolean(incoming.reviewSwapUsedByPlayer?.[actorId]);
-  if ((swapWasUsed && changedPlayer) || (changedPlayer && !swapIsUsed) || (!changedPlayer && swapIsUsed !== swapWasUsed)) {
+  if ((swapWasUsed && changedPlayer) || (changedPlayer && !swapIsUsed) || (swapWasUsed && !swapIsUsed)) {
     return keepHeartbeat(incoming, saved);
   }
   if (!["reviewing", "coach"].includes(incoming.status)) return keepHeartbeat(incoming, saved);
 
-  return normalizeFriendRoom({
+  const reviewSwapUsedByPlayer = {
+    ...(saved.reviewSwapUsedByPlayer ?? {}),
+    [actorId]: swapWasUsed || changedPlayer || swapIsUsed
+  };
+  const allConfirmed = saved.players.length > 0 && saved.players.every((player) => Boolean(reviewSwapUsedByPlayer[player.id]));
+  if (incoming.status === "coach" && !allConfirmed) return keepHeartbeat(incoming, saved);
+
+  const merged = normalizeFriendRoom({
     ...incoming,
     players: saved.players.map((player) => (player.id === actorId ? incomingActor : player)),
     lastSeenAt: { ...(saved.lastSeenAt ?? {}), ...(incoming.lastSeenAt ?? {}) },
-    reviewSwapUsedByPlayer: {
-      ...(saved.reviewSwapUsedByPlayer ?? {}),
-      [actorId]: swapWasUsed || changedPlayer
-    },
+    reviewSwapUsedByPlayer,
     revision: Math.max(saved.revision ?? 0, incoming.revision ?? 0) + 1,
     updatedAt: new Date().toISOString()
   });
+  return allConfirmed ? startRoomCoachStage(merged) : merged;
 }
 
 function authorizeDraftMutation(incoming: FriendRoom, saved: FriendRoom, actorId: string) {

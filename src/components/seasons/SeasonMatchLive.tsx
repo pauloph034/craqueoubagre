@@ -5,7 +5,7 @@ import { matchDecisionMoments, resolveMatchDecision } from "@/game-engine/match-
 import type { DraftPick, MatchEvent } from "@/types/game";
 import type { RankedMatch } from "@/types/seasons";
 import { Pause, Play, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const speedMs = { 1: 550, 2: 300, 4: 160 } as const;
 
@@ -25,6 +25,7 @@ export function SeasonMatchLive({
   const [minute, setMinute] = useState(0);
   const [speed, setSpeed] = useState<1 | 2 | 4>(2);
   const [paused, setPaused] = useState(false);
+  const timelineRef = useRef<HTMLDivElement>(null);
   const [decisions, setDecisions] = useState<Partial<Record<MatchDecisionType, { value: string; label: string; feedback: string }>>>({});
   const [penaltyTakers, setPenaltyTakers] = useState<Record<string, string>>({});
   const events = useMemo(() => rankedMatch.match.events.filter((event) => event.minute <= minute), [rankedMatch, minute]);
@@ -80,6 +81,15 @@ export function SeasonMatchLive({
     return () => window.clearTimeout(timer);
   }, [interactionPending, minute, paused, speed]);
 
+  useEffect(() => {
+    const timeline = timelineRef.current;
+    if (!timeline) return;
+    const frame = window.requestAnimationFrame(() => {
+      timeline.scrollTo({ top: timeline.scrollHeight, behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [timelineRows.length]);
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-3" role="dialog" aria-modal="true" aria-label="Partida de Temporadas">
       <section className="max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl overflow-y-auto border border-black bg-[var(--background)]">
@@ -108,7 +118,7 @@ export function SeasonMatchLive({
             </div>
             <p className="mt-4 text-[10px] leading-relaxed text-[var(--muted)]">{rankedMatch.opponentType === "player" ? "Adversario do ranking" : "Adversario historico"}</p>
           </div>
-          <div className="max-h-[360px] overflow-y-auto p-4">
+          <div ref={timelineRef} className="max-h-[360px] overflow-y-auto p-4" aria-live="polite">
             <p className="text-[9px] font-black uppercase tracking-[0.15em] text-[var(--muted)]">Linha do tempo</p>
             <div className="mt-2">{timelineRows.map((row) => <TimelineRow key={row.key} minute={row.minute} goal={row.goal} text={row.text} />)}</div>
           </div>

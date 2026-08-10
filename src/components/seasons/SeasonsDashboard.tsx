@@ -1,5 +1,6 @@
 "use client";
 
+import { ChampionSound } from "@/components/game/ChampionSound";
 import { SEASON_MATCH_LIMIT, SEASON_REROLL_LIMIT, SEASON_SWAP_LIMIT, thresholdsFor } from "@/config/seasons-balance";
 import { goalMessage } from "@/game-engine/seasons/season-progress";
 import { calculateChemistry } from "@/game-engine/chemistry";
@@ -55,6 +56,7 @@ export function SeasonsDashboard({
 
   return (
     <section className="flex min-h-0 flex-col border border-black bg-white">
+      {completed && season.outcome === "champion" && <ChampionSound eventId={`temporada-${season.id}`} />}
       <header className="grid gap-4 border-b border-black p-4 sm:grid-cols-[1fr_auto] sm:items-start">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--accent)]">Temporada {season.seasonNumber}</p>

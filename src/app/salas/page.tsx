@@ -1,6 +1,7 @@
 "use client";
 
 import { TeamNameWithCrest } from "@/components/game/TeamNameWithCrest";
+import { ChampionSound, EliminatedSound } from "@/components/game/ChampionSound";
 import { GenericBadge } from "@/components/game/GenericBadge";
 import { NationalityFlag } from "@/components/game/NationalityFlag";
 import { SoccerFieldMarkings } from "@/components/game/SoccerFieldMarkings";
@@ -23,6 +24,7 @@ import {
   autoPickRoomTurn,
   chooseRoomCoach,
   chooseRoomLegend,
+  confirmRoomReview,
   createFriendRoom,
   currentPlayerRoomMatch,
   drawRoomCoaches,
@@ -665,6 +667,7 @@ export default function FriendRoomsPage() {
           onReviewSlotChange={setReviewSlotId}
           onMovePick={(playerId, fromSlotId, toSlotId) => updateActiveRoom((room) => moveRoomPick(room, playerId, fromSlotId, toSlotId))}
           onReplacePick={(playerId, slotId, replacementId) => updateActiveRoom((room) => replaceRoomPick(room, playerId, slotId, replacementId))}
+          onConfirmReview={(playerId) => updateActiveRoom((room) => confirmRoomReview(room, playerId))}
           onDrawCoaches={(playerId) => updateActiveRoom((room) => drawRoomCoaches(room, playerId))}
           onChooseCoach={(playerId, coachId) => updateActiveRoom((room) => chooseRoomCoach(room, playerId, coachId))}
           onPlayerReady={handlePlayerReady}
@@ -927,6 +930,7 @@ function ActiveRoomPanel({
   onReviewSlotChange,
   onMovePick,
   onReplacePick,
+  onConfirmReview,
   onDrawCoaches,
   onChooseCoach,
   onPlayerReady,
@@ -957,6 +961,7 @@ function ActiveRoomPanel({
   onReviewSlotChange: (slotId?: string) => void;
   onMovePick: (playerId: string, fromSlotId: string, toSlotId: string) => void;
   onReplacePick: (playerId: string, slotId: string, replacementId: string) => void;
+  onConfirmReview: (playerId: string) => void;
   onDrawCoaches: (playerId: string) => void;
   onChooseCoach: (playerId: string, coachId: string) => void;
   onPlayerReady: (playerId: string, ready: boolean) => void;
@@ -1043,6 +1048,7 @@ function ActiveRoomPanel({
           onSelectSlot={onReviewSlotChange}
           onMovePick={onMovePick}
           onReplacePick={onReplacePick}
+          onConfirmReview={onConfirmReview}
         />
       )}
 
@@ -1555,12 +1561,16 @@ function PenaltyChallengePanel({
 
   useEffect(() => {
     if (!canShoot) return;
-    const timer = window.setInterval(() => {
-      const phase = (Date.now() % 1800) / 1800;
+    let frame = 0;
+    const startedAt = performance.now();
+    const animate = (timestamp: number) => {
+      const phase = ((timestamp - startedAt) % 1800) / 1800;
       const wave = phase <= 0.5 ? phase * 2 : (1 - phase) * 2;
       setAccuracy(Math.round(8 + wave * 92));
-    }, 45);
-    return () => window.clearInterval(timer);
+      frame = window.requestAnimationFrame(animate);
+    };
+    frame = window.requestAnimationFrame(animate);
+    return () => window.cancelAnimationFrame(frame);
   }, [canShoot]);
 
   useEffect(() => {
@@ -1628,8 +1638,11 @@ function PenaltyChallengePanel({
                   <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.16em]">
                     <span>Precisao</span><span>{accuracy}%</span>
                   </div>
-                  <div className="relative mt-2 h-5 overflow-hidden border-2 border-black bg-[linear-gradient(90deg,#c73333_0%,#e26a3d_30%,#e4b739_55%,#13a86b_80%,#087248_100%)]">
-                    <div className="absolute inset-y-[-3px] w-1.5 -translate-x-1/2 bg-white shadow-[0_0_0_2px_#000] transition-[left] duration-75" style={{ left: `${accuracy}%` }} />
+                  <div
+                    className="relative mt-2 h-6 overflow-hidden border-2 border-black"
+                    style={{ background: "linear-gradient(90deg, #c73333 0%, #e26a3d 30%, #e4b739 55%, #13a86b 80%, #087248 100%)" }}
+                  >
+                    <div className="absolute inset-y-[-3px] w-2 -translate-x-1/2 bg-black shadow-[0_0_0_2px_#fff]" style={{ left: `${accuracy}%` }} />
                   </div>
                   <div className="mt-1 flex justify-between text-[9px] font-black uppercase tracking-[0.12em] text-[var(--muted)]">
                     <span>Baixa</span><span>Alta</span>
@@ -1717,7 +1730,8 @@ function ReviewPanel({
   selectedSlotId,
   onSelectSlot,
   onMovePick,
-  onReplacePick
+  onReplacePick,
+  onConfirmReview
 }: {
   room: FriendRoom;
   currentPlayer?: RoomPlayer;
@@ -1726,6 +1740,7 @@ function ReviewPanel({
   onSelectSlot: (slotId?: string) => void;
   onMovePick: (playerId: string, fromSlotId: string, toSlotId: string) => void;
   onReplacePick: (playerId: string, slotId: string, replacementId: string) => void;
+  onConfirmReview: (playerId: string) => void;
 }) {
   const fieldPlayer = currentPlayer ?? room.players[0];
   const replacementUsed = Boolean(currentPlayer && room.reviewSwapUsedByPlayer[currentPlayer.id]);
@@ -1774,15 +1789,20 @@ function ReviewPanel({
       <aside className="space-y-4">
         <div className="rounded-lg border border-gold/25 bg-gold/10 p-5 shadow-card">
           <p className="text-xs font-black uppercase tracking-[0.22em] text-gold">Ajuste final</p>
-          <h3 className="mt-2 text-3xl font-black">Uma troca em 30 segundos</h3>
-          <p className="mt-2 text-sm text-slate-300">Clique em um jogador ja escalado e escolha um dos 10 substitutos compativeis. Depois da troca, o elenco fica confirmado.</p>
-          <div className="mt-4">
+          <h3 className="mt-2 text-3xl font-black">Uma troca opcional em 30 segundos</h3>
+          <p className="mt-2 text-sm text-[var(--muted)]">Troque um jogador ou confirme seu elenco. Quando todos confirmarem, a escolha dos tecnicos comeca imediatamente.</p>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <TimerPill seconds={reviewRemaining} icon={<Clock size={16} />} />
+            {currentPlayer && !replacementUsed && (
+              <Button onClick={() => { onSelectSlot(undefined); onConfirmReview(currentPlayer.id); }}>
+                <Check size={17} /> Confirmar elenco
+              </Button>
+            )}
           </div>
         </div>
         {currentPlayer && replacementUsed && (
           <div className="border border-[var(--success)] bg-[var(--success)]/10 p-5 text-sm font-black text-black">
-            Troca concluida. Seu elenco esta confirmado.
+            Seu elenco esta confirmado. Aguardando os demais jogadores.
           </div>
         )}
         {currentPlayer && selectedSlot && !replacementUsed && (
@@ -2061,6 +2081,7 @@ function RoomBracket({
   const [showResultOverlay, setShowResultOverlay] = useState(true);
   const onPlayMatchRef = useRef(onPlayMatch);
   const onProgressRoundRef = useRef(onProgressRound);
+  const timelineRef = useRef<HTMLDivElement>(null);
   const visibleEvents = presentation?.events.slice(0, presentation.visible) ?? [];
   const lastVisibleEvent = visibleEvents.at(-1);
   const interactionPending = Boolean(
@@ -2101,6 +2122,15 @@ function RoomBracket({
   useEffect(() => {
     onProgressRoundRef.current = onProgressRound;
   }, [onProgressRound]);
+
+  useEffect(() => {
+    const timeline = timelineRef.current;
+    if (!timeline) return;
+    const frame = window.requestAnimationFrame(() => {
+      timeline.scrollTo({ top: timeline.scrollHeight, behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [interactionChoices, visibleEvents.length]);
 
   useEffect(() => {
     if (!presentation || interactionPending) return;
@@ -2206,7 +2236,7 @@ function RoomBracket({
               <div className="h-1.5 bg-white/10">
                 <div className="h-full rounded-r-full bg-gradient-to-r from-electric to-gold transition-all" style={{ width: `${presentationProgress}%` }} />
               </div>
-              <div className="grid max-h-[190px] overflow-y-auto p-3 game-scrollbar">
+              <div ref={timelineRef} className="grid max-h-[190px] overflow-y-auto p-3 game-scrollbar" aria-live="polite">
                 {visibleEvents.map((event, index) => (
                   <div key={`${event.minute}-${index}`} className={cn("grid grid-cols-[3rem_auto_minmax(0,1fr)] items-center gap-3 border-b px-2 py-2.5 text-sm", event.text.startsWith("Gol") || event.kind === "penalty" ? "border-[var(--warning)]/40 bg-[var(--warning)]/10 font-bold" : event.kind === "decision" ? "border-[var(--success)]/30 bg-[color-mix(in_srgb,var(--success)_8%,transparent)]" : "border-black/10")}>
                     <span className="font-mono font-black text-black">{event.minute}&apos;</span>
@@ -2437,6 +2467,8 @@ function RoomResultOverlay({
 
   return (
     <div className="room-result-backdrop fixed inset-0 z-[100] grid overflow-y-auto bg-black/75 p-4 sm:p-8" role="dialog" aria-modal="true" aria-label="Resultado final da sala">
+      {champion && <ChampionSound eventId={`online-${room.id}-${finalMatch?.id ?? room.champion ?? "final"}`} />}
+      {!champion && <EliminatedSound eventId={`online-${room.id}-${matches.at(-1)?.id ?? player.id}`} />}
       <section className="room-result-panel m-auto w-full max-w-5xl border border-black bg-[var(--background)] text-black shadow-2xl">
         <div className="grid items-center border-b border-black md:grid-cols-[1.2fr_.8fr]">
           <div className="p-6 sm:p-9">

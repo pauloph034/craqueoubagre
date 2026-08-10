@@ -1,6 +1,7 @@
 "use client";
 
 import { TeamNameWithCrest } from "@/components/game/TeamNameWithCrest";
+import { ChampionSound, EliminatedSound } from "@/components/game/ChampionSound";
 import {
   MatchDecisionPrompt,
   PenaltyTakerPrompt,
@@ -12,7 +13,7 @@ import { useGameStore } from "@/stores/game-store";
 import type { BracketMatch, GroupStanding, MatchEvent, MatchResult } from "@/types/game";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type TimelineItem = {
   id: string;
@@ -250,9 +251,15 @@ export default function CampaignPage() {
           <LiveMatchCard match={displayActiveMatch ?? activeMatch} timeline={timeline} revealed={revealed} teamName={displayTeamName} minute={liveMinute} speed={matchSpeed} onSpeedChange={setMatchSpeed} />
         </section>
       ) : phase === "campaignFinished" && summary?.champion ? (
-        <ChampionCelebration teamName={displayTeamName} />
+        <>
+          <ChampionSound eventId={`solo-${summary.id}`} />
+          <ChampionCelebration teamName={displayTeamName} />
+        </>
       ) : phase === "campaignFinished" && displaySummaryBracket?.length ? (
-        <KnockoutBracket bracket={displaySummaryBracket} champion={displayTournamentChampion} customTeamName={displayTeamName} emblemId={currentUser?.emblemId} />
+        <>
+          {summary && <EliminatedSound eventId={`solo-${summary.id}`} />}
+          <KnockoutBracket bracket={displaySummaryBracket} champion={displayTournamentChampion} customTeamName={displayTeamName} emblemId={currentUser?.emblemId} />
+        </>
       ) : inKnockout ? (
         <KnockoutRoad
           teamName={displayTeamName}
@@ -770,10 +777,19 @@ function LiveMatchCard({
   onNextMatch?: () => void;
 }) {
   const visible = timeline.slice(0, revealed);
+  const timelineRef = useRef<HTMLOListElement>(null);
   const finished = visible.some((item) => item.kind === "fulltime");
   const userGoals = finished ? match.userGoals : visible.filter((item) => isScoringEvent(item.event) && item.event?.team === "user").length;
   const opponentGoals = finished ? match.opponentGoals : visible.filter((item) => isScoringEvent(item.event) && item.event?.team === "opponent").length;
   const progress = Math.min(100, Math.round((minute / (match.events.some((event) => event.minute > 90) ? 120 : 90)) * 100));
+  useEffect(() => {
+    const timelineElement = timelineRef.current;
+    if (!timelineElement) return;
+    const frame = window.requestAnimationFrame(() => {
+      timelineElement.scrollTo({ top: timelineElement.scrollHeight, behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [visible.length]);
   return (
     <article className="overflow-hidden border border-sky-200/10 bg-black/30">
       <div className="p-4">
@@ -806,7 +822,7 @@ function LiveMatchCard({
       </div>
 
       <div className="border-t border-black/10 p-4">
-        <ol className="game-scrollbar max-h-[300px] space-y-1 overflow-y-auto pr-1" aria-label="Linha do tempo da partida">
+        <ol ref={timelineRef} className="game-scrollbar max-h-[300px] space-y-1 overflow-y-auto pr-1" aria-label="Linha do tempo da partida" aria-live="polite">
           {visible.map((item, index) => (
             <li key={`${item.minute}-${index}`} className={`grid grid-cols-[2.8rem_auto_minmax(0,1fr)] items-center gap-3 border-b px-2 py-2.5 text-sm transition ${isScoringEvent(item.event) ? "border-[var(--warning)]/40 bg-[var(--warning)]/10 font-bold" : item.kind === "decision" ? "border-[var(--success)]/30 bg-[color-mix(in_srgb,var(--success)_8%,transparent)]" : "border-black/10"}`}>
               <span className="font-mono text-xs font-black text-black">{item.minute}'</span>
