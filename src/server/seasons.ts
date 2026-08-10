@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { clubSeasons, opponents, players } from "@/data/loaders";
 import { getFormationSlots } from "@/config/formations";
-import { SEASON_MATCH_LIMIT, SEASON_REROLL_LIMIT, SEASON_SWAP_LIMIT } from "@/config/seasons-balance";
+import { SEASON_MATCH_LIMIT, SEASON_REROLL_LIMIT, SEASON_SWAP_LIMIT, seasonDifficulty, seasonOpponentAdjustment } from "@/config/seasons-balance";
 import { calculatePositionFit } from "@/game-engine/position-fit";
 import { calculateTeamRating } from "@/game-engine/team-rating";
 import { createRng } from "@/game-engine/rng";
@@ -257,7 +257,7 @@ export async function playRankedMatch(user: UserAccount, idempotencyKey: string)
       rng,
       squad: season.squadSnapshot,
       tacticalStyle: season.tacticalStyle,
-      difficulty: divisionDifficulty(season.division),
+      difficulty: seasonDifficulty(season.division),
       opponent,
       phase: `Temporada ${season.seasonNumber} - J${season.matchesPlayed + 1}`,
       knockout: false
@@ -443,36 +443,33 @@ function buildTransferOffer(season: RankedSeason): SeasonTransferOffer {
 
 async function selectOpponent(username: string, season: RankedSeason) {
   const allSeasons = await listRankedSeasons();
+  const userRating = calculateTeamRating(season.squadSnapshot);
+  const target = Math.min(96, Math.max(72, userRating + seasonOpponentAdjustment(season.division)));
   const candidates = allSeasons.filter(
     (item) => item.username.toLowerCase() !== username.toLowerCase() && item.division === season.division && item.squadSnapshot.length === 11
   );
-  if (candidates.length > 0) {
+  const comparableCandidates = candidates
+    .map((item) => ({ item, strength: calculateTeamRating(item.squadSnapshot) }))
+    .filter(({ strength }) => Math.abs(strength - target) <= 4);
+  if (comparableCandidates.length > 0) {
     const rng = createRng(`${season.id}-opponent-${season.matchesPlayed}`);
-    const selected = rng.pick(candidates);
+    const selectedEntry = rng.pick(comparableCandidates);
+    const selected = selectedEntry.item;
     const users = await listPublicUsers();
     const account = users.find((user) => user.username.toLowerCase() === selected.username.toLowerCase());
     return {
       id: `player-${selected.username}`,
       name: account?.teamName?.trim() || `${maskUsername(selected.username)} FC`,
-      strength: calculateTeamRating(selected.squadSnapshot),
+      strength: selectedEntry.strength,
       username: selected.username
     };
   }
   const rng = createRng(`${season.id}-historical-${season.matchesPlayed}`);
-  const userRating = calculateTeamRating(season.squadSnapshot);
-  const target = Math.min(96, Math.max(72, userRating + divisionPower(season.division)));
-  const pool = opponents.filter((opponent) => Math.abs(opponent.strength - target) <= 5);
-  const selected = rng.pick(pool.length ? pool : opponents);
+  const pool = opponents.filter((opponent) => Math.abs(opponent.strength - target) <= 3);
+  const nearestGap = Math.min(...opponents.map((opponent) => Math.abs(opponent.strength - target)));
+  const nearest = opponents.filter((opponent) => Math.abs(opponent.strength - target) === nearestGap);
+  const selected = rng.pick(pool.length ? pool : nearest);
   return { ...selected, username: undefined };
-}
-
-function divisionPower(division: RankedDivision) {
-  if (division === "lenda") return 8;
-  return Math.round((10 - division) * 0.9);
-}
-
-function divisionDifficulty(division: RankedDivision) {
-  return division === "lenda" || (typeof division === "number" && division <= 3) ? "lenda" : "classico";
 }
 
 function compareParticipants(a: Omit<SeasonParticipant, "rank">, b: Omit<SeasonParticipant, "rank">) {
