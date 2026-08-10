@@ -5,7 +5,7 @@ import { EmblemPicker } from "@/components/game/EmblemPicker";
 import { TeamEmblem } from "@/components/game/TeamEmblem";
 import { GamePanel } from "@/components/ui/surface";
 import { useGameStore } from "@/stores/game-store";
-import { ChartNoAxesColumnIncreasing, Star, Trophy, X } from "lucide-react";
+import { ChartNoAxesColumnIncreasing, LogIn, Star, Trophy, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { PlayerProgression } from "@/types/game";
@@ -31,6 +31,9 @@ function AccountContent() {
   const updateProfile = useGameStore((state) => state.updateProfile);
   const changePassword = useGameStore((state) => state.changePassword);
   const logout = useGameStore((state) => state.logout);
+  const audioEnabled = useGameStore((state) => state.audioEnabled);
+  const volume = useGameStore((state) => state.volume);
+  const updateSettings = useGameStore((state) => state.updateSettings);
   const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
   const [teamName, setTeamName] = useState("");
@@ -52,6 +55,8 @@ function AccountContent() {
   const teamNameRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const redirectPath = safeRedirect(searchParams.get("redirect"));
+  const googleProfilePending = searchParams.get("google") === "novo";
+  const oauthError = searchParams.get("oauthError");
 
   useEffect(() => {
     setMode(searchParams.get("modo") === "criar" ? "register" : "login");
@@ -133,15 +138,45 @@ function AccountContent() {
     <main className="editorial-shell max-w-5xl py-6">
       <section className="editorial-panel overflow-hidden">
         <div className="grid lg:grid-cols-[.9fr_1fr]">
-          <div className="border-b border-black bg-[var(--accent)] p-6 lg:border-b-0 lg:border-r">
+          <div className="flex flex-col border-b border-black bg-[var(--accent)] p-6 lg:border-b-0 lg:border-r">
             <p className="text-xs font-black uppercase tracking-[0.16em] text-black">Acesso local</p>
             <h1 className="mt-3 font-display text-4xl font-black uppercase leading-[.9] text-black">Sua conta no Craque ou Bagre</h1>
             <p className="mt-4 max-w-xl text-white">Entre para salvar campanhas, taças e histórico do seu clube.</p>
+            <div className="mt-10 border border-black bg-white p-4 text-black lg:mt-auto">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--accent)]">Preferências</p>
+              <div className="mt-3 flex items-center justify-between gap-4 border-b border-black/20 pb-3">
+                <div>
+                  <p className="text-sm font-black">Áudio do jogo</p>
+                  <p className="text-[11px] text-[var(--muted)]">Efeitos do draft e das partidas.</p>
+                </div>
+                <label className="flex items-center gap-2 text-[10px] font-black uppercase">
+                  <input type="checkbox" checked={audioEnabled} onChange={(event) => updateSettings({ audioEnabled: event.target.checked })} />
+                  Ativado
+                </label>
+              </div>
+              <label className="mt-3 grid gap-2 text-xs font-black">
+                Volume
+                <input type="range" min="0" max="1" step="0.05" value={volume} onChange={(event) => updateSettings({ volume: Number(event.target.value) })} />
+              </label>
+              <button
+                type="button"
+                className="mt-4 text-[10px] font-black uppercase underline underline-offset-4 hover:text-[var(--accent)]"
+                onClick={() => window.localStorage.clear()}
+              >
+                Limpar dados locais
+              </button>
+            </div>
           </div>
 
           <div className="p-6 md:p-8">
             {currentUser ? (
               <div className="border border-black bg-white p-5">
+                {googleProfilePending && (
+                  <div className="mb-5 border border-black bg-[var(--accent)] p-4 text-black">
+                    <p className="text-xs font-black uppercase tracking-[0.14em]">Conta Google conectada</p>
+                    <p className="mt-1 text-sm">Complete o nome do time, escudo e pais para liberar todos os modos.</p>
+                  </div>
+                )}
                 <p className="text-sm text-slate-400">Logado como</p>
                 <div className="mt-2 flex items-center gap-3">
                   <TeamEmblem emblemId={profileEmblemId} teamName={displayTeamName} size={54} />
@@ -240,7 +275,21 @@ function AccountContent() {
                   </button>
                 </div>
 
-                <form className="mt-5 border border-black/20 bg-[var(--surface-muted)] p-5" autoComplete="off" onSubmit={(event) => { event.preventDefault(); submit(); }}>
+                <a
+                  className="mt-5 flex min-h-12 w-full items-center justify-center gap-3 border border-black bg-white px-4 font-black text-black transition-colors hover:bg-[var(--surface-muted)]"
+                  href={`/api/auth/google/start${redirectPath ? `?redirect=${encodeURIComponent(redirectPath)}` : ""}`}
+                >
+                  <LogIn className="h-5 w-5 text-[var(--accent)]" aria-hidden="true" />
+                  Continuar com Google
+                </a>
+                <div className="my-4 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--muted)]">
+                  <span className="h-px flex-1 bg-black/20" />
+                  ou use usuario e senha
+                  <span className="h-px flex-1 bg-black/20" />
+                </div>
+                {oauthError && <p className="border border-red-700 bg-red-50 p-3 text-sm font-bold text-red-800">{oauthError}</p>}
+
+                <form className="border border-black/20 bg-[var(--surface-muted)] p-5" autoComplete="off" onSubmit={(event) => { event.preventDefault(); submit(); }}>
                   <input className="hidden" name="fake-user" type="text" autoComplete="off" tabIndex={-1} />
                   <input className="hidden" name="fake-pass" type="password" autoComplete="new-password" tabIndex={-1} />
                   <label className="grid gap-2 text-sm font-semibold text-slate-200">

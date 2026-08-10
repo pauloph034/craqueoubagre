@@ -85,8 +85,8 @@ export function AppHeader() {
                 {label}
               </Link>
             ))}
-            <Link href="/configuracoes" className={cn("flex items-center gap-2 border-b border-r border-black px-3 py-3 text-xs font-black uppercase", isActive("/configuracoes") && "bg-[var(--accent)] text-white")} onClick={() => setMenuOpen(false)}>
-              <Settings size={14} /> Configurações
+            <Link href="/conta" className={cn("flex items-center gap-2 border-b border-r border-black px-3 py-3 text-xs font-black uppercase", isActive("/conta") && "bg-[var(--accent)] text-white")} onClick={() => setMenuOpen(false)}>
+              <Settings size={14} /> Conta
             </Link>
             {currentUser?.role === "admin" && <Link href="/admin/dados" className="border-b border-r border-black px-3 py-3 text-xs font-black uppercase text-[var(--accent)]" onClick={() => setMenuOpen(false)}>Admin</Link>}
           </div>
@@ -112,10 +112,10 @@ export function AppHeader() {
 function SettingsLink() {
   return (
     <Link
-      href="/configuracoes"
+      href="/conta"
       className="grid h-8 w-8 place-items-center border border-black text-black transition hover:bg-black hover:text-white"
-      aria-label="Configurações"
-      title="Configurações"
+      aria-label="Conta e configurações"
+      title="Conta e configurações"
     >
       <Settings size={15} aria-hidden="true" />
     </Link>

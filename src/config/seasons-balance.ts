@@ -1,3 +1,4 @@
+import type { Difficulty } from "@/types/game";
 import type { RankedDivision } from "@/types/seasons";
 
 export const SEASON_MATCH_LIMIT = 8;
@@ -39,4 +40,26 @@ export const seasonXp = {
 
 export function thresholdsFor(division: RankedDivision) {
   return divisionThresholds[String(division)]!;
+}
+
+const opponentAdjustment: Record<string, number> = {
+  "10": -5,
+  "9": -4,
+  "8": -3,
+  "7": -2,
+  "6": -1,
+  "5": 0,
+  "4": 1,
+  "3": 0,
+  "2": 2,
+  "1": 4,
+  lenda: 6
+};
+
+export function seasonOpponentAdjustment(division: RankedDivision) {
+  return opponentAdjustment[String(division)] ?? 0;
+}
+
+export function seasonDifficulty(division: RankedDivision): Difficulty {
+  return division === "lenda" || (typeof division === "number" && division <= 3) ? "lenda" : "classico";
 }
