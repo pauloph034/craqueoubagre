@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { players } from "../src/data/loaders";
-import { autoCompleteRoomDraft, autoPickRoomPlayer, autoPickRoomTurn, chooseRoomCoach, chooseRoomLegend, createFriendRoom, drawRoomCoaches, drawRoomTeam, joinRoom, normalizeFriendRooms, placeRoomPlayer, playPlayerRoomMatch, previewPlayerRoomMatch, progressRoomRound, replaceRoomPick, selectRoomPlayer, setRoomPlayerReady, shootRoomPenalty, startRoomDraft, startRoomCoachStage, type FriendRoom, type RoomDraw } from "../src/lib/friend-rooms";
+import { activateRoomSecretCard, autoCompleteRoomDraft, autoPickRoomPlayer, autoPickRoomTurn, chooseRoomCoach, chooseRoomLegend, chooseRoomSecretCard, confirmRoomReview, createFriendRoom, drawRoomCoaches, drawRoomTeam, joinRoom, normalizeFriendRooms, placeRoomPlayer, playPlayerRoomMatch, previewPlayerRoomMatch, progressRoomRound, replaceRoomPick, selectRoomPlayer, setRoomPlayerReady, shootRoomPenalty, startRoomDraft, startRoomCoachStage, type FriendRoom, type RoomDraw } from "../src/lib/friend-rooms";
 
 function test(name: string, fn: () => void) {
   fn();
@@ -35,6 +35,48 @@ test("salas vazias sao removidas automaticamente", () => {
     turnSeconds: 30
   });
   assert.equal(normalizeFriendRooms([{ ...room, players: [] }]).length, 0);
+});
+
+test("penalti com precisao de ate 35 por cento sempre e defendido", () => {
+  let room = createFriendRoom({
+    name: "Teste de penalti",
+    hostName: "Paulo",
+    hostTeamName: "Sergipe FC",
+    visibility: "publica",
+    difficulty: "classico",
+    draftMode: "turnos",
+    simultaneousMinutes: 2,
+    turnSeconds: 30
+  });
+  const playerId = room.players[0]!.id;
+  room = setRoomPlayerReady(room, playerId, true);
+  room = startRoomDraft(room);
+  for (let step = 0; step < 60 && room.status === "drafting"; step++) room = autoPickRoomTurn(room);
+  assert.equal(room.status, "challenge");
+  const afterShot = shootRoomPenalty(room, playerId, "left", 35);
+  assert.equal(afterShot.penaltyShotsByPlayer[playerId]![0]!.scored, false);
+});
+
+test("penalti acima de 85 por cento e gol mesmo com o goleiro no canto", () => {
+  let room = createFriendRoom({
+    name: "Teste de penalti garantido",
+    hostName: "Paulo",
+    hostTeamName: "Sergipe FC",
+    visibility: "publica",
+    difficulty: "classico",
+    draftMode: "turnos",
+    simultaneousMinutes: 2,
+    turnSeconds: 30
+  });
+  const playerId = room.players[0]!.id;
+  room = setRoomPlayerReady(room, playerId, true);
+  room = startRoomDraft(room);
+  for (let step = 0; step < 60 && room.status === "drafting"; step++) room = autoPickRoomTurn(room);
+  assert.equal(room.status, "challenge");
+  const first = shootRoomPenalty(room, playerId, "left", 86);
+  const shot = first.penaltyShotsByPlayer[playerId]![0]!;
+  const result = shootRoomPenalty(room, playerId, shot.keeperDirection, 86);
+  assert.equal(result.penaltyShotsByPlayer[playerId]![0]!.scored, true);
 });
 
 test("draft permite trocar jogador pendente antes de colocar na escalação", () => {
@@ -157,7 +199,7 @@ test("tecnicos da sala carregam temporada para mostrar escudo", () => {
   assert.equal(room.players[0]?.squad[1]?.effectiveRating, 80);
 });
 
-test("draft por turnos sorteia times, revisa elenco, escolhe tecnico e gera chave", () => {
+test("draft por turnos sorteia times, revisa elenco, escolhe tecnico, carta e gera chave", () => {
   let room = createFriendRoom({
     name: "Mata-mata",
     hostName: "Paulo",
@@ -189,10 +231,33 @@ test("draft por turnos sorteia times, revisa elenco, escolhe tecnico e gera chav
   assert.equal(room.players.every((player) => player.squad.length === 11), true);
   room = startRoomCoachStage(room);
   room = chooseCoaches(room);
+  assert.equal(room.status, "cards");
+  assert.equal(room.players.every((player) => room.cardOptionsByPlayer[player.id]?.length === 1), true);
+  assert.equal(room.players.every((player) => Boolean(room.selectedCardByPlayer[player.id])), true);
+  room = chooseCards(room);
   assert.equal(room.status, "bracket");
   assert.equal(room.bracket.filter((match) => match.phase === "Oitavas de final").length, 8);
   assert.equal(room.bracket.every((match) => match.status === "pending"), true);
   const firstPlayer = room.players[0]!;
+  room = {
+    ...room,
+    selectedCardByPlayer: { ...room.selectedCardByPlayer, [firstPlayer.id]: "perfect-night" },
+    cardActivationByPlayer: Object.fromEntries(
+      Object.entries(room.cardActivationByPlayer).filter(([playerId]) => playerId !== firstPlayer.id)
+    )
+  };
+  const playerMatchBeforeCard = room.bracket.find((match) => match.status === "pending" && (match.homePlayerId === firstPlayer.id || match.awayPlayerId === firstPlayer.id))!;
+  const playerStrengthBeforeCard = playerMatchBeforeCard.homePlayerId === firstPlayer.id ? playerMatchBeforeCard.homeStrength : playerMatchBeforeCard.awayStrength;
+  assert.ok(playerStrengthBeforeCard !== undefined);
+  room = activateRoomSecretCard(room, firstPlayer.id);
+  const playerMatchAfterCard = room.bracket.find((match) => match.id === playerMatchBeforeCard.id)!;
+  const playerStrengthAfterCard = playerMatchAfterCard.homePlayerId === firstPlayer.id ? playerMatchAfterCard.homeStrength : playerMatchAfterCard.awayStrength;
+  assert.equal(playerStrengthAfterCard, playerStrengthBeforeCard + 5);
+  assert.equal(room.cardActivationByPlayer[firstPlayer.id]?.cardId, "perfect-night");
+  room = activateRoomSecretCard(room, firstPlayer.id);
+  const playerMatchAfterSecondUse = room.bracket.find((match) => match.id === playerMatchBeforeCard.id)!;
+  const playerStrengthAfterSecondUse = playerMatchAfterSecondUse.homePlayerId === firstPlayer.id ? playerMatchAfterSecondUse.homeStrength : playerMatchAfterSecondUse.awayStrength;
+  assert.equal(playerStrengthAfterSecondUse, playerStrengthAfterCard);
   const preview = previewPlayerRoomMatch(room, firstPlayer.id);
   assert.ok(preview);
   const afterMatch = playPlayerRoomMatch(room, firstPlayer.id);
@@ -226,6 +291,8 @@ test("auto completar preenche participantes e mata-mata com 16 times", () => {
   assert.equal(room.players.every((player) => player.squad.length === 11), true);
   assert.equal(room.status, "coach");
   room = chooseCoaches(room);
+  assert.equal(room.status, "cards");
+  room = chooseCards(room);
   assert.equal(room.status, "bracket");
   assert.equal(room.bracket.filter((match) => match.phase === "Oitavas de final").length, 8);
   assert.equal(room.bracket.length, 8);
@@ -238,6 +305,16 @@ function chooseCoaches(room: FriendRoom) {
     const option = next.coachOptionsByPlayer[player.id]?.[0];
     assert.ok(option);
     next = chooseRoomCoach(next, player.id, option.id);
+  }
+  return next;
+}
+
+function chooseCards(room: FriendRoom) {
+  let next = room;
+  for (const player of next.players) {
+    const option = next.selectedCardByPlayer[player.id];
+    assert.ok(option);
+    next = chooseRoomSecretCard(next, player.id, option);
   }
   return next;
 }
@@ -257,6 +334,7 @@ function finishPenaltyChallenge(room: FriendRoom) {
   assert.ok(next.penaltyWinnerId);
   assert.equal(next.legendOptions.length, 5);
   assert.equal(next.legendOptions.every((pick) => pick.overall === 99 && pick.effectiveRating === 99), true);
+  assert.equal(new Set(next.legendOptions.map((pick) => pick.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase())).size, next.legendOptions.length);
   return chooseRoomLegend(next, next.penaltyWinnerId, next.legendOptions[0]!.id);
 }
 
@@ -440,6 +518,8 @@ test("revisao online dura 30 segundos e permite substituir por jogador compative
   assert.equal(room.status, "reviewing");
   assert.ok((room.reviewEndsAt ?? 0) - Date.now() > 28_000);
   const currentPlayer = room.players[0]!;
+  const confirmedWithoutSwap = confirmRoomReview(room, currentPlayer.id);
+  assert.equal(confirmedWithoutSwap.status, "coach");
   const slot = currentPlayer.squad.find((pick) => pick.slotId)?.slotId;
   assert.ok(slot);
   const used = new Set(currentPlayer.squad.map((pick) => pick.canonicalPlayerId));

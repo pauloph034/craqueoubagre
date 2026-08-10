@@ -1,5 +1,7 @@
 ﻿import assert from "node:assert/strict";
 import { difficultyRules } from "../src/config/game-balance";
+import { seasonDifficulty, seasonOpponentAdjustment } from "../src/config/seasons-balance";
+import { googlePlayerName, googleUsername, linkedGoogleUsername, safeOAuthRedirect } from "../src/server/google-oauth";
 import { formations } from "../src/config/formations";
 import { clubSeasons, opponents, players } from "../src/data/loaders";
 import { coaches } from "../src/data/coaches";
@@ -414,6 +416,42 @@ test("temporadas usa oito jogos e progressao configurada", () => {
   assert.equal(nextDivision(1, "champion"), "lenda");
   assert.equal(seasonOutcome("lenda", 24), "legend-perfect");
   assert.equal(nextDivision("lenda", "relegated"), 1);
+});
+
+test("temporadas aumenta a dificuldade conforme a divisao", () => {
+  assert.equal(seasonOpponentAdjustment(10), -5);
+  assert.equal(seasonOpponentAdjustment(9), -4);
+  assert.ok(seasonOpponentAdjustment(8) < seasonOpponentAdjustment(5));
+  assert.ok(seasonOpponentAdjustment(5) < seasonOpponentAdjustment(1));
+  assert.ok(seasonOpponentAdjustment(1) < seasonOpponentAdjustment("lenda"));
+  assert.equal(seasonDifficulty(9), "classico");
+  assert.equal(seasonDifficulty(3), "lenda");
+});
+
+test("login Google gera identidade interna estavel e redirecionamento seguro", () => {
+  assert.equal(googleUsername("google-user-123"), googleUsername("google-user-123"));
+  assert.notEqual(googleUsername("google-user-123"), googleUsername("google-user-456"));
+  assert.equal(googlePlayerName({ id: "1", email: "craque@example.com", user_metadata: {} }), "craque");
+  assert.equal(googlePlayerName({ id: "1", user_metadata: { full_name: "Paulo Rocha" } }), "Paulo Rocha");
+  assert.equal(safeOAuthRedirect("/temporadas"), "/temporadas");
+  assert.equal(safeOAuthRedirect("https://site-malicioso.test"), "/conta");
+  assert.equal(
+    linkedGoogleUsername(
+      { id: "1", email: "PauloPH034@Gmail.com", email_confirmed_at: "2026-08-10T12:00:00.000Z" },
+      "pauloph034@gmail.com",
+      "admin"
+    ),
+    "admin"
+  );
+  assert.equal(linkedGoogleUsername({ id: "1", email: "pauloph034@gmail.com" }, "pauloph034@gmail.com", "admin"), undefined);
+  assert.equal(
+    linkedGoogleUsername(
+      { id: "2", email: "outra-conta@gmail.com", email_confirmed_at: "2026-08-10T12:00:00.000Z" },
+      "pauloph034@gmail.com",
+      "admin"
+    ),
+    undefined
+  );
 });
 
 test("XP de temporadas diferencia resultado e recompensa final", () => {
