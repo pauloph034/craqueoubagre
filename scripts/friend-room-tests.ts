@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { players } from "../src/data/loaders";
-import { autoCompleteRoomDraft, autoPickRoomPlayer, autoPickRoomTurn, chooseRoomCoach, createFriendRoom, drawRoomCoaches, drawRoomTeam, joinRoom, normalizeFriendRooms, placeRoomPlayer, playPlayerRoomMatch, previewPlayerRoomMatch, progressRoomRound, replaceRoomPick, selectRoomPlayer, setRoomPlayerReady, startRoomDraft, startRoomCoachStage, type FriendRoom, type RoomDraw } from "../src/lib/friend-rooms";
+import { autoCompleteRoomDraft, autoPickRoomPlayer, autoPickRoomTurn, chooseRoomCoach, chooseRoomLegend, createFriendRoom, drawRoomCoaches, drawRoomTeam, joinRoom, normalizeFriendRooms, placeRoomPlayer, playPlayerRoomMatch, previewPlayerRoomMatch, progressRoomRound, replaceRoomPick, selectRoomPlayer, setRoomPlayerReady, shootRoomPenalty, startRoomDraft, startRoomCoachStage, type FriendRoom, type RoomDraw } from "../src/lib/friend-rooms";
 
 function test(name: string, fn: () => void) {
   fn();
@@ -182,6 +182,9 @@ test("draft por turnos sorteia times, revisa elenco, escolhe tecnico e gera chav
     room = autoPickRoomTurn(room);
   }
 
+  assert.equal(room.status, "challenge");
+  room = finishPenaltyChallenge(room);
+  for (let i = 0; i < 20 && room.status === "drafting"; i++) room = autoPickRoomTurn(room);
   assert.equal(room.status, "reviewing");
   assert.equal(room.players.every((player) => player.squad.length === 11), true);
   room = startRoomCoachStage(room);
@@ -237,6 +240,24 @@ function chooseCoaches(room: FriendRoom) {
     next = chooseRoomCoach(next, player.id, option.id);
   }
   return next;
+}
+
+function finishPenaltyChallenge(room: FriendRoom) {
+  let next = room;
+  for (let roundStep = 0; roundStep < 5 && next.status === "challenge" && !next.penaltyWinnerId; roundStep++) {
+    const round = next.penaltyRound;
+    const required = round === 0 ? 3 : 1;
+    const eligible = [...next.penaltyEligiblePlayerIds];
+    for (const playerId of eligible) {
+      while ((next.penaltyShotsByPlayer[playerId] ?? []).filter((shot) => shot.round === round).length < required) {
+        next = shootRoomPenalty(next, playerId, "center", 100);
+      }
+    }
+  }
+  assert.ok(next.penaltyWinnerId);
+  assert.equal(next.legendOptions.length, 5);
+  assert.equal(next.legendOptions.every((pick) => pick.overall === 99 && pick.effectiveRating === 99), true);
+  return chooseRoomLegend(next, next.penaltyWinnerId, next.legendOptions[0]!.id);
 }
 
 function finishBracket(room: FriendRoom) {
@@ -295,7 +316,7 @@ test("draft online permite somente 3 rerolls durante todo o draft", () => {
   assert.ok(firstClub);
 });
 
-test("draft por turnos respeita rodadas 3 mais 3 e fecha com 2", () => {
+test("draft por turnos respeita rodadas de 3, fecha 10 e libera o desafio", () => {
   let room = createFriendRoom({
     name: "Turnos",
     hostName: "Paulo",
@@ -319,6 +340,14 @@ test("draft por turnos respeita rodadas 3 mais 3 e fecha com 2", () => {
     assert.ok(room.players.every((player) => player.squad.length <= 11));
   }
 
+  assert.equal(room.players.every((player) => player.squad.length === 10), true);
+  assert.equal(room.status, "challenge");
+  assert.equal((room.penaltyEndsAt ?? 0) - (room.penaltyStartedAt ?? 0), 45_000);
+
+  room = finishPenaltyChallenge(room);
+  assert.equal(room.players.filter((player) => player.squad.length === 11).length, 1);
+  assert.equal(room.players.flatMap((player) => player.squad).some((pick) => pick.overall === 99), true);
+  for (let step = 0; step < 30 && room.status === "drafting"; step++) room = autoPickRoomTurn(room);
   assert.equal(room.players.every((player) => player.squad.length === 11), true);
   assert.equal(room.status, "reviewing");
 });
@@ -338,6 +367,8 @@ test("revisao online permite somente uma troca por jogador", () => {
   room = setRoomPlayerReady(room, playerId, true);
   room = startRoomDraft(room);
   for (let step = 0; step < 80 && room.status === "drafting"; step++) room = autoPickRoomTurn(room);
+  room = finishPenaltyChallenge(room);
+  for (let step = 0; step < 20 && room.status === "drafting"; step++) room = autoPickRoomTurn(room);
   assert.equal(room.status, "reviewing");
 
   const original = room.players[0]!.squad[0]!;
@@ -404,6 +435,8 @@ test("revisao online dura 30 segundos e permite substituir por jogador compative
   room = setRoomPlayerReady(room, player.id, true);
   room = startRoomDraft(room);
   for (let step = 0; step < 40 && room.status === "drafting"; step++) room = autoPickRoomTurn(room);
+  room = finishPenaltyChallenge(room);
+  for (let step = 0; step < 20 && room.status === "drafting"; step++) room = autoPickRoomTurn(room);
   assert.equal(room.status, "reviewing");
   assert.ok((room.reviewEndsAt ?? 0) - Date.now() > 28_000);
   const currentPlayer = room.players[0]!;
