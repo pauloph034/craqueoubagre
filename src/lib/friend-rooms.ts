@@ -636,7 +636,7 @@ export function replaceRoomPick(room: FriendRoom, playerId: string, slotId: stri
   const season = clubSeasons.find((item) => item.id === sourcePlayer.clubSeasonId);
   const placed = assignPickToSlot(toRoomPick(sourcePlayer, season), player, slotId);
   if (!placed) return normalized;
-  return normalizeRoom({
+  const nextRoom = normalizeRoom({
     ...normalized,
     players: normalized.players.map((item) =>
       item.id === playerId
@@ -651,6 +651,20 @@ export function replaceRoomPick(room: FriendRoom, playerId: string, slotId: stri
       [playerId]: true
     }
   });
+  return allRoomReviewsComplete(nextRoom) ? startRoomCoachStage(nextRoom) : nextRoom;
+}
+
+export function confirmRoomReview(room: FriendRoom, playerId: string) {
+  const normalized = normalizeRoom(room);
+  if (normalized.status !== "reviewing" || !normalized.players.some((player) => player.id === playerId)) return normalized;
+  const nextRoom = normalizeRoom({
+    ...normalized,
+    reviewSwapUsedByPlayer: {
+      ...normalized.reviewSwapUsedByPlayer,
+      [playerId]: true
+    }
+  });
+  return allRoomReviewsComplete(nextRoom) ? startRoomCoachStage(nextRoom) : nextRoom;
 }
 
 export function startRoomCoachStage(room: FriendRoom) {
@@ -1487,6 +1501,10 @@ function sameName(a: string, b: string) {
 
 function allSquadsComplete(roomPlayers: RoomPlayer[]) {
   return roomPlayers.length > 0 && roomPlayers.every((player) => player.squad.length >= 11);
+}
+
+function allRoomReviewsComplete(room: FriendRoom) {
+  return room.players.length > 0 && room.players.every((player) => Boolean(room.reviewSwapUsedByPlayer[player.id]));
 }
 
 function beginRoomReview(room: FriendRoom) {
