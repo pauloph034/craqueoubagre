@@ -8,12 +8,17 @@ import { useEffect, useState } from "react";
 
 export default function RankingPage() {
   const [entries, setEntries] = useState<RankingEntry[]>([]);
+  const [weeklyEntries, setWeeklyEntries] = useState<RankingEntry[]>([]);
+  const [view, setView] = useState<"geral" | "semanal">("geral");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/rankings", { cache: "no-store" })
       .then((response) => response.json())
-      .then((data: { rankings?: RankingEntry[] }) => setEntries(data.rankings ?? []))
+      .then((data: { rankings?: RankingEntry[]; weeklyRankings?: RankingEntry[] }) => {
+        setEntries(data.rankings ?? []);
+        setWeeklyEntries(data.weeklyRankings ?? []);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -21,10 +26,14 @@ export default function RankingPage() {
     <main className="editorial-shell max-w-5xl py-6">
       <EditorialPageHeader chapter="Competição" title="Ranking dos jogadores" description="Classificação geral por taças conquistadas e experiência acumulada." />
 
-      <section className="mt-4 overflow-hidden border border-black bg-white">
+      <div className="mt-4 grid grid-cols-2 border border-black bg-white p-1">
+        <button type="button" className={`px-4 py-3 text-xs font-black uppercase ${view === "geral" ? "bg-[var(--success)] text-white" : "text-black"}`} onClick={() => setView("geral")}>Ranking geral</button>
+        <button type="button" className={`px-4 py-3 text-xs font-black uppercase ${view === "semanal" ? "bg-[var(--success)] text-white" : "text-black"}`} onClick={() => setView("semanal")}>Disputa semanal</button>
+      </div>
+      <section className="overflow-hidden border-x border-b border-black bg-white">
         {loading && <p className="p-6 text-sm text-[var(--muted)]">Carregando classificação...</p>}
-        {!loading && entries.length === 0 && <div className="p-4"><EmptyState title="Tabela vazia" description="Ainda não existem campanhas classificadas." /></div>}
-        {entries.map((entry, index) => (
+        {!loading && (view === "geral" ? entries : weeklyEntries).length === 0 && <div className="p-4"><EmptyState title="Tabela vazia" description={view === "geral" ? "Ainda não existem campanhas classificadas." : "Nenhuma disputa multiplayer registrada nesta semana."} /></div>}
+        {(view === "geral" ? entries : weeklyEntries).map((entry, index) => (
           <article key={`${entry.username}-${entry.teamName}-${index}`} className="grid min-h-16 grid-cols-[32px_44px_minmax(0,1fr)_auto] items-center gap-3 border-b border-black/15 px-4 py-2 last:border-0">
             <div
               className={`grid h-8 w-8 place-items-center border border-black text-sm font-black ${

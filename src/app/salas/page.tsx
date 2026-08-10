@@ -22,25 +22,27 @@ import {
   autoPickRoomPlayer,
   autoPickRoomTurn,
   chooseRoomCoach,
+  chooseRoomLegend,
   createFriendRoom,
   currentPlayerRoomMatch,
   drawRoomCoaches,
   drawRoomTeam,
   hasPendingHumanRoomMatches,
   joinRoom,
-  loadFriendRooms,
   moveRoomPick,
   playPlayerRoomMatch,
   placeRoomPlayer,
   previewPlayerRoomMatch,
   progressRoomRound,
   replaceRoomPick,
+  resolveRoomPenaltyTimeout,
   resetRoomToLobby,
   saveFriendRooms,
   selectRoomPlayer,
   setRoomPlayerReady,
   startRoomCoachStage,
   startRoomDraft,
+  shootRoomPenalty,
   touchRoomPlayer,
   updateRoomPlayerSetup,
   updateRoomSettings,
@@ -51,12 +53,13 @@ import {
   type RoomMatch,
   type RoomPick,
   type RoomPlayer,
-  type RoomVisibility
+  type RoomVisibility,
+  type PenaltyDirection
 } from "@/lib/friend-rooms";
 import { cn } from "@/lib/utils";
 import { useGameStore } from "@/stores/game-store";
 import type { CampaignSummary, Position, TacticalStyle } from "@/types/game";
-import { Check, Clock, Dices, Lock, Play, Plus, ShieldCheck, Trophy, Users, Volume2 } from "lucide-react";
+import { Check, CircleDot, Clock, Copy, Crown, Dices, Lock, Play, Plus, ShieldCheck, Trophy, UserX, Users, Volume2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -97,11 +100,18 @@ async function fetchSharedRooms() {
   return Array.isArray(payload.rooms) ? payload.rooms : [];
 }
 
-async function persistSharedRooms(rooms: FriendRoom[]) {
+type RoomConnectionStatus = "syncing" | "connected" | "disconnected";
+const activeFriendRoomStorageKey = "craque-ou-bagre:active-friend-room:v1";
+
+function createActionId() {
+  return globalThis.crypto?.randomUUID?.() ?? `acao-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+async function persistSharedRooms(rooms: FriendRoom[], actionId?: string, actionRoomId?: string) {
   const response = await fetch("/api/friend-rooms", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ rooms })
+    body: JSON.stringify({ rooms, actionId, actionRoomId })
   });
   if (!response.ok) throw new Error("Nao foi possivel salvar as salas.");
   const payload = (await response.json()) as { rooms?: FriendRoom[] };
@@ -115,6 +125,17 @@ async function leaveSharedRoom(roomId: string, playerId?: string) {
     body: JSON.stringify({ roomId, playerId })
   });
   if (!response.ok) throw new Error("Nao foi possivel sair da sala.");
+  const payload = (await response.json()) as { rooms?: FriendRoom[] };
+  return Array.isArray(payload.rooms) ? payload.rooms : [];
+}
+
+async function kickSharedRoomPlayer(roomId: string, kickPlayerId: string) {
+  const response = await fetch("/api/friend-rooms", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ roomId, kickPlayerId })
+  });
+  if (!response.ok) throw new Error("Nao foi possivel remover o jogador.");
   const payload = (await response.json()) as { rooms?: FriendRoom[] };
   return Array.isArray(payload.rooms) ? payload.rooms : [];
 }
@@ -135,7 +156,7 @@ function roomUpdatedTime(room: FriendRoom) {
   return Date.parse(room.updatedAt ?? room.createdAt ?? "") || 0;
 }
 
-function onlineChampionSummary(room: FriendRoom, player: RoomPlayer, username: string): CampaignSummary {
+function onlineRoomSummary(room: FriendRoom, player: RoomPlayer, username: string): CampaignSummary {
   const squad = player.squad.flatMap((pick) => {
     const sourcePlayer = playerData.find((item) => item.id === pick.id || item.canonicalPlayerId === pick.canonicalPlayerId);
     const clubSeason = clubSeasonData.find((item) => item.id === pick.clubSeasonId);
@@ -161,6 +182,9 @@ function onlineChampionSummary(room: FriendRoom, player: RoomPlayer, username: s
     });
   const coachId = room.selectedCoachByPlayer[player.id];
   const coach = (room.coachOptionsByPlayer[player.id] ?? []).find((item) => item.id === coachId);
+  const champion = sameText(room.champion ?? "", player.teamName);
+  const elimination = matches.find((match) => match.userGoals < match.opponentGoals);
+  const stageReached = champion ? "Campeao da sala" : elimination ? `Eliminado em ${elimination.phase}` : "Mata-mata online";
   return {
     id: `online-${room.id}-${player.id}`,
     date: room.updatedAt ?? new Date().toISOString(),
@@ -175,8 +199,8 @@ function onlineChampionSummary(room: FriendRoom, player: RoomPlayer, username: s
     squad,
     coach,
     matches,
-    stageReached: "Campeao da sala",
-    champion: true,
+    stageReached,
+    champion,
     tournamentChampion: player.teamName,
     tournamentBracket: room.bracket.filter((match) => match.status === "done").map((match) => ({
       id: match.id,
@@ -187,8 +211,8 @@ function onlineChampionSummary(room: FriendRoom, player: RoomPlayer, username: s
       awayGoals: match.awayGoals ?? 0,
       winnerName: match.winnerName ?? ""
     })),
-    score: 700 + matches.filter((match) => match.userGoals > match.opponentGoals).length * 100,
-    achievements: ["primeiro-titulo"],
+    score: (champion ? 700 : 120) + matches.filter((match) => match.userGoals > match.opponentGoals).length * 100,
+    achievements: champion ? ["primeiro-titulo", "campeao-online"] : ["estreia-online"],
     rerollsUsed: room.rerollsByPlayer[player.id] ?? 0,
     swapsUsed: 0,
     undoUsed: false
@@ -221,10 +245,12 @@ export default function FriendRoomsPage() {
   const roomsRef = useRef<FriendRoom[]>([]);
   const persistSequenceRef = useRef(0);
   const pendingMutationsRef = useRef(0);
+  const roomMutationInFlightRef = useRef(false);
   const createInFlightRef = useRef(false);
   const hiddenRoomUntilRef = useRef(new Map<string, number>());
   const [creatingRoom, setCreatingRoom] = useState(false);
-  const savedOnlineTrophiesRef = useRef(new Set<string>());
+  const [connectionStatus, setConnectionStatus] = useState<RoomConnectionStatus>("syncing");
+  const savedOnlineResultsRef = useRef(new Set<string>());
 
   const applyRooms = useCallback((nextRooms: FriendRoom[], activeId?: string) => {
     const now = Date.now();
@@ -253,9 +279,10 @@ export default function FriendRoomsPage() {
         const sharedRooms = await fetchSharedRooms();
         if (pendingMutationsRef.current > 0 || sequenceAtStart !== persistSequenceRef.current) return;
         applyRooms(sharedRooms);
+        setConnectionStatus("connected");
       } catch {
         if (pendingMutationsRef.current > 0 || sequenceAtStart !== persistSequenceRef.current) return;
-        applyRooms(mergeLatestRooms(loadFriendRooms(), roomsRef.current));
+        setConnectionStatus("disconnected");
       }
     },
     [applyRooms]
@@ -292,22 +319,34 @@ export default function FriendRoomsPage() {
 
   useEffect(() => {
     if (!currentUser || activeRoom?.status !== "finished" || !activeRoom.champion) return;
-    const champion = activeRoom.champion;
     const playerName = currentUser.playerName?.trim() || currentUser.username;
     const teamName = currentUser.teamName?.trim() || `${playerName} FC`;
-    const winner = activeRoom.players.find((player) => samePlayer(player, playerName, teamName) && sameText(player.teamName, champion));
-    if (!winner) return;
-    const rewardId = `online-${activeRoom.id}-${winner.id}`;
-    if (savedOnlineTrophiesRef.current.has(rewardId)) return;
-    savedOnlineTrophiesRef.current.add(rewardId);
+    const participant = activeRoom.players.find((player) => samePlayer(player, playerName, teamName));
+    if (!participant) return;
+    const rewardId = `online-${activeRoom.id}-${participant.id}`;
+    if (savedOnlineResultsRef.current.has(rewardId)) return;
+    savedOnlineResultsRef.current.add(rewardId);
     void fetch("/api/campaigns", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ summary: onlineChampionSummary(activeRoom, winner, currentUser.username) })
+      body: JSON.stringify({ summary: onlineRoomSummary(activeRoom, participant, currentUser.username) })
     }).then((response) => {
-      if (!response.ok) savedOnlineTrophiesRef.current.delete(rewardId);
-    }).catch(() => savedOnlineTrophiesRef.current.delete(rewardId));
+      if (!response.ok) savedOnlineResultsRef.current.delete(rewardId);
+    }).catch(() => savedOnlineResultsRef.current.delete(rewardId));
   }, [activeRoom, currentUser]);
+
+  useEffect(() => {
+    if (!currentUser || !rooms.length || roomScreen === "room") return;
+    const savedRoomId = window.localStorage.getItem(activeFriendRoomStorageKey);
+    if (!savedRoomId) return;
+    const playerName = currentUser.playerName?.trim() || currentUser.username;
+    const teamName = currentUser.teamName?.trim() || `${playerName} FC`;
+    const savedRoom = rooms.find((room) => room.id === savedRoomId && room.players.some((player) => samePlayer(player, playerName, teamName)));
+    if (!savedRoom) return;
+    setActiveRoomId(savedRoom.id);
+    setRoomScreen("room");
+    setMessage("Progresso recuperado. Voce voltou para a sala.");
+  }, [currentUser, roomScreen, rooms]);
 
   useEffect(() => {
     document.body.classList.toggle("room-focus-mode", roomFocusMode);
@@ -315,18 +354,20 @@ export default function FriendRoomsPage() {
   }, [roomFocusMode]);
 
   const commitRooms = useCallback(
-    async (nextRooms: FriendRoom[], activeId?: string) => {
+    async (nextRooms: FriendRoom[], activeId?: string, actionId = createActionId()) => {
       const cleanRooms = nextRooms.slice(0, 40);
       const sequence = ++persistSequenceRef.current;
       pendingMutationsRef.current += 1;
-      applyRooms(cleanRooms, activeId);
+      setConnectionStatus("syncing");
       try {
-        const sharedRooms = await persistSharedRooms(cleanRooms);
+        const sharedRooms = await persistSharedRooms(cleanRooms, actionId, activeId);
         if (sequence === persistSequenceRef.current) applyRooms(sharedRooms, activeId);
+        setConnectionStatus("connected");
         return sharedRooms;
       } catch {
-        setMessage("Sala salva neste navegador, mas ainda nao sincronizou com as outras abas.");
-        return cleanRooms;
+        setConnectionStatus("disconnected");
+        setMessage("Conexao interrompida. Reconectando automaticamente...");
+        return roomsRef.current;
       } finally {
         pendingMutationsRef.current = Math.max(0, pendingMutationsRef.current - 1);
       }
@@ -334,11 +375,22 @@ export default function FriendRoomsPage() {
     [applyRooms]
   );
 
-  const commitRoom = useCallback((room: FriendRoom) => {
+  const commitRoom = useCallback(async (room: FriendRoom) => {
+    if (roomMutationInFlightRef.current) {
+      setMessage("Sincronizando a acao anterior...");
+      return false;
+    }
+    roomMutationInFlightRef.current = true;
+    const actionId = createActionId();
     const touchedRoom = { ...room, revision: (room.revision ?? 0) + 1, updatedAt: new Date().toISOString() };
     const currentRooms = roomsRef.current;
     const nextRooms = currentRooms.some((item) => item.id === touchedRoom.id) ? currentRooms.map((item) => (item.id === touchedRoom.id ? touchedRoom : item)) : [touchedRoom, ...currentRooms];
-    void commitRooms(nextRooms, touchedRoom.id);
+    try {
+      const sharedRooms = await commitRooms(nextRooms, touchedRoom.id, actionId);
+      return Boolean(sharedRooms.find((item) => item.id === touchedRoom.id)?.processedActionIds?.includes(actionId));
+    } finally {
+      roomMutationInFlightRef.current = false;
+    }
   }, [commitRooms]);
 
   useEffect(() => {
@@ -349,7 +401,7 @@ export default function FriendRoomsPage() {
       const latest = roomsRef.current.find((room) => room.id === activeRoomId);
       const player = latest?.players.find((item) => samePlayer(item, userName, teamName));
       if (!latest || !player) return;
-      commitRoom(touchRoomPlayer(latest, player.id));
+      if (!roomMutationInFlightRef.current) void commitRoom(touchRoomPlayer(latest, player.id));
     };
     touch();
     const timer = window.setInterval(touch, 10_000);
@@ -377,16 +429,19 @@ export default function FriendRoomsPage() {
     try {
       const sharedRooms = await commitRooms([room, ...roomsRef.current], room.id);
       const createdRoom = sharedRooms.find((item) => item.id === room.id) ?? sharedRooms.find((item) => sameText(item.hostName, room.hostName) && sameText(item.name, room.name));
-      if (createdRoom) setActiveRoomId(createdRoom.id);
-      setRoomScreen("room");
-      setMessage("Sala criada.");
+      if (createdRoom) {
+        window.localStorage.setItem(activeFriendRoomStorageKey, createdRoom.id);
+        setActiveRoomId(createdRoom.id);
+        setRoomScreen("room");
+        setMessage("Sala criada.");
+      }
     } finally {
       createInFlightRef.current = false;
       setCreatingRoom(false);
     }
   }
 
-  function handleJoin(room: FriendRoom) {
+  async function handleJoin(room: FriendRoom) {
     if (!currentUser) {
       setMessage("Entre com uma conta para entrar na sala.");
       return;
@@ -397,9 +452,11 @@ export default function FriendRoomsPage() {
     }
     const userName = currentUser.playerName?.trim() || currentUser.username;
     const teamName = currentUser.teamName ?? `${userName} FC`;
-    commitRoom(joinRoom(room, userName, teamName, currentUser.emblemId));
-    setRoomScreen("room");
-    setMessage("Voce entrou na sala.");
+    if (await commitRoom(joinRoom(room, userName, teamName, currentUser.emblemId))) {
+      window.localStorage.setItem(activeFriendRoomStorageKey, room.id);
+      setRoomScreen("room");
+      setMessage("Voce entrou na sala.");
+    }
   }
 
   async function handleLeaveRoom() {
@@ -415,6 +472,7 @@ export default function FriendRoomsPage() {
     hiddenRoomUntilRef.current.set(roomId, Date.now() + 10_000);
     applyRooms(roomsRef.current.filter((room) => room.id !== roomId));
     setRoomScreen("rooms");
+    window.localStorage.removeItem(activeFriendRoomStorageKey);
     try {
       applyRooms(await leaveSharedRoom(roomId, leavingPlayer?.id));
     } catch {
@@ -422,17 +480,28 @@ export default function FriendRoomsPage() {
     }
   }
 
+  async function handleKickPlayer(playerId: string) {
+    if (!activeRoom) return;
+    try {
+      applyRooms(await kickSharedRoomPlayer(activeRoom.id, playerId), activeRoom.id);
+      setMessage("Jogador inativo removido da sala.");
+    } catch {
+      setMessage("Nao foi possivel remover o jogador.");
+    }
+  }
+
   function updateActiveRoom(updater: (room: FriendRoom) => FriendRoom) {
     const latest = roomsRef.current.find((room) => room.id === activeRoom?.id);
     if (!latest) return;
-    commitRoom(updater(latest));
+    void commitRoom(updater(latest));
   }
 
-  function handlePlacePick(playerId: string, slotId: string) {
+  async function handlePlacePick(playerId: string, slotId: string) {
     const latest = roomsRef.current.find((room) => room.id === activeRoom?.id);
     if (!latest) return;
-    handledAutoPicksRef.current.add(autoPickKey(latest, playerId));
-    commitRoom(placeRoomPlayer(latest, playerId, slotId));
+    if (await commitRoom(placeRoomPlayer(latest, playerId, slotId))) {
+      handledAutoPicksRef.current.add(autoPickKey(latest, playerId));
+    }
   }
 
   function handleStartDraft() {
@@ -467,6 +536,10 @@ export default function FriendRoomsPage() {
     activeRoom?.status === "reviewing" && activeRoom.reviewEndsAt
       ? Math.max(0, Math.ceil((activeRoom.reviewEndsAt - now) / 1000))
       : undefined;
+  const penaltyRemaining =
+    activeRoom?.status === "challenge" && activeRoom.penaltyEndsAt
+      ? Math.max(0, Math.ceil((activeRoom.penaltyEndsAt - now) / 1000))
+      : undefined;
 
   useEffect(() => {
     if (!activeRoom || activeRoom.status !== "drafting" || turnRemaining !== 0 || !currentUser) return;
@@ -486,17 +559,22 @@ export default function FriendRoomsPage() {
     if (handledAutoPicksRef.current.has(key)) return;
     handledAutoPicksRef.current.add(key);
     if (latest.draftMode === "todos") {
-      if (player.squad.length < 11) commitRoom(autoPickRoomPlayer(latest, player.id));
+      if (player.squad.length < 11) void commitRoom(autoPickRoomPlayer(latest, player.id));
       return;
     }
-    if (latest.players[latest.turnIndex]?.id === player.id) commitRoom(autoPickRoomTurn(latest));
+    if (latest.players[latest.turnIndex]?.id === player.id) void commitRoom(autoPickRoomTurn(latest));
   }, [activeRoom, commitRoom, currentUser, turnRemaining]);
 
   useEffect(() => {
     if (!activeRoom || activeRoom.status !== "reviewing" || reviewRemaining !== 0) return;
     setReviewSlotId(undefined);
-    commitRoom(startRoomCoachStage(activeRoom));
+    void commitRoom(startRoomCoachStage(activeRoom));
   }, [activeRoom, commitRoom, reviewRemaining]);
+
+  useEffect(() => {
+    if (!activeRoom || activeRoom.status !== "challenge" || activeRoom.penaltyWinnerId || penaltyRemaining !== 0) return;
+    void commitRoom(resolveRoomPenaltyTimeout(activeRoom));
+  }, [activeRoom, commitRoom, penaltyRemaining]);
 
   useEffect(() => {
     if (!activeRoom || activeRoom.status !== "drafting" || activeRoom.draftMode !== "turnos") return;
@@ -557,14 +635,19 @@ export default function FriendRoomsPage() {
           room={focusedRoom}
           turnRemaining={turnRemaining}
           reviewRemaining={reviewRemaining}
+          penaltyRemaining={penaltyRemaining}
           accountPlayerName={accountPlayerName}
           accountTeamName={accountTeamName}
           focused={gameStarted}
+          connectionStatus={connectionStatus}
+          now={now}
           onBackToRooms={() => void handleLeaveRoom()}
           onStartDraft={handleStartDraft}
           onDrawTeam={(playerId) => updateActiveRoom((room) => drawRoomTeam(room, playerId))}
           onSelectPick={(playerId, pickId) => updateActiveRoom((room) => selectRoomPlayer(room, playerId, pickId))}
           onPlacePick={handlePlacePick}
+          onShootPenalty={(playerId, direction, accuracy) => updateActiveRoom((room) => shootRoomPenalty(room, playerId, direction, accuracy))}
+          onChooseLegend={(playerId, legendId) => updateActiveRoom((room) => chooseRoomLegend(room, playerId, legendId))}
           reviewSlotId={reviewSlotId}
           onReviewSlotChange={setReviewSlotId}
           onMovePick={(playerId, fromSlotId, toSlotId) => updateActiveRoom((room) => moveRoomPick(room, playerId, fromSlotId, toSlotId))}
@@ -577,6 +660,7 @@ export default function FriendRoomsPage() {
           onPlayMatch={(playerId) => updateActiveRoom((room) => playPlayerRoomMatch(room, playerId))}
           onProgressRound={() => updateActiveRoom(progressRoomRound)}
           onResetLobby={() => updateActiveRoom(resetRoomToLobby)}
+          onKickPlayer={(playerId) => void handleKickPlayer(playerId)}
         />
         {!gameStarted && <div className="mt-6"><AdBanner variant="leaderboard" /></div>}
       </main>
@@ -813,14 +897,19 @@ function ActiveRoomPanel({
   room,
   turnRemaining,
   reviewRemaining,
+  penaltyRemaining,
   accountPlayerName,
   accountTeamName,
   focused = false,
+  connectionStatus,
+  now,
   onBackToRooms,
   onStartDraft,
   onDrawTeam,
   onSelectPick,
   onPlacePick,
+  onShootPenalty,
+  onChooseLegend,
   reviewSlotId,
   onReviewSlotChange,
   onMovePick,
@@ -832,19 +921,25 @@ function ActiveRoomPanel({
   onRoomSettings,
   onPlayMatch,
   onProgressRound,
-  onResetLobby
+  onResetLobby,
+  onKickPlayer
 }: {
   room?: FriendRoom;
   turnRemaining?: number;
   reviewRemaining?: number;
+  penaltyRemaining?: number;
   accountPlayerName: string;
   accountTeamName: string;
   focused?: boolean;
+  connectionStatus: RoomConnectionStatus;
+  now: number;
   onBackToRooms?: () => void;
   onStartDraft: () => void;
   onDrawTeam: (playerId: string) => void;
   onSelectPick: (playerId: string, pickId: string) => void;
   onPlacePick: (playerId: string, slotId: string) => void;
+  onShootPenalty: (playerId: string, direction: PenaltyDirection, accuracy: number) => void;
+  onChooseLegend: (playerId: string, legendId: string) => void;
   reviewSlotId?: string;
   onReviewSlotChange: (slotId?: string) => void;
   onMovePick: (playerId: string, fromSlotId: string, toSlotId: string) => void;
@@ -857,6 +952,7 @@ function ActiveRoomPanel({
   onPlayMatch: (playerId: string) => void;
   onProgressRound: () => void;
   onResetLobby: () => void;
+  onKickPlayer: (playerId: string) => void;
 }) {
   if (!room) {
     return (
@@ -872,6 +968,9 @@ function ActiveRoomPanel({
 
   return (
     <section className={cn("min-w-0", focused ? "" : "rounded-xl border border-emerald-300/18 bg-[linear-gradient(135deg,rgba(4,18,43,.88),rgba(3,46,52,.62))] p-5 shadow-card")}>
+      <div className="mb-3 flex justify-end">
+        <ConnectionStateBadge status={connectionStatus} />
+      </div>
       {!focused && (
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -895,6 +994,9 @@ function ActiveRoomPanel({
           onPlayerReady={onPlayerReady}
           onPlayerSetup={onPlayerSetup}
           onRoomSettings={onRoomSettings}
+          now={now}
+          connectionStatus={connectionStatus}
+          onKickPlayer={onKickPlayer}
         />
       )}
 
@@ -906,6 +1008,16 @@ function ActiveRoomPanel({
           onDrawTeam={onDrawTeam}
           onSelectPick={onSelectPick}
           onPlacePick={onPlacePick}
+        />
+      )}
+
+      {room.status === "challenge" && (
+        <PenaltyChallengePanel
+          room={room}
+          currentPlayer={currentPlayer}
+          remaining={penaltyRemaining ?? 0}
+          onShoot={onShootPenalty}
+          onChooseLegend={onChooseLegend}
         />
       )}
 
@@ -944,7 +1056,10 @@ function LobbyPanel({
   onStartDraft,
   onPlayerReady,
   onPlayerSetup,
-  onRoomSettings
+  onRoomSettings,
+  now,
+  connectionStatus,
+  onKickPlayer
 }: {
   room: FriendRoom;
   currentPlayer?: RoomPlayer;
@@ -953,6 +1068,9 @@ function LobbyPanel({
   onPlayerReady: (playerId: string, ready: boolean) => void;
   onPlayerSetup: (playerId: string, setup: { formation?: string; tacticalStyle?: TacticalStyle }) => void;
   onRoomSettings: (settings: Partial<Pick<FriendRoom, "name" | "visibility" | "password" | "difficulty" | "draftMode" | "simultaneousMinutes" | "turnSeconds">>) => void;
+  now: number;
+  connectionStatus: RoomConnectionStatus;
+  onKickPlayer: (playerId: string) => void;
 }) {
   const realPlayers = room.players.filter((player) => !player.isBot);
   const readyCount = realPlayers.filter((player) => player.ready).length;
@@ -985,7 +1103,16 @@ function LobbyPanel({
             )}
           </div>
         </div>
-        <PlayerLobbyList players={realPlayers} />
+        <RoomInvite room={room} />
+        <PlayerLobbyList
+          room={room}
+          players={realPlayers}
+          now={now}
+          currentPlayerId={currentPlayer?.id}
+          isHost={isHost}
+          connectionStatus={connectionStatus}
+          onKickPlayer={onKickPlayer}
+        />
       </div>
       </div>
       {isHost && <div className="mt-4"><HostSettingsPanel room={room} onChange={onRoomSettings} /></div>}
@@ -1019,10 +1146,15 @@ function DraftPanel({
   const pendingPick = isMyTurn && !previewPlayer ? activeDraw?.roster.find((pick) => pick.id === activePendingPickId) : undefined;
   const rerollsUsed = turnPlayer ? room.rerollsByPlayer?.[turnPlayer.id] ?? 0 : 0;
   const rerollsLeft = Math.max(0, 3 - rerollsUsed);
+  const draftTarget = room.penaltyWinnerId ? 11 : 10;
   const batchStartSize = Math.max(0, (turnPlayer?.squad.length ?? 0) - room.picksInTurn);
-  const batchLimit = batchStartSize >= 9 ? 2 : 3;
+  const batchLimit = batchStartSize >= 9 ? 1 : 3;
   const batchRemaining = Math.max(1, batchLimit - room.picksInTurn);
-  const turnText = room.draftMode === "todos" ? "Monte os 11 antes do tempo acabar" : batchLimit === 2 ? "Rodada final: escolha 2 jogadores" : "Escolha 3 jogadores nesta vez";
+  const turnText = room.draftMode === "todos"
+    ? `Monte ${draftTarget} jogadores antes do tempo acabar`
+    : batchLimit === 1
+      ? room.penaltyWinnerId ? "Escolha o ultimo jogador" : "Feche os 10 para liberar o desafio"
+      : "Escolha 3 jogadores nesta vez";
   const [isDrawing, setIsDrawing] = useState(false);
   const [isRevealingDraw, setIsRevealingDraw] = useState(false);
   const [rollingIndex, setRollingIndex] = useState(0);
@@ -1105,32 +1237,42 @@ function DraftPanel({
       <aside className="space-y-4 xl:sticky xl:top-20">
         {room.draftMode === "todos" && currentPlayer && (
           <div className="flex flex-wrap items-center gap-2 border border-black bg-white p-2 text-black">
-            <span className="mr-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--muted)]">Ver escalação</span>
-            <button type="button" className={cn("border px-2 py-1 text-xs font-black", !previewPlayer ? "border-black bg-black text-white" : "border-black/20")} onClick={() => setPreviewPlayerId(undefined)}>Meu time</button>
+            <span className="mr-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--muted)]">Ver elencos</span>
+            <button type="button" className={cn("border px-2 py-1 text-xs font-black", !previewPlayer ? "border-black bg-[var(--success)] text-white" : "border-black/20 bg-white text-black")} onClick={() => setPreviewPlayerId(undefined)}>Meu time</button>
             {room.players.filter((player) => player.id !== currentPlayer.id).map((player) => (
-              <button key={player.id} type="button" className={cn("max-w-32 truncate border px-2 py-1 text-xs font-black", previewPlayerId === player.id ? "border-black bg-black text-white" : "border-black/20")} onClick={() => setPreviewPlayerId(player.id)}>{player.teamName}</button>
+              <button key={player.id} type="button" className={cn("max-w-32 truncate border px-2 py-1 text-xs font-black", previewPlayerId === player.id ? "border-black bg-[var(--success)] text-white" : "border-black/20 bg-white text-black")} onClick={() => setPreviewPlayerId(player.id)}>{player.teamName}</button>
             ))}
           </div>
         )}
         <div className="overflow-hidden border border-black bg-white">
-          <div className="border-b border-black/15 bg-[var(--surface-muted)] p-4 text-black">
+          <div className={cn("border-b border-black/15 p-4", isMyTurn && !previewPlayer ? "bg-[var(--success)] text-white" : "bg-[var(--surface-muted)] text-black")}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--success)]">Vez de escolher</p>
-                <h3 className="mt-1 truncate text-2xl font-black">{turnPlayer?.teamName ?? "Jogador"}</h3>
+                <p className={cn("text-xs font-black uppercase tracking-[0.2em]", isMyTurn && !previewPlayer ? "text-white/80" : "text-[var(--success)]")}>{isMyTurn && !previewPlayer ? "Agora" : "Vez de escolher"}</p>
+                <h3 className="mt-1 truncate font-display text-4xl font-black uppercase leading-none">{isMyTurn && !previewPlayer ? "Sua vez" : turnPlayer?.teamName ?? "Jogador"}</h3>
+                {isMyTurn && !previewPlayer && <p className="mt-2 text-sm font-bold text-white">{room.draftMode === "turnos" ? `${batchRemaining} escolha(s) neste bloco` : `${Math.max(0, draftTarget - (currentPlayer?.squad.length ?? 0))} jogador(es) para fechar esta etapa`}</p>}
               </div>
               <TimerPill seconds={turnRemaining ?? room.turnSeconds} icon={<Volume2 size={16} />} />
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-[0.14em] text-[var(--muted)]">
               <span className="border border-black/15 bg-white px-3 py-1.5">{fieldPlayer?.formation ?? "4-3-3"}</span>
               <span className="border border-black/15 bg-white px-3 py-1.5">{room.difficulty === "almanaque" ? "De almanaque" : "Classico"}</span>
-              <span className="border border-[var(--success)]/35 bg-[var(--success)]/10 px-3 py-1.5 text-[var(--success)]">{turnText}{room.draftMode === "turnos" ? ` - faltam ${batchRemaining}` : ""}</span>
+              <span className={cn("border px-3 py-1.5", isMyTurn && !previewPlayer ? "border-white/40 bg-black/15 text-white" : "border-[var(--success)]/35 bg-[var(--success)]/10 text-[var(--success)]")}>{turnText}{room.draftMode === "turnos" ? ` - faltam ${batchRemaining}` : ""}</span>
             </div>
             <p className="mt-3 text-sm text-[var(--muted)]">
               {isMyTurn ? (pendingPick ? "Clique em uma posicao destacada no campo ou troque o jogador na lista." : "Sorteie um time, escolha um jogador e depois a posicao.") : "Aguardando esse jogador escolher."}
             </p>
           </div>
-          <div className="p-4">
+          <div className="relative p-4">
+            {!isMyTurn && !previewPlayer && (
+              <div className="absolute inset-0 z-20 grid place-items-center bg-white/90 p-5 text-center" aria-live="polite">
+                <div>
+                  <Lock className="mx-auto mb-2" size={22} />
+                  <p className="font-display text-2xl font-black uppercase text-black">Aguardando {turnPlayer?.teamName}</p>
+                  <p className="mt-1 text-xs font-bold text-[var(--muted)]">Os controles liberam automaticamente na sua vez.</p>
+                </div>
+              </div>
+            )}
             {(isDrawing || isRevealingDraw) && rollingClub ? (
               <RollingTeamCard club={rollingClub} />
             ) : !activeDraw ? (
@@ -1368,6 +1510,164 @@ function DraftProgress({ players, currentPlayerId }: { players: RoomPlayer[]; cu
             <span className="font-mono text-xs font-black text-gold">{player.squad.length}/11</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function PenaltyChallengePanel({
+  room,
+  currentPlayer,
+  remaining,
+  onShoot,
+  onChooseLegend
+}: {
+  room: FriendRoom;
+  currentPlayer?: RoomPlayer;
+  remaining: number;
+  onShoot: (playerId: string, direction: PenaltyDirection, accuracy: number) => void;
+  onChooseLegend: (playerId: string, legendId: string) => void;
+}) {
+  const [accuracy, setAccuracy] = useState(50);
+  const [shotLocked, setShotLocked] = useState(false);
+  const round = room.penaltyRound;
+  const myShots = currentPlayer ? room.penaltyShotsByPlayer[currentPlayer.id] ?? [] : [];
+  const myRoundShots = myShots.filter((shot) => shot.round === round);
+  const requiredShots = round === 0 ? 3 : 1;
+  const isEligible = Boolean(currentPlayer && room.penaltyEligiblePlayerIds.includes(currentPlayer.id));
+  const canShoot = Boolean(currentPlayer && !room.penaltyWinnerId && isEligible && myRoundShots.length < requiredShots && remaining > 0 && !shotLocked);
+  const winner = room.players.find((player) => player.id === room.penaltyWinnerId);
+  const isWinner = Boolean(currentPlayer && room.penaltyWinnerId === currentPlayer.id);
+
+  useEffect(() => {
+    if (!canShoot) return;
+    const timer = window.setInterval(() => {
+      const phase = (Date.now() % 1800) / 1800;
+      const wave = phase <= 0.5 ? phase * 2 : (1 - phase) * 2;
+      setAccuracy(Math.round(8 + wave * 92));
+    }, 45);
+    return () => window.clearInterval(timer);
+  }, [canShoot]);
+
+  useEffect(() => {
+    setShotLocked(false);
+  }, [myShots.length, round]);
+
+  function takeShot(direction: PenaltyDirection) {
+    if (!currentPlayer || !canShoot) return;
+    setShotLocked(true);
+    onShoot(currentPlayer.id, direction, accuracy);
+    window.setTimeout(() => setShotLocked(false), 1200);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[95] overflow-y-auto bg-black/75 p-3 backdrop-blur-sm sm:p-6" role="dialog" aria-modal="true" aria-label="Desafio do Craque 99">
+      <div className="mx-auto min-h-full max-w-6xl border border-black bg-[var(--surface)] text-black shadow-2xl">
+        <header className="grid gap-4 border-b border-black bg-[var(--success)] p-5 text-white md:grid-cols-[1fr_auto] md:items-end">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-white/75">Ultima vaga do elenco</p>
+            <h2 className="mt-2 font-display text-4xl font-black uppercase leading-none sm:text-6xl">Penalti de Ouro</h2>
+            <p className="mt-3 max-w-2xl text-sm font-semibold text-white/85">Tres cobrancas para disputar a primeira escolha entre cinco Craques 99.</p>
+          </div>
+          <div className="flex items-center gap-3 border border-white/40 bg-black/15 px-4 py-3">
+            <Clock size={20} />
+            <span className="font-mono text-3xl font-black tabular-nums">0:{String(remaining).padStart(2, "0")}</span>
+          </div>
+        </header>
+
+        <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_19rem]">
+          <section className="border-b border-black p-4 sm:p-6 lg:border-b-0 lg:border-r">
+            {!room.penaltyWinnerId ? (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--success)]">{round === 0 ? "Rodada principal" : `Morte subita ${round}/${3}`}</p>
+                    <h3 className="mt-1 text-2xl font-black">{isEligible ? "Escolha o canto" : "Acompanhe o desempate"}</h3>
+                  </div>
+                  <p className="font-mono text-sm font-black">{Math.min(myRoundShots.length, requiredShots)}/{requiredShots} cobranca(s)</p>
+                </div>
+
+                <div className="mx-auto mt-5 max-w-2xl border-x-8 border-t-8 border-black bg-[linear-gradient(180deg,#dff7eb_0_72%,#137a4c_72%)] p-3 pt-8 shadow-[inset_0_0_0_2px_rgba(0,0,0,.12)] sm:p-6 sm:pt-12">
+                  <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                    {(["left", "center", "right"] as PenaltyDirection[]).map((direction) => (
+                      <button
+                        key={direction}
+                        type="button"
+                        disabled={!canShoot}
+                        className="grid min-h-24 place-items-center border-2 border-dashed border-black/45 bg-white/70 px-2 font-black uppercase transition hover:bg-[var(--success)] hover:text-white disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-36"
+                        onClick={() => takeShot(direction)}
+                      >
+                        <CircleDot size={28} />
+                        <span>{direction === "left" ? "Esquerda" : direction === "right" ? "Direita" : "Centro"}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mx-auto mt-5 max-w-2xl">
+                  <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.16em]">
+                    <span>Precisao</span><span>{accuracy}%</span>
+                  </div>
+                  <div className="relative mt-2 h-3 border border-black bg-white">
+                    <div className="absolute inset-y-0 left-1/2 w-12 -translate-x-1/2 bg-[var(--success)]/25" />
+                    <div className="absolute -top-1 h-5 w-1.5 -translate-x-1/2 bg-black transition-[left] duration-75" style={{ left: `${accuracy}%` }} />
+                  </div>
+                  <p className="mt-3 text-center text-xs font-bold text-[var(--muted)]">A faixa central aumenta a chance de vencer o goleiro mesmo escolhendo o mesmo canto.</p>
+                </div>
+
+                <div className="mt-5 flex justify-center gap-2">
+                  {Array.from({ length: requiredShots }, (_, index) => {
+                    const shot = myRoundShots[index];
+                    return <span key={index} className={cn("grid h-10 w-10 place-items-center border border-black font-mono text-sm font-black", shot ? shot.scored ? "bg-[var(--success)] text-white" : "bg-black text-white" : "bg-white text-black")}>{shot ? shot.scored ? "GOL" : "X" : index + 1}</span>;
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="py-8 text-center sm:py-14">
+                <Crown className="mx-auto text-[var(--warning)]" size={48} />
+                <p className="mt-4 text-xs font-black uppercase tracking-[0.2em] text-[var(--success)]">Vencedor do desafio</p>
+                <h3 className="mt-2 font-display text-5xl font-black uppercase">{winner?.teamName}</h3>
+                {!isWinner && <p className="mx-auto mt-3 max-w-xl text-sm font-semibold text-[var(--muted)]">O vencedor esta escolhendo o Craque 99. Sua ultima vaga sera preenchida pelo draft tradicional.</p>}
+              </div>
+            )}
+
+            {room.penaltyWinnerId && isWinner && !room.legendSelectedId && (
+              <div className="border-t border-black pt-5">
+                <div className="mb-4 flex items-end justify-between gap-3">
+                  <div><p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--success)]">Premio</p><h3 className="mt-1 text-2xl font-black">Escolha seu Craque 99</h3></div>
+                  <span className="font-mono text-sm font-black">5 opcoes</span>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                  {room.legendOptions.map((legend) => (
+                    <button key={legend.id} type="button" className="group min-h-40 border border-black bg-white p-3 text-left transition hover:-translate-y-1 hover:bg-[var(--success)] hover:text-white" onClick={() => currentPlayer && onChooseLegend(currentPlayer.id, legend.id)}>
+                      <span className="font-mono text-4xl font-black text-[var(--warning)]">99</span>
+                      <span className="mt-4 block text-lg font-black leading-tight">{legend.name}</span>
+                      <span className="mt-1 block text-xs font-bold opacity-70">{positionLabel(legend.position)} - {legend.clubName}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+
+          <aside className="bg-white p-4 sm:p-5">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--success)]">Placar ao vivo</p>
+            <div className="mt-3 divide-y divide-black/15 border-y border-black">
+              {room.players.map((player) => {
+                const shots = room.penaltyShotsByPlayer[player.id] ?? [];
+                const goals = shots.filter((shot) => shot.scored).length;
+                const active = room.penaltyEligiblePlayerIds.includes(player.id);
+                return (
+                  <div key={player.id} className={cn("grid grid-cols-[1fr_auto] items-center gap-3 py-3", !active && round > 0 && "opacity-45")}>
+                    <div className="min-w-0"><p className="truncate font-black">{player.teamName}</p><p className="text-xs text-[var(--muted)]">{shots.length} cobranca(s)</p></div>
+                    <span className="font-mono text-2xl font-black text-[var(--success)]">{goals}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-4 text-xs font-semibold leading-relaxed text-[var(--muted)]">Em empate, os lideres fazem ate tres cobrancas alternadas. Persistindo a igualdade, vence o melhor indice tecnico do elenco.</p>
+          </aside>
+        </div>
       </div>
     </div>
   );
@@ -1700,6 +2000,21 @@ function RoomBracket({
   onResetLobby: () => void;
 }) {
   const playerMatch = currentPlayer ? currentPlayerRoomMatch(room, currentPlayer.id) : undefined;
+  const completedPlayerMatches = currentPlayer
+    ? room.bracket.filter(
+        (match) =>
+          match.status === "done" &&
+          (match.homePlayerId === currentPlayer.id || match.awayPlayerId === currentPlayer.id)
+      )
+    : [];
+  const eliminationMatch = currentPlayer
+    ? completedPlayerMatches.find((match) => {
+        const playerWasHome = match.homePlayerId === currentPlayer.id;
+        const playerWon = playerWasHome ? match.winnerName === match.homeName : match.winnerName === match.awayName;
+        return !playerWon;
+      })
+    : undefined;
+  const playerEliminated = Boolean(eliminationMatch);
   const pendingHumans = hasPendingHumanRoomMatches(room);
   const currentPhase = phases[room.bracketRound]?.label ?? "Mata-mata";
   const canProgressRound = room.status === "bracket" && !playerMatch && !pendingHumans;
@@ -1732,8 +2047,8 @@ function RoomBracket({
   );
 
   useEffect(() => {
-    if (room.status === "finished") setShowResultOverlay(true);
-  }, [room.champion, room.status]);
+    if (room.status === "finished" || eliminationMatch?.id) setShowResultOverlay(true);
+  }, [eliminationMatch?.id, room.champion, room.status]);
 
   useEffect(() => {
     if (!presentation) return;
@@ -1803,7 +2118,7 @@ function RoomBracket({
 
   return (
     <div className="mt-5">
-      {room.status === "finished" && currentPlayer && showResultOverlay && (
+      {(room.status === "finished" || playerEliminated) && currentPlayer && showResultOverlay && (
         <RoomResultOverlay room={room} player={currentPlayer} isHost={isHost} onClose={() => setShowResultOverlay(false)} onResetLobby={onResetLobby} />
       )}
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -2009,6 +2324,36 @@ function RoomFinalSquadCard({ room, player }: { room: FriendRoom; player: RoomPl
   );
 }
 
+function buildRoomTournamentSummary(room: FriendRoom) {
+  const matches = room.bracket.filter((match) => match.status === "done" && typeof match.homeGoals === "number" && typeof match.awayGoals === "number");
+  const teamStats = new Map<string, { goalsFor: number; goalsAgainst: number; wins: number; losses: number; matches: number }>();
+  for (const match of matches) {
+    const home = teamStats.get(match.homeName) ?? { goalsFor: 0, goalsAgainst: 0, wins: 0, losses: 0, matches: 0 };
+    const away = teamStats.get(match.awayName) ?? { goalsFor: 0, goalsAgainst: 0, wins: 0, losses: 0, matches: 0 };
+    home.goalsFor += match.homeGoals ?? 0;
+    home.goalsAgainst += match.awayGoals ?? 0;
+    home.matches += 1;
+    away.goalsFor += match.awayGoals ?? 0;
+    away.goalsAgainst += match.homeGoals ?? 0;
+    away.matches += 1;
+    if ((match.homeGoals ?? 0) > (match.awayGoals ?? 0)) { home.wins += 1; away.losses += 1; }
+    else { away.wins += 1; home.losses += 1; }
+    teamStats.set(match.homeName, home);
+    teamStats.set(match.awayName, away);
+  }
+  const biggestWin = matches.slice().sort((a, b) => Math.abs((b.homeGoals ?? 0) - (b.awayGoals ?? 0)) - Math.abs((a.homeGoals ?? 0) - (a.awayGoals ?? 0)))[0];
+  const closestMatch = matches.slice().sort((a, b) => Math.abs((a.homeGoals ?? 0) - (a.awayGoals ?? 0)) - Math.abs((b.homeGoals ?? 0) - (b.awayGoals ?? 0)) || ((b.homeGoals ?? 0) + (b.awayGoals ?? 0)) - ((a.homeGoals ?? 0) + (a.awayGoals ?? 0)))[0];
+  const bestAttack = Array.from(teamStats.entries()).sort((a, b) => b[1].goalsFor - a[1].goalsFor)[0];
+  const bestDefense = Array.from(teamStats.entries()).filter(([, stats]) => stats.matches > 0).sort((a, b) => a[1].goalsAgainst - b[1].goalsAgainst || b[1].matches - a[1].matches)[0];
+  const bestPlayer = room.players.flatMap((participant) => participant.squad.map((pick) => ({ ...pick, teamName: participant.teamName }))).sort((a, b) => (b.effectiveRating ?? b.overall) - (a.effectiveRating ?? a.overall))[0];
+  const squads = room.players.filter((participant) => !participant.isBot).map((participant) => {
+    const stats = teamStats.get(participant.teamName) ?? { goalsFor: 0, goalsAgainst: 0, wins: 0, losses: 0, matches: 0 };
+    const rating = participant.squad.length ? Math.round((participant.squad.reduce((sum, pick) => sum + (pick.effectiveRating ?? pick.overall), 0) / participant.squad.length) * 10) / 10 : 0;
+    return { participant, stats, rating };
+  }).sort((a, b) => b.stats.wins - a.stats.wins || b.rating - a.rating);
+  return { biggestWin, closestMatch, bestAttack, bestDefense, bestPlayer, squads };
+}
+
 function RoomResultOverlay({
   room,
   player,
@@ -2022,6 +2367,7 @@ function RoomResultOverlay({
   onClose: () => void;
   onResetLobby: () => void;
 }) {
+  const tournament = buildRoomTournamentSummary(room);
   const matches = room.bracket.filter(
     (match) => match.status === "done" && (match.homePlayerId === player.id || match.awayPlayerId === player.id || sameText(match.homeName, player.teamName) || sameText(match.awayName, player.teamName))
   );
@@ -2037,7 +2383,20 @@ function RoomResultOverlay({
     },
     { wins: 0, goalsFor: 0, goalsAgainst: 0 }
   );
-  const champion = sameText(room.champion ?? "", player.teamName);
+  const finalMatch = room.bracket.find((match) => match.phase === "Final" && match.status === "done");
+  const winnerPlayerId = finalMatch
+    ? finalMatch.winnerName === finalMatch.homeName
+      ? finalMatch.homePlayerId
+      : finalMatch.awayPlayerId
+    : undefined;
+  const champion = winnerPlayerId
+    ? winnerPlayerId === player.id
+    : room.status === "finished" && sameText(room.champion ?? "", player.teamName);
+  const resultDescription = champion
+    ? "Seu time venceu a sala e a taca foi registrada na galeria."
+    : room.status === "finished"
+      ? `Eliminado. O campeao da sala foi ${room.champion ?? "definido no mata-mata"}.`
+      : "Seu time foi eliminado. Continue acompanhando o chaveamento ate a definicao do campeao.";
 
   return (
     <div className="room-result-backdrop fixed inset-0 z-[100] grid overflow-y-auto bg-black/75 p-4 sm:p-8" role="dialog" aria-modal="true" aria-label="Resultado final da sala">
@@ -2050,7 +2409,7 @@ function RoomResultOverlay({
             </h2>
             <p className="mt-4 text-2xl font-black">{player.teamName}</p>
             <p className="mt-2 max-w-xl text-sm text-[var(--muted)]">
-              {champion ? "Seu time venceu a sala e a taca foi registrada na galeria." : `Eliminado. O campeao da sala foi ${room.champion ?? "definido no mata-mata"}.`}
+              {resultDescription}
             </p>
             <div className="mt-6 grid grid-cols-2 gap-px border border-black bg-black sm:grid-cols-4">
               <ResultMetric value={matches.length} label="Jogos" />
@@ -2071,6 +2430,26 @@ function RoomResultOverlay({
           </div>
         </div>
         <div className="p-5 sm:p-7">
+          {room.status === "finished" && (
+            <div className="mb-6">
+              <h3 className="font-display text-2xl font-black uppercase">Resumo da disputa</h3>
+              <div className="mt-3 grid gap-px border border-black bg-black sm:grid-cols-2 lg:grid-cols-4">
+                <TournamentMetric label="Destaque" value={tournament.bestPlayer ? `${tournament.bestPlayer.name} (${tournament.bestPlayer.effectiveRating ?? tournament.bestPlayer.overall})` : "A definir"} />
+                <TournamentMetric label="Maior goleada" value={tournament.biggestWin ? `${tournament.biggestWin.homeName} ${tournament.biggestWin.homeGoals}-${tournament.biggestWin.awayGoals} ${tournament.biggestWin.awayName}` : "A definir"} />
+                <TournamentMetric label="Melhor ataque" value={tournament.bestAttack ? `${tournament.bestAttack[0]} · ${tournament.bestAttack[1].goalsFor} gols` : "A definir"} />
+                <TournamentMetric label="Melhor defesa" value={tournament.bestDefense ? `${tournament.bestDefense[0]} · ${tournament.bestDefense[1].goalsAgainst} sofridos` : "A definir"} />
+              </div>
+              {tournament.closestMatch && <p className="border-x border-b border-black bg-[var(--surface-muted)] px-3 py-2 text-xs font-bold">Confronto mais equilibrado: {tournament.closestMatch.homeName} {tournament.closestMatch.homeGoals}-{tournament.closestMatch.awayGoals} {tournament.closestMatch.awayName}</p>}
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {tournament.squads.map(({ participant, stats, rating }) => (
+                  <article key={participant.id} className="border border-black/20 bg-white p-3">
+                    <div className="flex items-center justify-between gap-2"><strong className="truncate">{participant.teamName}</strong><span className="font-mono font-black text-[var(--success)]">{rating}</span></div>
+                    <p className="mt-1 text-[10px] font-black uppercase text-[var(--muted)]">{participant.formation} · V {stats.wins} · D {stats.losses} · GP {stats.goalsFor} · GC {stats.goalsAgainst}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between gap-3">
             <h3 className="font-display text-2xl font-black uppercase">Seu onze final</h3>
             <span className="text-xs font-black uppercase tracking-[0.16em] text-[var(--muted)]">{player.formation} · {tacticalStyleLabel(player.tacticalStyle)}</span>
@@ -2088,12 +2467,16 @@ function RoomResultOverlay({
           </div>
           <div className="mt-5 flex flex-wrap justify-end gap-2">
             <Button variant="secondary" onClick={onClose}>Ver chaveamento</Button>
-            {isHost && <Button onClick={onResetLobby}>Voltar ao lobby</Button>}
+            {isHost && room.status === "finished" && <Button onClick={onResetLobby}>Voltar ao lobby</Button>}
           </div>
         </div>
       </section>
     </div>
   );
+}
+
+function TournamentMetric({ label, value }: { label: string; value: string }) {
+  return <div className="min-w-0 bg-white p-3"><p className="text-[9px] font-black uppercase tracking-[0.14em] text-[var(--success)]">{label}</p><p className="mt-1 text-sm font-black leading-tight text-black">{value}</p></div>;
 }
 
 function ResultMetric({ value, label }: { value: number; label: string }) {
@@ -2139,6 +2522,24 @@ function buildRoomMatchTimeline(room: FriendRoom, match: RoomMatch, currentPlaye
   const currentGoals = currentIsHome ? match.homeGoals ?? 0 : match.awayGoals ?? 0;
   const opponentGoals = currentIsHome ? match.awayGoals ?? 0 : match.homeGoals ?? 0;
   const decisions = matchDecisionMoments(`${room.id}-${match.id}`, currentGoals, opponentGoals, true);
+  const eventSeed = stableRoomTimelineNumber(`${room.id}-${match.id}-events`);
+  const flavorPool = [
+    { minute: 12, text: "Chance perdida" },
+    { minute: 24, text: "Defesa do goleiro" },
+    { minute: 36, text: "Bola na trave" },
+    { minute: 58, text: "Substituicao tatica" },
+    { minute: 66, text: "Cartao amarelo" },
+    { minute: 77, text: "Defesa do goleiro" }
+  ];
+  const flavorCount = 2 + (eventSeed % 3);
+  const flavorEvents = Array.from({ length: flavorCount }, (_, index) => {
+    const source = flavorPool[(eventSeed + index * 3) % flavorPool.length]!;
+    return { id: `flavor-${index}`, minute: Math.min(88, source.minute + (eventSeed % 5)), teamName: "", text: source.text };
+  });
+  if (eventSeed % 11 === 0) flavorEvents.push({ id: "injury", minute: 48 + (eventSeed % 21), teamName: "", text: "Lesao obriga uma mudanca" });
+  if (eventSeed % 17 === 0) flavorEvents.push({ id: "red-card", minute: 55 + (eventSeed % 24), teamName: "", text: "Expulsao apos revisao do lance" });
+  if (Math.abs(currentGoals - opponentGoals) <= 1 && eventSeed % 3 === 0) flavorEvents.push({ id: "late-pressure", minute: 84, teamName: "", text: "Pressao final" });
+  if (eventSeed % 2 === 0) flavorEvents.push({ id: "stoppage", minute: 90, teamName: "", text: `${3 + (eventSeed % 5)} minutos de acrescimos` });
   const timelineItems: Array<{
     id: string;
     minute: number;
@@ -2149,11 +2550,8 @@ function buildRoomMatchTimeline(room: FriendRoom, match: RoomMatch, currentPlaye
     decisionType?: MatchDecisionType;
   }> = [
     { id: "kickoff", minute: 1, teamName: "", text: "Bola rolando" },
-    { id: "flavor-14", minute: 14, teamName: "", text: "Chance perdida" },
-    { id: "flavor-31", minute: 31, teamName: "", text: "Bola na trave" },
     { id: "halftime", minute: 45, teamName: "", text: "Intervalo" },
-    { id: "flavor-57", minute: 57, teamName: "", text: "Defesa do goleiro" },
-    { id: "flavor-74", minute: 74, teamName: "", text: "Cartao amarelo" },
+    ...flavorEvents,
     ...decisions.map((decision) => ({ id: `decision-${decision.minute}-${decision.type}`, minute: decision.minute, teamName: "", text: decision.type === "formation" ? "Ajuste para a reta final" : "Decisao tatica", kind: "decision" as const, decisionType: decision.type }))
   ];
   let homeGoals = 0;
@@ -2255,7 +2653,44 @@ function goalTextOrder(text: string) {
   return 1;
 }
 
-function PlayerLobbyList({ players }: { players: RoomPlayer[] }) {
+function RoomInvite({ room }: { room: FriendRoom }) {
+  const [copied, setCopied] = useState(false);
+  const code = room.id.replace(/[^a-z0-9]/gi, "").slice(-6).toUpperCase();
+
+  async function copyInvite() {
+    const invite = `${window.location.origin}/salas?sala=${room.id}`;
+    await navigator.clipboard.writeText(invite);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+  }
+
+  return (
+    <div className="mt-4 flex items-center justify-between gap-3 border border-black bg-[var(--surface-muted)] px-3 py-2 text-black">
+      <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">Convite <strong className="ml-2 font-mono text-sm text-black">{code}</strong></span>
+      <button type="button" className="inline-flex items-center gap-2 border border-black bg-[var(--success)] px-3 py-2 text-[10px] font-black uppercase text-white" onClick={() => void copyInvite()}>
+        <Copy size={14} /> {copied ? "Link copiado" : "Copiar link"}
+      </button>
+    </div>
+  );
+}
+
+function PlayerLobbyList({
+  room,
+  players,
+  now,
+  currentPlayerId,
+  isHost,
+  connectionStatus,
+  onKickPlayer
+}: {
+  room: FriendRoom;
+  players: RoomPlayer[];
+  now: number;
+  currentPlayerId?: string;
+  isHost: boolean;
+  connectionStatus: RoomConnectionStatus;
+  onKickPlayer: (playerId: string) => void;
+}) {
   return (
     <div className="mt-4 overflow-hidden border border-black/20 bg-white">
       <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-3 bg-[var(--surface-muted)] px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">
@@ -2264,8 +2699,16 @@ function PlayerLobbyList({ players }: { players: RoomPlayer[] }) {
         <span>Status</span>
       </div>
       <div>
-        {players.map((player, index) => (
-          <div key={player.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-t border-black/15 px-3 py-3">
+        {players.map((player, index) => {
+          const lastSeen = room.lastSeenAt?.[player.id] ?? 0;
+          const age = lastSeen ? now - lastSeen : Number.POSITIVE_INFINITY;
+          const syncing = player.id === currentPlayerId && connectionStatus === "syncing";
+          const disconnected = age > 30_000;
+          const away = !disconnected && age > 12_000;
+          const status = syncing ? "Sincronizando" : disconnected ? "Desconectado" : away ? "Ausente" : player.ready ? "Pronto" : "Aguardando";
+          const canKick = isHost && player.id !== currentPlayerId && (away || disconnected);
+          return (
+          <div key={player.id} className={cn("grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-t border-black/15 px-3 py-3", disconnected && "bg-black/5 opacity-60")}>
             <span className="font-mono text-[11px] font-black text-[var(--accent-strong)]">
               #{index + 1}
               <span className="mt-0.5 block text-[9px] text-[var(--muted)]">{shortPlayerId(player.id)}</span>
@@ -2277,13 +2720,33 @@ function PlayerLobbyList({ players }: { players: RoomPlayer[] }) {
                 {player.formation} · {tacticalStyleLabel(player.tacticalStyle)}
               </span>
             </span>
-            <span className={cn("w-fit whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-black", player.ready ? "bg-[var(--success)] text-white" : "border border-black/20 text-[var(--muted)]")}>
-              {player.ready ? "Pronto" : "Aguardando"}
+            <span className="grid justify-items-end gap-1">
+              <span className={cn("w-fit whitespace-nowrap border px-2.5 py-1 text-[10px] font-black", disconnected ? "border-red-700 bg-red-700 text-white" : away || syncing ? "border-black bg-[var(--warning)] text-black" : player.ready ? "border-black bg-[var(--success)] text-white" : "border-black/20 text-[var(--muted)]")}>
+                {status}
+              </span>
+              {canKick && (
+                <button type="button" className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-red-700 underline" onClick={() => onKickPlayer(player.id)}>
+                  <UserX size={12} /> Expulsar
+                </button>
+              )}
             </span>
           </div>
-        ))}
+        );})}
       </div>
     </div>
+  );
+}
+
+function ConnectionStateBadge({ status }: { status: RoomConnectionStatus }) {
+  const label = status === "syncing" ? "Sincronizando" : status === "connected" ? "Conectado" : "Reconectando";
+  return (
+    <span className={cn(
+      "inline-flex items-center gap-2 border border-black px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em]",
+      status === "connected" ? "bg-[var(--success)] text-white" : status === "syncing" ? "bg-[var(--warning)] text-black" : "bg-red-700 text-white"
+    )}>
+      <span className="h-2 w-2 rounded-full bg-current" aria-hidden />
+      {label}
+    </span>
   );
 }
 
@@ -2464,10 +2927,10 @@ function initials(name: string) {
 function isFreshRoom(room: FriendRoom) {
   if (!room.players.some((player) => !player.isBot)) return false;
   const seenValues = Object.values(room.lastSeenAt ?? {});
-  if (seenValues.length) return seenValues.some((value) => Date.now() - value < 45_000);
+  if (seenValues.length) return seenValues.some((value) => Date.now() - value < 5 * 60_000);
   const reference = Date.parse(room.updatedAt || room.createdAt);
   if (!Number.isFinite(reference)) return true;
-  return Date.now() - reference < 45_000;
+  return Date.now() - reference < 5 * 60_000;
 }
 
 function samePlayer(player: RoomPlayer, userName: string, teamName: string) {
@@ -2488,6 +2951,7 @@ function roomStatusLabel(status: FriendRoom["status"]) {
   return {
     lobby: "Lobby",
     drafting: "Draft",
+    challenge: "Desafio 99",
     reviewing: "Ajustes",
     coach: "Tecnico",
     bracket: "Chave",

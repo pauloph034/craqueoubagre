@@ -1,4 +1,4 @@
-import { normalizeFriendRoom, normalizeFriendRooms, progressRoomRound, type FriendRoom, type RoomMatch, type RoomPlayer, type RoomStatus } from "@/lib/friend-rooms";
+import { chooseRoomLegend, normalizeFriendRoom, normalizeFriendRooms, progressRoomRound, resolveRoomPenaltyTimeout, shootRoomPenalty, startRoomPenaltyChallenge, type FriendRoom, type RoomMatch, type RoomPlayer, type RoomStatus } from "@/lib/friend-rooms";
 import { deleteSharedFriendRoom, hasSupabaseConfig, listSharedFriendRooms, saveSharedFriendRooms } from "@/server/db";
 import { validatePublicName } from "@/server/name-policy";
 import { getCurrentUser } from "@/server/session";
@@ -98,11 +98,13 @@ function mergeRoomState(incoming: FriendRoom, current: FriendRoom) {
   const incomingRevision = incoming.revision ?? 0;
   const currentRevision = current.revision ?? 0;
   const incomingIsCurrent = incomingRevision >= currentRevision;
-  const base = incomingIsCurrent && incomingRank >= currentRank ? incoming : current;
-  const status = incoming.status === "finished" || current.status === "finished" ? "finished" : incomingRank >= currentRank ? incoming.status : current.status;
+  const resumesFinalPick = current.status === "challenge" && incoming.status === "drafting" && Boolean(incoming.legendSelectedId);
+  const base = resumesFinalPick || (incomingIsCurrent && incomingRank >= currentRank) ? incoming : current;
+  const status = incoming.status === "finished" || current.status === "finished" ? "finished" : resumesFinalPick ? "drafting" : incomingRank >= currentRank ? incoming.status : current.status;
   const merged = normalizeFriendRoom({
     ...base,
     status,
+    processedActionIds: mergeActionIds(current.processedActionIds, incoming.processedActionIds),
     lastSeenAt: { ...(current.lastSeenAt ?? {}), ...(incoming.lastSeenAt ?? {}) },
     players: mergePlayers(incoming.players, current.players),
     turnIndex: base.turnIndex ?? 0,
@@ -117,6 +119,14 @@ function mergeRoomState(incoming: FriendRoom, current: FriendRoom) {
     draftEndsAt: base.draftEndsAt,
     reviewEndsAt: base.reviewEndsAt,
     reviewSwapUsedByPlayer: mergeBooleanMap(current.reviewSwapUsedByPlayer, incoming.reviewSwapUsedByPlayer),
+    penaltyStartedAt: base.penaltyStartedAt,
+    penaltyEndsAt: base.penaltyEndsAt,
+    penaltyRound: base.penaltyRound,
+    penaltyEligiblePlayerIds: base.penaltyEligiblePlayerIds,
+    penaltyShotsByPlayer: { ...(current.penaltyShotsByPlayer ?? {}), ...(incoming.penaltyShotsByPlayer ?? {}) },
+    penaltyWinnerId: base.penaltyWinnerId,
+    legendOptions: base.legendOptions,
+    legendSelectedId: base.legendSelectedId,
     coachOptionsByPlayer: { ...(current.coachOptionsByPlayer ?? {}), ...(incoming.coachOptionsByPlayer ?? {}) },
     selectedCoachByPlayer: { ...(current.selectedCoachByPlayer ?? {}), ...(incoming.selectedCoachByPlayer ?? {}) },
     bracket: mergeMatches(incoming.bracket, current.bracket),
@@ -158,7 +168,20 @@ function mergePlayers(incoming: RoomPlayer[], current: RoomPlayer[]) {
 function keepHeartbeat(incoming: FriendRoom, saved: FriendRoom) {
   return normalizeFriendRoom({
     ...saved,
+    processedActionIds: mergeActionIds(saved.processedActionIds, incoming.processedActionIds),
     lastSeenAt: { ...(saved.lastSeenAt ?? {}), ...(incoming.lastSeenAt ?? {}) }
+  });
+}
+
+function mergeActionIds(current: string[] | undefined, incoming: string[] | undefined) {
+  return Array.from(new Set([...(current ?? []), ...(incoming ?? [])])).slice(-80);
+}
+
+function markAction(room: FriendRoom, actionId?: string) {
+  if (!actionId) return room;
+  return normalizeFriendRoom({
+    ...room,
+    processedActionIds: mergeActionIds(room.processedActionIds, [actionId])
   });
 }
 
@@ -200,6 +223,7 @@ function authorizeReviewMutation(incoming: FriendRoom, saved: FriendRoom, actorI
 }
 
 function authorizeDraftMutation(incoming: FriendRoom, saved: FriendRoom, actorId: string) {
+  if (saved.status === "challenge") return authorizePenaltyMutation(incoming, saved, actorId);
   if (saved.status === "reviewing") return authorizeReviewMutation(incoming, saved, actorId);
   if (saved.status !== "drafting") return incoming;
   const activePlayer = saved.players[saved.turnIndex];
@@ -236,7 +260,8 @@ function authorizeDraftMutation(incoming: FriendRoom, saved: FriendRoom, actorId
   if (incoming.status === "reviewing" && !incoming.players.every((player) => player.squad.length === 11)) {
     return keepHeartbeat(incoming, saved);
   }
-  if (!["drafting", "reviewing"].includes(incoming.status)) return keepHeartbeat(incoming, saved);
+  if (incoming.status === "challenge" && !incoming.players.every((player) => player.squad.length >= 10)) return keepHeartbeat(incoming, saved);
+  if (!["drafting", "challenge", "reviewing"].includes(incoming.status)) return keepHeartbeat(incoming, saved);
   const players = saved.players.map((player) => (player.id === actorId ? incomingActor : player));
   const currentDrawByPlayer = { ...(saved.currentDrawByPlayer ?? {}) };
   const pendingPickByPlayer = { ...(saved.pendingPickByPlayer ?? {}) };
@@ -244,7 +269,7 @@ function authorizeDraftMutation(incoming: FriendRoom, saved: FriendRoom, actorId
     currentDrawByPlayer[actorId] = incoming.currentDrawByPlayer?.[actorId];
     pendingPickByPlayer[actorId] = incoming.pendingPickByPlayer?.[actorId];
   }
-  return normalizeFriendRoom({
+  const accepted = normalizeFriendRoom({
     ...incoming,
     players,
     lastSeenAt: { ...(saved.lastSeenAt ?? {}), ...(incoming.lastSeenAt ?? {}) },
@@ -254,6 +279,26 @@ function authorizeDraftMutation(incoming: FriendRoom, saved: FriendRoom, actorId
     revision: Math.max(saved.revision ?? 0, incoming.revision ?? 0) + 1,
     updatedAt: new Date().toISOString()
   });
+  return accepted.players.every((player) => player.squad.length >= 10) && !accepted.penaltyWinnerId
+    ? startRoomPenaltyChallenge(accepted)
+    : accepted;
+}
+
+function authorizePenaltyMutation(incoming: FriendRoom, saved: FriendRoom, actorId: string) {
+  let authoritative = saved;
+  if ((saved.penaltyEndsAt ?? Infinity) <= Date.now()) authoritative = resolveRoomPenaltyTimeout(saved);
+
+  if (authoritative.status === "challenge" && authoritative.penaltyWinnerId === actorId && incoming.legendSelectedId && !authoritative.legendSelectedId) {
+    return chooseRoomLegend(authoritative, actorId, incoming.legendSelectedId);
+  }
+
+  if (authoritative.status !== "challenge" || authoritative.penaltyWinnerId) return keepHeartbeat(incoming, authoritative);
+  const savedShots = authoritative.penaltyShotsByPlayer[actorId] ?? [];
+  const incomingShots = incoming.penaltyShotsByPlayer[actorId] ?? [];
+  if (incomingShots.length !== savedShots.length + 1) return keepHeartbeat(incoming, authoritative);
+  const shot = incomingShots[incomingShots.length - 1];
+  if (!shot) return keepHeartbeat(incoming, authoritative);
+  return shootRoomPenalty(authoritative, actorId, shot.direction, shot.accuracy);
 }
 
 function mergeMatches(incoming: RoomMatch[], current: RoomMatch[]) {
@@ -271,7 +316,7 @@ function mergeMatches(incoming: RoomMatch[], current: RoomMatch[]) {
 }
 
 function statusRank(status: RoomStatus) {
-  return { lobby: 0, drafting: 1, reviewing: 2, coach: 3, bracket: 4, finished: 5 }[status] ?? 0;
+  return { lobby: 0, drafting: 1, challenge: 2, reviewing: 3, coach: 4, bracket: 5, finished: 6 }[status] ?? 0;
 }
 
 export async function GET() {
@@ -290,7 +335,7 @@ export async function PUT(request: Request) {
   const currentUser = await getCurrentUser();
   if (!currentUser) return Response.json({ error: "Nao autenticado." }, { status: 401 });
   const current = await readRooms();
-  const payload = (await request.json().catch(() => ({}))) as { rooms?: FriendRoom[] };
+  const payload = (await request.json().catch(() => ({}))) as { rooms?: FriendRoom[]; actionId?: string; actionRoomId?: string };
   const playerName = currentUser.playerName?.trim() || currentUser.username;
   const teamName = currentUser.teamName?.trim() || `${playerName} FC`;
   const incomingRooms = (Array.isArray(payload.rooms) ? payload.rooms : []).map((room) => {
@@ -299,22 +344,24 @@ export async function PUT(request: Request) {
       player.teamName.trim().toLowerCase() === teamName.toLowerCase()
     );
     const saved = current.find((item) => item.id === room.id);
+    const actionId = payload.actionRoomId === room.id ? payload.actionId : undefined;
+    if (saved && actionId && saved.processedActionIds?.includes(actionId)) return saved;
     if (!participant) return saved;
     const namesAllowed = validatePublicName(room.name).allowed &&
       room.players.every((player) => validatePublicName(player.userName).allowed && validatePublicName(player.teamName).allowed);
     if (!namesAllowed) return saved;
-    if (!saved) return room;
+    if (!saved) return markAction(room, actionId);
     const actor = saved.players.find((player) =>
       player.userName.trim().toLowerCase() === playerName.toLowerCase() &&
       player.teamName.trim().toLowerCase() === teamName.toLowerCase()
     );
-    if (actor) return authorizeDraftMutation(room, saved, actor.id);
+    if (actor) return markAction(authorizeDraftMutation(room, saved, actor.id), actionId);
     if (saved.status === "lobby" && saved.players.length < 16) {
-      return normalizeFriendRoom({
+      return markAction(normalizeFriendRoom({
         ...room,
         revision: Math.max(saved.revision ?? 0, room.revision ?? 0) + 1,
         updatedAt: new Date().toISOString()
-      });
+      }), actionId);
     }
     return saved;
   }).filter((room): room is FriendRoom => Boolean(room));
@@ -328,7 +375,7 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   const currentUser = await getCurrentUser();
   if (!currentUser) return Response.json({ error: "Nao autenticado." }, { status: 401 });
-  const payload = (await request.json().catch(() => ({}))) as { roomId?: string; playerId?: string };
+  const payload = (await request.json().catch(() => ({}))) as { roomId?: string; playerId?: string; kickPlayerId?: string };
   if (!payload.roomId) return Response.json({ error: "Sala invalida." }, { status: 400 });
 
   const playerName = currentUser.playerName?.trim() || currentUser.username;
@@ -337,6 +384,26 @@ export async function DELETE(request: Request) {
   let deleteRoomId: string | undefined;
   const rooms = current.flatMap((room) => {
     if (room.id !== payload.roomId) return [room];
+    if (payload.kickPlayerId) {
+      const actor = room.players.find((player) =>
+        player.userName.trim().toLowerCase() === playerName.toLowerCase() &&
+        player.teamName.trim().toLowerCase() === teamName.toLowerCase()
+      );
+      const target = room.players.find((player) => player.id === payload.kickPlayerId);
+      const targetLastSeen = target ? room.lastSeenAt?.[target.id] ?? 0 : 0;
+      const actorIsHost = Boolean(actor && room.hostName.trim().toLowerCase() === actor.userName.trim().toLowerCase());
+      if (!actorIsHost || !target || target.id === actor?.id || Date.now() - targetLastSeen < 20_000) return [room];
+      const players = room.players.filter((player) => player.id !== target.id);
+      const lastSeenAt = { ...(room.lastSeenAt ?? {}) };
+      delete lastSeenAt[target.id];
+      return [normalizeFriendRoom({
+        ...room,
+        players,
+        lastSeenAt,
+        revision: (room.revision ?? 0) + 1,
+        updatedAt: new Date().toISOString()
+      })];
+    }
     const leaving = room.players.find((player) =>
       (!payload.playerId || player.id === payload.playerId) &&
       player.userName.trim().toLowerCase() === playerName.toLowerCase() &&

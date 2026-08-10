@@ -14,8 +14,13 @@ export async function GET() {
   ]);
   const rankedRewards = await ensureOnlineTrophyForSoCanela(users, initialRewards);
   const rankings = buildRankings(users, campaigns, rankedSeasons, rankedRewards);
+  const weekStart = new Date();
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+  const weeklyCampaigns = campaigns.filter((campaign) => campaign.id.startsWith("online-") && Date.parse(campaign.date) >= weekStart.getTime());
+  const weeklyRankings = buildRankings(users, weeklyCampaigns).filter((entry) => entry.progression.campaigns > 0);
   const progression = currentUser ? buildProgression(currentUser.username, campaigns, rankedSeasons, rankedRewards) : undefined;
-  return NextResponse.json({ rankings, progression });
+  return NextResponse.json({ rankings, weeklyRankings, progression });
 }
 
 const soCanelaOnlineTrophyId = "admin-trophy-grant-online-so-canela-fc";
