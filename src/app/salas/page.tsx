@@ -245,7 +245,7 @@ export default function FriendRoomsPage() {
   const roomsRef = useRef<FriendRoom[]>([]);
   const persistSequenceRef = useRef(0);
   const pendingMutationsRef = useRef(0);
-  const roomMutationInFlightRef = useRef(false);
+  const roomMutationQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
   const createInFlightRef = useRef(false);
   const hiddenRoomUntilRef = useRef(new Map<string, number>());
   const [creatingRoom, setCreatingRoom] = useState(false);
@@ -375,23 +375,36 @@ export default function FriendRoomsPage() {
     [applyRooms]
   );
 
-  const commitRoom = useCallback(async (room: FriendRoom) => {
-    if (roomMutationInFlightRef.current) {
-      setMessage("Sincronizando a acao anterior...");
-      return false;
-    }
-    roomMutationInFlightRef.current = true;
+  const commitRoom = useCallback((room: FriendRoom) => {
     const actionId = createActionId();
     const touchedRoom = { ...room, revision: (room.revision ?? 0) + 1, updatedAt: new Date().toISOString() };
     const currentRooms = roomsRef.current;
     const nextRooms = currentRooms.some((item) => item.id === touchedRoom.id) ? currentRooms.map((item) => (item.id === touchedRoom.id ? touchedRoom : item)) : [touchedRoom, ...currentRooms];
-    try {
-      const sharedRooms = await commitRooms(nextRooms, touchedRoom.id, actionId);
-      return Boolean(sharedRooms.find((item) => item.id === touchedRoom.id)?.processedActionIds?.includes(actionId));
-    } finally {
-      roomMutationInFlightRef.current = false;
-    }
-  }, [commitRooms]);
+    applyRooms(nextRooms, touchedRoom.id);
+    setConnectionStatus("connected");
+
+    const operation = roomMutationQueueRef.current.then(async () => {
+      pendingMutationsRef.current += 1;
+      const sequence = ++persistSequenceRef.current;
+      try {
+        const sharedRooms = await persistSharedRooms(nextRooms, actionId, touchedRoom.id);
+        const latestRevision = roomsRef.current.find((item) => item.id === touchedRoom.id)?.revision ?? 0;
+        if (sequence === persistSequenceRef.current && latestRevision <= (touchedRoom.revision ?? 0)) {
+          applyRooms(sharedRooms, touchedRoom.id);
+        }
+        setConnectionStatus("connected");
+        return Boolean(sharedRooms.find((item) => item.id === touchedRoom.id)?.processedActionIds?.includes(actionId));
+      } catch {
+        setConnectionStatus("disconnected");
+        setMessage("Conexao interrompida. Reconectando automaticamente...");
+        return false;
+      } finally {
+        pendingMutationsRef.current = Math.max(0, pendingMutationsRef.current - 1);
+      }
+    });
+    roomMutationQueueRef.current = operation.then(() => true, () => false);
+    return operation;
+  }, [applyRooms]);
 
   useEffect(() => {
     if (!currentUser || !activeRoomId || roomScreen !== "room") return;
@@ -401,7 +414,7 @@ export default function FriendRoomsPage() {
       const latest = roomsRef.current.find((room) => room.id === activeRoomId);
       const player = latest?.players.find((item) => samePlayer(item, userName, teamName));
       if (!latest || !player) return;
-      if (!roomMutationInFlightRef.current) void commitRoom(touchRoomPlayer(latest, player.id));
+      if (pendingMutationsRef.current === 0) void commitRoom(touchRoomPlayer(latest, player.id));
     };
     touch();
     const timer = window.setInterval(touch, 10_000);
@@ -1533,6 +1546,7 @@ function PenaltyChallengePanel({
   const round = room.penaltyRound;
   const myShots = currentPlayer ? room.penaltyShotsByPlayer[currentPlayer.id] ?? [] : [];
   const myRoundShots = myShots.filter((shot) => shot.round === round);
+  const lastRoundShot = myRoundShots[myRoundShots.length - 1];
   const requiredShots = round === 0 ? 3 : 1;
   const isEligible = Boolean(currentPlayer && room.penaltyEligiblePlayerIds.includes(currentPlayer.id));
   const canShoot = Boolean(currentPlayer && !room.penaltyWinnerId && isEligible && myRoundShots.length < requiredShots && remaining > 0 && !shotLocked);
@@ -1558,6 +1572,12 @@ function PenaltyChallengePanel({
     setShotLocked(true);
     onShoot(currentPlayer.id, direction, accuracy);
     window.setTimeout(() => setShotLocked(false), 1200);
+  }
+
+  function directionLabel(direction: PenaltyDirection) {
+    if (direction === "left") return "esquerda";
+    if (direction === "right") return "direita";
+    return "centro";
   }
 
   return (
@@ -1594,7 +1614,7 @@ function PenaltyChallengePanel({
                         key={direction}
                         type="button"
                         disabled={!canShoot}
-                        className="grid min-h-24 place-items-center border-2 border-dashed border-black/45 bg-white/70 px-2 font-black uppercase transition hover:bg-[var(--success)] hover:text-white disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-36"
+                        className="grid min-h-24 place-items-center border-2 border-dashed border-black/55 bg-white px-2 font-black uppercase text-black transition hover:border-[var(--success)] hover:bg-[var(--success)] hover:text-white focus-visible:border-[var(--success)] focus-visible:bg-[var(--success)] focus-visible:text-white focus-visible:outline focus-visible:outline-4 focus-visible:outline-[var(--warning)] disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-36"
                         onClick={() => takeShot(direction)}
                       >
                         <CircleDot size={28} />
@@ -1608,17 +1628,34 @@ function PenaltyChallengePanel({
                   <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.16em]">
                     <span>Precisao</span><span>{accuracy}%</span>
                   </div>
-                  <div className="relative mt-2 h-3 border border-black bg-white">
-                    <div className="absolute inset-y-0 left-1/2 w-12 -translate-x-1/2 bg-[var(--success)]/25" />
-                    <div className="absolute -top-1 h-5 w-1.5 -translate-x-1/2 bg-black transition-[left] duration-75" style={{ left: `${accuracy}%` }} />
+                  <div className="relative mt-2 h-5 overflow-hidden border-2 border-black bg-[linear-gradient(90deg,#c73333_0%,#e26a3d_30%,#e4b739_55%,#13a86b_80%,#087248_100%)]">
+                    <div className="absolute inset-y-[-3px] w-1.5 -translate-x-1/2 bg-white shadow-[0_0_0_2px_#000] transition-[left] duration-75" style={{ left: `${accuracy}%` }} />
                   </div>
-                  <p className="mt-3 text-center text-xs font-bold text-[var(--muted)]">A faixa central aumenta a chance de vencer o goleiro mesmo escolhendo o mesmo canto.</p>
+                  <div className="mt-1 flex justify-between text-[9px] font-black uppercase tracking-[0.12em] text-[var(--muted)]">
+                    <span>Baixa</span><span>Alta</span>
+                  </div>
+                  <p className="mt-3 text-center text-xs font-bold text-[var(--muted)]">Pare o marcador na faixa verde e escolha o canto da cobranca.</p>
                 </div>
+
+                {lastRoundShot && (
+                  <div
+                    aria-live="polite"
+                    className={cn(
+                      "mx-auto mt-5 max-w-2xl border-2 border-black px-4 py-3 text-center text-white shadow-[4px_4px_0_#000]",
+                      lastRoundShot.scored ? "bg-[var(--success)]" : "bg-[#c73333]"
+                    )}
+                  >
+                    <strong className="block font-display text-3xl font-black uppercase leading-none">{lastRoundShot.scored ? "Gol!" : "Defendido"}</strong>
+                    <span className="mt-1 block text-xs font-bold">
+                      Chute na {directionLabel(lastRoundShot.direction)} com {lastRoundShot.accuracy}% de precisao.
+                    </span>
+                  </div>
+                )}
 
                 <div className="mt-5 flex justify-center gap-2">
                   {Array.from({ length: requiredShots }, (_, index) => {
                     const shot = myRoundShots[index];
-                    return <span key={index} className={cn("grid h-10 w-10 place-items-center border border-black font-mono text-sm font-black", shot ? shot.scored ? "bg-[var(--success)] text-white" : "bg-black text-white" : "bg-white text-black")}>{shot ? shot.scored ? "GOL" : "X" : index + 1}</span>;
+                    return <span key={index} className={cn("grid h-10 w-10 place-items-center border border-black font-mono text-sm font-black", shot ? shot.scored ? "bg-[var(--success)] text-white" : "bg-[#c73333] text-white" : "bg-white text-black")}>{shot ? shot.scored ? "GOL" : "X" : index + 1}</span>;
                   })}
                 </div>
               </>
