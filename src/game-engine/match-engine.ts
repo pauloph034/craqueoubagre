@@ -162,11 +162,15 @@ export function simulateMatch(args: {
       });
     }
   }
-  const flavor: MatchEvent["type"][] = ["yellow", "save", "woodwork", "miss"];
-  for (let i = 0; i < args.rng.int(3, 6); i++) {
+  const flavor: MatchEvent["type"][] = ["yellow", "save", "save", "woodwork", "miss", "miss", "substitution"];
+  for (let i = 0; i < args.rng.int(2, 5); i++) {
     const type = args.rng.pick(flavor);
     events.push({ minute: args.rng.int(10, 88), type, team: args.rng.next() > 0.45 ? "user" : "opponent", text: eventText(type) });
   }
+  if (args.rng.next() < 0.12) events.push({ minute: args.rng.int(16, 76), type: "injury", team: args.rng.next() > 0.5 ? "user" : "opponent", text: "Lesao obriga uma mudanca" });
+  if (args.rng.next() < 0.07) events.push({ minute: args.rng.int(38, 84), type: "red", team: args.rng.next() > 0.5 ? "user" : "opponent", text: "Expulsao apos revisao do lance" });
+  if (Math.abs(userGoals - opponentGoals) <= 1 && args.rng.next() < 0.42) events.push({ minute: args.rng.int(79, 88), type: "pressure", team: userGoals <= opponentGoals ? "user" : "opponent", text: "Pressao final e defesa fechada" });
+  if (args.rng.next() < 0.58) events.push({ minute: 90, type: "stoppage", team: "user", text: `${args.rng.int(3, 7)} minutos de acrescimos` });
   if (resolvedByPenalties) events.push({ minute: 120, type: "penalty_scored", team: userGoals > opponentGoals ? "user" : "opponent", text: `Disputa de penaltis encerrada: ${penaltyScore}` });
   events.sort((a, b) => a.minute - b.minute);
 
@@ -224,6 +228,9 @@ function eventText(type: MatchEvent["type"]) {
     goal: "Gol",
     yellow: "Cartao amarelo",
     red: "Cartao vermelho",
+    injury: "Lesao e substituicao forcada",
+    pressure: "Pressao final",
+    stoppage: "Acrescimos",
     substitution: "Substituicao",
     save: "Grande defesa",
     woodwork: "Bola na trave",

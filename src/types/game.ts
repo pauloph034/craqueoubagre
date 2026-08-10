@@ -121,7 +121,7 @@ export type Coach = {
 
 export type MatchEvent = {
   minute: number;
-  type: "goal" | "yellow" | "red" | "substitution" | "save" | "woodwork" | "miss" | "extra_time" | "penalty_scored" | "penalty_missed";
+  type: "goal" | "yellow" | "red" | "injury" | "pressure" | "stoppage" | "substitution" | "save" | "woodwork" | "miss" | "extra_time" | "penalty_scored" | "penalty_missed";
   team: "user" | "opponent";
   text: string;
   playerName?: string;

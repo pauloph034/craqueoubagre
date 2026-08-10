@@ -10,8 +10,18 @@ import type { Coach, Position, TacticalStyle } from "@/types/game";
 
 export type RoomVisibility = "publica" | "privada";
 export type RoomDraftMode = "todos" | "turnos";
-export type RoomStatus = "lobby" | "drafting" | "reviewing" | "coach" | "bracket" | "finished";
+export type RoomStatus = "lobby" | "drafting" | "challenge" | "reviewing" | "coach" | "bracket" | "finished";
 export type RoomMatchStatus = "pending" | "done";
+export type PenaltyDirection = "left" | "center" | "right";
+
+export type RoomPenaltyShot = {
+  id: string;
+  round: number;
+  direction: PenaltyDirection;
+  keeperDirection: PenaltyDirection;
+  scored: boolean;
+  accuracy: number;
+};
 
 export type RoomPick = {
   id: string;
@@ -89,6 +99,7 @@ export type FriendRoom = {
   createdAt: string;
   updatedAt?: string;
   revision: number;
+  processedActionIds?: string[];
   lastSeenAt?: Record<string, number>;
   players: RoomPlayer[];
   turnIndex: number;
@@ -103,6 +114,14 @@ export type FriendRoom = {
   draftEndsAt?: number;
   reviewEndsAt?: number;
   reviewSwapUsedByPlayer: Record<string, boolean>;
+  penaltyStartedAt?: number;
+  penaltyEndsAt?: number;
+  penaltyRound: number;
+  penaltyEligiblePlayerIds: string[];
+  penaltyShotsByPlayer: Record<string, RoomPenaltyShot[]>;
+  penaltyWinnerId?: string;
+  legendOptions: RoomPick[];
+  legendSelectedId?: string;
   coachOptionsByPlayer: Record<string, RoomCoach[]>;
   selectedCoachByPlayer: Record<string, string>;
   bracket: RoomMatch[];
@@ -129,6 +148,9 @@ const defaultFormation = "4-3-3";
 const defaultTacticalStyle: TacticalStyle = "equilibrado";
 const maxEntrants = 16;
 const roomRerollsPerDraft = 3;
+export const penaltyChallengeSeconds = 45;
+const penaltySuddenDeathSeconds = 15;
+const penaltySuddenDeathRounds = 3;
 const staleRoomMs = 60 * 60 * 1000;
 
 export function loadFriendRooms() {
@@ -172,6 +194,14 @@ export function createFriendRoom(input: CreateRoomInput): FriendRoom {
     picksInTurn: 0,
     reviewEndsAt: undefined,
     reviewSwapUsedByPlayer: {},
+    penaltyStartedAt: undefined,
+    penaltyEndsAt: undefined,
+    penaltyRound: 0,
+    penaltyEligiblePlayerIds: [],
+    penaltyShotsByPlayer: {},
+    penaltyWinnerId: undefined,
+    legendOptions: [],
+    legendSelectedId: undefined,
     coachOptionsByPlayer: {},
     selectedCoachByPlayer: {},
     bracket: [],
@@ -215,6 +245,14 @@ export function startRoomDraft(room: FriendRoom) {
     turnStartedAt: room.draftMode === "turnos" ? Date.now() : undefined,
     reviewEndsAt: undefined,
     reviewSwapUsedByPlayer: {},
+    penaltyStartedAt: undefined,
+    penaltyEndsAt: undefined,
+    penaltyRound: 0,
+    penaltyEligiblePlayerIds: [],
+    penaltyShotsByPlayer: {},
+    penaltyWinnerId: undefined,
+    legendOptions: [],
+    legendSelectedId: undefined,
     coachOptionsByPlayer: {},
     selectedCoachByPlayer: {},
     bracket: [],
@@ -238,7 +276,7 @@ export function drawRoomTeam(room: FriendRoom, playerId: string) {
   const normalized = normalizeRoom(room);
   if (normalized.status !== "drafting") return normalized;
   const player = draftPlayerFor(normalized, playerId);
-  if (!player || player.squad.length >= 11) return normalized;
+  if (!player || player.squad.length >= draftSquadTarget(normalized)) return normalized;
   const currentDraw = playerDrawFor(normalized, playerId);
   const rerollsUsed = normalized.rerollsByPlayer[playerId] ?? 0;
   const isReroll = Boolean(currentDraw);
@@ -273,7 +311,7 @@ export function selectRoomPlayer(room: FriendRoom, playerId: string, pickId: str
   const normalized = normalizeRoom(room);
   if (normalized.status !== "drafting") return normalized;
   const player = draftPlayerFor(normalized, playerId);
-  if (!player || player.squad.length >= 11) return normalized;
+  if (!player || player.squad.length >= draftSquadTarget(normalized)) return normalized;
   const pick = playerDrawFor(normalized, playerId)?.roster.find((item) => item.id === pickId);
   if (!pick || player.squad.some((item) => item.canonicalPlayerId === pick.canonicalPlayerId)) return normalized;
   if (!hasAvailableRoomSlot(player, pick)) return normalized;
@@ -291,7 +329,8 @@ export function placeRoomPlayer(room: FriendRoom, playerId: string, slotId: stri
   const normalized = normalizeRoom(room);
   if (normalized.status !== "drafting") return normalized;
   const player = draftPlayerFor(normalized, playerId);
-  if (!player || player.squad.length >= 11) return normalized;
+  const squadTarget = draftSquadTarget(normalized);
+  if (!player || player.squad.length >= squadTarget) return normalized;
   const playerIndex = normalized.players.findIndex((item) => item.id === player.id);
   const pendingId = normalized.draftMode === "todos" ? normalized.pendingPickByPlayer?.[playerId] : normalized.pendingPickId;
   const pending = playerDrawFor(normalized, playerId)?.roster.find((item) => item.id === pendingId);
@@ -306,6 +345,20 @@ export function placeRoomPlayer(room: FriendRoom, playerId: string, slotId: stri
     return { ...item, squad, ready: squad.length >= 11 };
   });
   const updatedPlayer = playersNext[playerIndex]!;
+  if (!normalized.penaltyWinnerId && playersNext.every((item) => item.squad.length >= 10)) {
+    return startRoomPenaltyChallenge({
+      ...normalized,
+      players: playersNext,
+      currentDraw: undefined,
+      currentDrawByPlayer: {},
+      pendingPickId: undefined,
+      pendingPickByPlayer: {},
+      picksInTurn: 0,
+      turnOptions: [],
+      turnStartedAt: undefined
+    });
+  }
+
   if (playersNext.every((item) => item.squad.length >= 11)) {
     return normalizeRoom({
       ...normalized,
@@ -334,8 +387,8 @@ export function placeRoomPlayer(room: FriendRoom, playerId: string, slotId: stri
   }
 
   const batchStartSize = updatedPlayer.squad.length - nextPicksInTurn;
-  const batchLimit = batchStartSize >= 9 ? 2 : 3;
-  const shouldAdvance = updatedPlayer.squad.length >= 11 || nextPicksInTurn >= batchLimit;
+  const batchLimit = batchStartSize >= 9 ? 1 : 3;
+  const shouldAdvance = updatedPlayer.squad.length >= squadTarget || nextPicksInTurn >= batchLimit;
   return normalizeRoom({
     ...normalized,
     players: playersNext,
@@ -382,6 +435,166 @@ export function autoPickRoomPlayer(room: FriendRoom, playerId: string) {
   if (!picked || !slot) return next;
   next = selectRoomPlayer(next, playerId, picked.id);
   return placeRoomPlayer(next, playerId, slot.id);
+}
+
+export function startRoomPenaltyChallenge(room: FriendRoom) {
+  const normalized = normalizeRoom(room);
+  if (normalized.penaltyWinnerId || !normalized.players.length || !normalized.players.every((player) => player.squad.length >= 10)) return normalized;
+  const now = Date.now();
+  return normalizeRoom({
+    ...normalized,
+    status: "challenge",
+    currentDraw: undefined,
+    currentDrawByPlayer: {},
+    pendingPickId: undefined,
+    pendingPickByPlayer: {},
+    picksInTurn: 0,
+    turnStartedAt: undefined,
+    draftEndsAt: undefined,
+    penaltyStartedAt: now,
+    penaltyEndsAt: now + penaltyChallengeSeconds * 1000,
+    penaltyRound: 0,
+    penaltyEligiblePlayerIds: normalized.players.map((player) => player.id),
+    penaltyShotsByPlayer: Object.fromEntries(normalized.players.map((player) => [player.id, []])),
+    penaltyWinnerId: undefined,
+    legendOptions: [],
+    legendSelectedId: undefined
+  });
+}
+
+export function shootRoomPenalty(room: FriendRoom, playerId: string, direction: PenaltyDirection, accuracy: number) {
+  const normalized = normalizeRoom(room);
+  if (normalized.status !== "challenge" || normalized.penaltyWinnerId || !normalized.penaltyEligiblePlayerIds.includes(playerId)) return normalized;
+  const round = normalized.penaltyRound;
+  const roundShots = (normalized.penaltyShotsByPlayer[playerId] ?? []).filter((shot) => shot.round === round);
+  const required = round === 0 ? 3 : 1;
+  if (roundShots.length >= required) return normalized;
+  const shotIndex = roundShots.length;
+  const keeperRng = createRng(`${normalized.id}-${playerId}-penalty-${round}-${shotIndex}`);
+  const directions: PenaltyDirection[] = ["left", "center", "right"];
+  const keeperDirection = directions[keeperRng.int(0, directions.length - 1)]!;
+  const cleanAccuracy = Math.max(0, Math.min(100, Math.round(accuracy)));
+  const shot: RoomPenaltyShot = {
+    id: `${playerId}-${round}-${shotIndex}`,
+    round,
+    direction,
+    keeperDirection,
+    scored: direction !== keeperDirection || cleanAccuracy >= 92,
+    accuracy: cleanAccuracy
+  };
+  const next = normalizeRoom({
+    ...normalized,
+    penaltyShotsByPlayer: {
+      ...normalized.penaltyShotsByPlayer,
+      [playerId]: [...(normalized.penaltyShotsByPlayer[playerId] ?? []), shot]
+    }
+  });
+  return resolveRoomPenaltyRound(next);
+}
+
+export function resolveRoomPenaltyTimeout(room: FriendRoom) {
+  let next = normalizeRoom(room);
+  if (next.status !== "challenge" || next.penaltyWinnerId || (next.penaltyEndsAt ?? Infinity) > Date.now()) return next;
+  const round = next.penaltyRound;
+  const required = round === 0 ? 3 : 1;
+  for (const playerId of next.penaltyEligiblePlayerIds) {
+    while ((next.penaltyShotsByPlayer[playerId] ?? []).filter((shot) => shot.round === round).length < required) {
+      const shotIndex = (next.penaltyShotsByPlayer[playerId] ?? []).filter((shot) => shot.round === round).length;
+      const rng = createRng(`${next.id}-${playerId}-penalty-auto-${round}-${shotIndex}`);
+      const directions: PenaltyDirection[] = ["left", "center", "right"];
+      next = shootRoomPenalty(next, playerId, directions[rng.int(0, 2)]!, 55 + rng.int(0, 35));
+      if (next.status !== "challenge" || next.penaltyWinnerId) return next;
+    }
+  }
+  return resolveRoomPenaltyRound(next, true);
+}
+
+export function chooseRoomLegend(room: FriendRoom, playerId: string, legendId: string) {
+  const normalized = normalizeRoom(room);
+  if (normalized.status !== "challenge" || normalized.penaltyWinnerId !== playerId || normalized.legendSelectedId) return normalized;
+  const player = normalized.players.find((item) => item.id === playerId);
+  const legend = normalized.legendOptions.find((item) => item.id === legendId);
+  if (!player || !legend || player.squad.length !== 10) return normalized;
+  const openSlot = getFormationSlots(player.formation, player.tacticalStyle).find((slot) => !player.squad.some((pick) => pick.slotId === slot.id));
+  if (!openSlot) return normalized;
+  const assigned = assignPickToSlot(legend, player, openSlot.id);
+  if (!assigned) return normalized;
+  const legendaryPick = { ...assigned, overall: 99, effectiveRating: 99 };
+  const nextPlayers = normalized.players.map((item) => item.id === playerId ? { ...item, squad: [...item.squad, legendaryPick], ready: true } : item);
+  if (nextPlayers.every((item) => item.squad.length >= 11)) return beginRoomReview({ ...normalized, players: nextPlayers, legendSelectedId: legendId });
+  const firstIncomplete = nextPlayers.findIndex((item) => item.squad.length < 11);
+  return normalizeRoom({
+    ...normalized,
+    status: "drafting",
+    players: nextPlayers,
+    legendSelectedId: legendId,
+    turnIndex: Math.max(0, firstIncomplete),
+    currentDraw: undefined,
+    currentDrawByPlayer: {},
+    pendingPickId: undefined,
+    pendingPickByPlayer: {},
+    picksInTurn: 0,
+    turnStartedAt: normalized.draftMode === "turnos" ? Date.now() : undefined,
+    draftEndsAt: normalized.draftMode === "todos" ? Date.now() + 60_000 : undefined
+  });
+}
+
+function resolveRoomPenaltyRound(room: FriendRoom, force = false) {
+  const round = room.penaltyRound;
+  const required = round === 0 ? 3 : 1;
+  const complete = room.penaltyEligiblePlayerIds.every((playerId) => (room.penaltyShotsByPlayer[playerId] ?? []).filter((shot) => shot.round === round).length >= required);
+  if (!complete && !force) return room;
+
+  const scoreFor = (playerId: string) => (room.penaltyShotsByPlayer[playerId] ?? []).filter((shot) => shot.round === round && shot.scored).length;
+  const best = Math.max(...room.penaltyEligiblePlayerIds.map(scoreFor));
+  const leaders = room.penaltyEligiblePlayerIds.filter((playerId) => scoreFor(playerId) === best);
+  if (leaders.length === 1) return finishRoomPenaltyChallenge(room, leaders[0]!);
+
+  if (round < penaltySuddenDeathRounds) {
+    return normalizeRoom({
+      ...room,
+      penaltyRound: round + 1,
+      penaltyEligiblePlayerIds: leaders,
+      penaltyEndsAt: Date.now() + penaltySuddenDeathSeconds * 1000
+    });
+  }
+
+  const technicalWinner = [...leaders].sort((a, b) => penaltyTechnicalScore(room, b) - penaltyTechnicalScore(room, a) || a.localeCompare(b))[0]!;
+  return finishRoomPenaltyChallenge(room, technicalWinner);
+}
+
+function finishRoomPenaltyChallenge(room: FriendRoom, winnerId: string) {
+  const winner = room.players.find((player) => player.id === winnerId);
+  return normalizeRoom({
+    ...room,
+    penaltyWinnerId: winnerId,
+    penaltyEndsAt: undefined,
+    legendOptions: winner ? buildRoomLegendOptions(room, winner) : []
+  });
+}
+
+function penaltyTechnicalScore(room: FriendRoom, playerId: string) {
+  const player = room.players.find((item) => item.id === playerId);
+  const squadRating = player?.squad.reduce((sum, pick) => sum + (pick.effectiveRating ?? pick.overall), 0) ?? 0;
+  const accuracy = (room.penaltyShotsByPlayer[playerId] ?? []).reduce((sum, shot) => sum + shot.accuracy, 0);
+  const seeded = createRng(`${room.id}-${playerId}-technical-tiebreak`).int(0, 999) / 1000;
+  return squadRating * 1000 + accuracy + seeded;
+}
+
+function buildRoomLegendOptions(room: FriendRoom, winner: RoomPlayer) {
+  const used = new Set(winner.squad.map((pick) => pick.canonicalPlayerId));
+  const openSlot = getFormationSlots(winner.formation, winner.tacticalStyle).find((slot) => !winner.squad.some((pick) => pick.slotId === slot.id));
+  if (!openSlot) return [];
+  const pool = players
+    .filter((player) => player.isActive && !used.has(player.canonicalPlayerId) && calculatePositionFit(player, openSlot.position).allowed)
+    .sort((a, b) => b.overall - a.overall)
+    .slice(0, 40);
+  return shuffle(pool, createRng(`${room.id}-${winner.id}-legend-99`)).slice(0, 5).map((player) => ({
+    ...toRoomPick(player),
+    id: `legend99-${player.id}`,
+    overall: 99,
+    effectiveRating: 99
+  }));
 }
 
 export function moveRoomPick(room: FriendRoom, playerId: string, fromSlotId: string, toSlotId: string) {
@@ -574,6 +787,14 @@ export function resetRoomToLobby(room: FriendRoom) {
     draftEndsAt: undefined,
     reviewEndsAt: undefined,
     reviewSwapUsedByPlayer: {},
+    penaltyStartedAt: undefined,
+    penaltyEndsAt: undefined,
+    penaltyRound: 0,
+    penaltyEligiblePlayerIds: [],
+    penaltyShotsByPlayer: {},
+    penaltyWinnerId: undefined,
+    legendOptions: [],
+    legendSelectedId: undefined,
     coachOptionsByPlayer: {},
     selectedCoachByPlayer: {},
     bracket: [],
@@ -640,12 +861,20 @@ function completeSquad(current: RoomPick[], seed: string, rng = createRng(seed))
 }
 
 function nextDraftTurnIndex(roomPlayers: RoomPlayer[], current: number) {
-  const target = roomPlayers.some((player) => player.squad.length < 9) ? 9 : 11;
+  const target = roomPlayers.some((player) => player.squad.length >= 11)
+    ? 11
+    : roomPlayers.some((player) => player.squad.length < 9)
+      ? 9
+      : 10;
   for (let step = 1; step <= roomPlayers.length; step++) {
     const index = (current + step) % roomPlayers.length;
     if (roomPlayers[index]!.squad.length < target) return index;
   }
   return current;
+}
+
+function draftSquadTarget(room: FriendRoom) {
+  return room.penaltyWinnerId ? 11 : 10;
 }
 
 function draftPlayerFor(room: FriendRoom, playerId: string) {
@@ -1047,9 +1276,10 @@ function normalizeRoom(room: FriendRoom): FriendRoom {
 
 export function normalizeFriendRoom(room: FriendRoom): FriendRoom {
   const players = (Array.isArray(room.players) ? room.players : []).filter((player) => !player.isBot).slice(0, maxEntrants).map(normalizePlayer);
-  const rawStatus = ["lobby", "drafting", "reviewing", "coach", "bracket", "finished"].includes(room.status) ? room.status : "lobby";
+  const rawStatus = ["lobby", "drafting", "challenge", "reviewing", "coach", "bracket", "finished"].includes(room.status) ? room.status : "lobby";
+  const invalidChallenge = rawStatus === "challenge" && !players.every((player) => player.squad.length >= 10);
   const invalidPostDraft = ["reviewing", "coach", "bracket", "finished"].includes(rawStatus) && !allSquadsComplete(players);
-  const status = invalidPostDraft ? "drafting" : rawStatus;
+  const status = invalidChallenge || invalidPostDraft ? "drafting" : rawStatus;
   const bracket = invalidPostDraft ? [] : (Array.isArray(room.bracket) ? room.bracket : []).map(normalizeMatch);
   const maxRound = Math.max(0, phases.length - 1);
   return {
@@ -1066,6 +1296,7 @@ export function normalizeFriendRoom(room: FriendRoom): FriendRoom {
     createdAt: room.createdAt || new Date().toISOString(),
     updatedAt: room.updatedAt || room.createdAt || new Date().toISOString(),
     revision: Math.max(0, Number.isFinite(room.revision) ? room.revision : 0),
+    processedActionIds: Array.from(new Set((room.processedActionIds ?? []).filter((value) => typeof value === "string" && value.length > 0))).slice(-80),
     lastSeenAt: normalizePresenceMap(room.lastSeenAt, players),
     players,
     turnIndex: Math.min(room.turnIndex ?? 0, Math.max(0, players.length - 1)),
@@ -1080,6 +1311,14 @@ export function normalizeFriendRoom(room: FriendRoom): FriendRoom {
     draftEndsAt: room.draftEndsAt,
     reviewEndsAt: room.reviewEndsAt,
     reviewSwapUsedByPlayer: normalizeReviewSwapMap(room.reviewSwapUsedByPlayer, players),
+    penaltyStartedAt: room.penaltyStartedAt,
+    penaltyEndsAt: room.penaltyEndsAt,
+    penaltyRound: Math.max(0, Math.min(penaltySuddenDeathRounds, room.penaltyRound ?? 0)),
+    penaltyEligiblePlayerIds: (room.penaltyEligiblePlayerIds ?? []).filter((playerId) => players.some((player) => player.id === playerId)),
+    penaltyShotsByPlayer: normalizePenaltyShotsMap(room.penaltyShotsByPlayer, players),
+    penaltyWinnerId: players.some((player) => player.id === room.penaltyWinnerId) ? room.penaltyWinnerId : undefined,
+    legendOptions: (room.legendOptions ?? []).map(normalizePick).slice(0, 5),
+    legendSelectedId: room.legendSelectedId,
     coachOptionsByPlayer: normalizeCoachMap(room.coachOptionsByPlayer),
     selectedCoachByPlayer: room.selectedCoachByPlayer ?? {},
     bracket,
@@ -1184,6 +1423,24 @@ function normalizeReviewSwapMap(map: Record<string, boolean> | undefined, roomPl
   return Object.fromEntries(roomPlayers.map((player) => [player.id, Boolean(map?.[player.id])]));
 }
 
+function normalizePenaltyShotsMap(map: Record<string, RoomPenaltyShot[]> | undefined, roomPlayers: RoomPlayer[]) {
+  const clean: Record<string, RoomPenaltyShot[]> = {};
+  for (const player of roomPlayers) {
+    clean[player.id] = (map?.[player.id] ?? []).filter((shot) =>
+      Boolean(shot?.id) &&
+      Number.isFinite(shot.round) &&
+      ["left", "center", "right"].includes(shot.direction) &&
+      ["left", "center", "right"].includes(shot.keeperDirection)
+    ).slice(0, 6).map((shot) => ({
+      ...shot,
+      round: Math.max(0, Math.min(penaltySuddenDeathRounds, shot.round)),
+      accuracy: Math.max(0, Math.min(100, Math.round(shot.accuracy ?? 0))),
+      scored: Boolean(shot.scored)
+    }));
+  }
+  return clean;
+}
+
 function normalizePresenceMap(map: Record<string, number> | undefined, roomPlayers: RoomPlayer[]) {
   const playerIds = new Set(roomPlayers.map((player) => player.id));
   return Object.fromEntries(Object.entries(map ?? {}).filter(([playerId, value]) => playerIds.has(playerId) && Number.isFinite(value)));
@@ -1232,6 +1489,23 @@ function allSquadsComplete(roomPlayers: RoomPlayer[]) {
   return roomPlayers.length > 0 && roomPlayers.every((player) => player.squad.length >= 11);
 }
 
+function beginRoomReview(room: FriendRoom) {
+  return normalizeRoom({
+    ...room,
+    status: "reviewing",
+    currentDraw: undefined,
+    currentDrawByPlayer: {},
+    pendingPickId: undefined,
+    pendingPickByPlayer: {},
+    picksInTurn: 0,
+    turnOptions: [],
+    turnStartedAt: undefined,
+    draftEndsAt: undefined,
+    reviewEndsAt: Date.now() + 30_000,
+    reviewSwapUsedByPlayer: Object.fromEntries(room.players.map((player) => [player.id, false]))
+  });
+}
+
 function hasHumanPlayers(room: FriendRoom) {
   return room.players.some((player) => !player.isBot);
 }
@@ -1239,8 +1513,8 @@ function hasHumanPlayers(room: FriendRoom) {
 function isVisibleRoom(room: FriendRoom) {
   if (!hasHumanPlayers(room)) return false;
   const seenValues = Object.values(room.lastSeenAt ?? {});
-  if (seenValues.length) return seenValues.some((value) => Date.now() - value < 45_000);
+  if (seenValues.length) return seenValues.some((value) => Date.now() - value < 5 * 60_000);
   const reference = Date.parse(room.updatedAt || room.createdAt);
   if (!Number.isFinite(reference)) return true;
-  return Date.now() - reference < Math.min(staleRoomMs, 45_000);
+  return Date.now() - reference < Math.min(staleRoomMs, 5 * 60_000);
 }
