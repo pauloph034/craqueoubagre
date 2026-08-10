@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { AppBoot } from "@/components/AppBoot";
 import { AppFooter } from "@/components/AppFooter";
 import { AppHeader } from "@/components/AppHeader";
+import { OutcomeSoundPrimer } from "@/components/game/ChampionSound";
 import type { ReactNode } from "react";
 import "./globals.css";
 
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="pt-BR" data-scroll-behavior="smooth">
       <body>
         <AppBoot />
+        <OutcomeSoundPrimer />
         <div className="min-h-screen stadium-texture">
           <AppHeader />
           {children}

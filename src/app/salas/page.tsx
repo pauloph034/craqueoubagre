@@ -1639,10 +1639,9 @@ function PenaltyChallengePanel({
                     <span>Precisao</span><span>{accuracy}%</span>
                   </div>
                   <div
-                    className="relative mt-2 h-6 overflow-hidden border-2 border-black"
-                    style={{ background: "linear-gradient(90deg, #c73333 0%, #e26a3d 30%, #e4b739 55%, #13a86b 80%, #087248 100%)" }}
+                    className="penalty-accuracy-track relative mt-2 h-6 overflow-hidden border-2 border-black"
                   >
-                    <div className="absolute inset-y-[-3px] w-2 -translate-x-1/2 bg-black shadow-[0_0_0_2px_#fff]" style={{ left: `${accuracy}%` }} />
+                    <div className="penalty-accuracy-marker" style={{ left: `${accuracy}%` }} aria-hidden="true" />
                   </div>
                   <div className="mt-1 flex justify-between text-[9px] font-black uppercase tracking-[0.12em] text-[var(--muted)]">
                     <span>Baixa</span><span>Alta</span>

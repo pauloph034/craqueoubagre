@@ -636,6 +636,26 @@ textarea {
   color: #ffffff !important;
 }
 
+/* Keep penalty timing feedback above the editorial theme overrides. */
+.stadium-texture main .penalty-accuracy-track {
+  background-color: #c73333 !important;
+  background-image: linear-gradient(90deg, #c73333 0%, #df5938 22%, #e4b739 45%, #16a96b 72%, #087248 100%) !important;
+}
+
+.stadium-texture main .penalty-accuracy-marker {
+  position: absolute;
+  z-index: 2;
+  top: -4px;
+  bottom: -4px;
+  width: 10px;
+  transform: translateX(-50%);
+  background: #080808 !important;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px #080808;
+  transition: left 35ms linear;
+  pointer-events: none;
+}
+
 .achievement-emblem {
   clip-path: polygon(50% 0, 92% 20%, 92% 72%, 50% 100%, 8% 72%, 8% 20%);
 }
