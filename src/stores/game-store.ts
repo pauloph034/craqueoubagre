@@ -286,7 +286,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       difficulty: state.config.difficulty,
       selectedCanonicalIds,
       appearanceCounts,
-      recentClubSeasonIds: state.drawHistory
+      recentClubSeasonIds: state.drawHistory,
+      remainingPositions: openSlots.map((openSlot) => openSlot.position)
     });
     const roster = players.filter((player) => player.clubSeasonId === clubSeason.id && player.isActive);
     const options =
@@ -297,8 +298,14 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   reroll: () => {
     const state = get();
-    if (!state.currentDraw || state.rerollsLeft <= 0) return;
-    set({ rerollsLeft: state.rerollsLeft - 1, rerollsUsed: state.rerollsUsed + 1, drawHistory: [...state.drawHistory, state.currentDraw.clubSeason.id] });
+    if (!state.currentDraw) return;
+    const invalidDraw = state.currentDraw.options.length === 0;
+    if (!invalidDraw && state.rerollsLeft <= 0) return;
+    set({
+      rerollsLeft: invalidDraw ? state.rerollsLeft : state.rerollsLeft - 1,
+      rerollsUsed: invalidDraw ? state.rerollsUsed : state.rerollsUsed + 1,
+      drawHistory: [...state.drawHistory, state.currentDraw.clubSeason.id]
+    });
     get().drawForSlot(state.currentDraw.slotId);
   },
   choosePlayer: (playerId) => {

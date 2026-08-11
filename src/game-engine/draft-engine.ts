@@ -8,6 +8,7 @@ export type DraftContext = {
   selectedCanonicalIds: string[];
   appearanceCounts: Record<string, number>;
   recentClubSeasonIds: string[];
+  remainingPositions?: Position[];
 };
 
 export function eligiblePlayers(players: Player[], clubSeasonId: string, slot: Position | "ANY", selectedCanonicalIds: string[]) {
@@ -25,7 +26,15 @@ export function drawClubSeason(rng: Rng, clubSeasons: ClubSeason[], players: Pla
     if (!season.isActive) continue;
     if ((context.appearanceCounts[season.id] ?? 0) >= 2) continue;
     if (context.recentClubSeasonIds.slice(-3).includes(season.id)) continue;
-    if (eligiblePlayers(players, season.id, slot, context.selectedCanonicalIds).length === 0) continue;
+    const hasEligiblePlayer = slot === "ANY" && context.remainingPositions?.length
+      ? players.some((player) =>
+          player.isActive &&
+          player.clubSeasonId === season.id &&
+          !context.selectedCanonicalIds.includes(player.canonicalPlayerId) &&
+          context.remainingPositions!.some((position) => calculatePositionFit(player, position).allowed)
+        )
+      : eligiblePlayers(players, season.id, slot, context.selectedCanonicalIds).length > 0;
+    if (!hasEligiblePlayer) continue;
     const bucket = eligibleByRarity.get(season.rarity) ?? [];
     bucket.push(season);
     eligibleByRarity.set(season.rarity, bucket);

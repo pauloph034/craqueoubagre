@@ -73,7 +73,7 @@ export function DraftPanel({
           <span className="whitespace-nowrap px-2 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--muted)]">
             {state.rerollsLeft} de 3 restantes
           </span>
-          <Button className="min-h-10 flex-1 text-xs" onClick={() => runDrawAnimation(() => (state.currentDraw ? state.reroll() : state.drawForSlot()))} disabled={isDrawing || Boolean(state.currentDraw && state.rerollsLeft <= 0)}>
+          <Button className="min-h-10 flex-1 text-xs" onClick={() => runDrawAnimation(() => (state.currentDraw ? state.reroll() : state.drawForSlot()))} disabled={isDrawing || Boolean(state.currentDraw && state.currentDraw.options.length > 0 && state.rerollsLeft <= 0)}>
             <Dices size={18} /> Sortear time
           </Button>
         </div>
