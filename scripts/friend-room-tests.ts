@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { players } from "../src/data/loaders";
-import { activateRoomSecretCard, autoCompleteRoomDraft, autoPickRoomPlayer, autoPickRoomTurn, chooseRoomCoach, chooseRoomLegend, chooseRoomSecretCard, confirmRoomReview, createFriendRoom, drawRoomCoaches, drawRoomTeam, joinRoom, normalizeFriendRooms, placeRoomPlayer, playPlayerRoomMatch, previewPlayerRoomMatch, progressRoomRound, replaceRoomPick, selectRoomPlayer, setRoomPlayerReady, shootRoomPenalty, startRoomDraft, startRoomCoachStage, type FriendRoom, type RoomDraw } from "../src/lib/friend-rooms";
+import { activateRoomSecretCard, autoCompleteRoomDraft, autoPickRoomPlayer, autoPickRoomTurn, chooseRoomCoach, chooseRoomLegend, chooseRoomSecretCard, confirmRoomReview, createFriendRoom, drawRoomCoaches, drawRoomTeam, joinRoom, normalizeFriendRooms, placeRoomPlayer, playPlayerRoomMatch, previewPlayerRoomMatch, progressRoomRound, replaceRoomPick, selectRoomPlayer, setRoomPlayerReady, shootRoomPenalty, startRoomDraft, startRoomCoachStage, updateRoomPlayerSetup, type FriendRoom, type RoomDraw } from "../src/lib/friend-rooms";
 
 function test(name: string, fn: () => void) {
   fn();
@@ -534,4 +534,27 @@ test("revisao online dura 30 segundos e permite substituir por jogador compative
   }
   const after = room.players[0]!.squad.find((pick) => pick.slotId === slot)?.id;
   assert.notEqual(after, before);
+});
+
+test("confirmacao do lobby permanece ao clicar na preparacao ja selecionada", () => {
+  let room = createFriendRoom({
+    name: "Lobby estavel",
+    hostName: "Paulo",
+    hostTeamName: "Sergipe FC",
+    visibility: "publica",
+    difficulty: "classico",
+    draftMode: "turnos",
+    simultaneousMinutes: 2,
+    turnSeconds: 30
+  });
+  const player = room.players[0]!;
+  room = setRoomPlayerReady(room, player.id, true);
+  room = updateRoomPlayerSetup(room, player.id, {
+    formation: player.formation,
+    tacticalStyle: player.tacticalStyle
+  });
+  assert.equal(room.players[0]!.ready, true);
+
+  room = updateRoomPlayerSetup(room, player.id, { formation: "4-4-2" });
+  assert.equal(room.players[0]!.ready, false);
 });

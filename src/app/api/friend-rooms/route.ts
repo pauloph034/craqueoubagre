@@ -1,4 +1,4 @@
-import { chooseRoomLegend, normalizeFriendRoom, normalizeFriendRooms, progressRoomRound, resolveRoomPenaltyTimeout, resolveRoomSecretCardStage, shootRoomPenalty, startRoomCoachStage, startRoomPenaltyChallenge, type FriendRoom, type RoomMatch, type RoomPlayer, type RoomStatus } from "@/lib/friend-rooms";
+import { chooseRoomLegend, normalizeFriendRoom, normalizeFriendRooms, progressRoomRound, resolveRoomPenaltyTimeout, resolveRoomSecretCardStage, shootRoomPenalty, startRoomCardStage, startRoomCoachStage, startRoomPenaltyChallenge, type FriendRoom, type RoomMatch, type RoomPlayer, type RoomStatus } from "@/lib/friend-rooms";
 import { deleteSharedFriendRoom, hasSupabaseConfig, listSharedFriendRooms, saveSharedFriendRooms } from "@/server/db";
 import { validatePublicName } from "@/server/name-policy";
 import { getCurrentUser } from "@/server/session";
@@ -140,7 +140,8 @@ function mergeRoomState(incoming: FriendRoom, current: FriendRoom) {
   });
   // O ultimo resultado humano pode chegar junto com outro resultado. Avancar
   // no servidor evita que todos os clientes fiquem esperando uma nova acao.
-  const afterCards = merged.status === "cards" ? resolveRoomSecretCardStage(merged) : merged;
+  const afterCoach = merged.status === "coach" ? startRoomCardStage(merged) : merged;
+  const afterCards = afterCoach.status === "cards" ? resolveRoomSecretCardStage(afterCoach) : afterCoach;
   return afterCards.status === "bracket" ? progressRoomRound(afterCards) : afterCards;
 }
 

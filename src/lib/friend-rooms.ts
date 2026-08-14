@@ -876,12 +876,18 @@ export function updateRoomPlayerSetup(room: FriendRoom, playerId: string, setup:
     ...room,
     players: room.players.map((player) =>
       player.id === playerId
-        ? {
-            ...normalizePlayer(player),
-            formation: setup.formation ?? player.formation ?? defaultFormation,
-            tacticalStyle: setup.tacticalStyle ?? player.tacticalStyle ?? defaultTacticalStyle,
-            ready: false
-          }
+        ? (() => {
+            const normalized = normalizePlayer(player);
+            const formation = setup.formation ?? normalized.formation ?? defaultFormation;
+            const tacticalStyle = setup.tacticalStyle ?? normalized.tacticalStyle ?? defaultTacticalStyle;
+            const preparationChanged = formation !== normalized.formation || tacticalStyle !== normalized.tacticalStyle;
+            return {
+              ...normalized,
+              formation,
+              tacticalStyle,
+              ready: preparationChanged ? false : normalized.ready
+            };
+          })()
         : normalizePlayer(player)
     )
   };

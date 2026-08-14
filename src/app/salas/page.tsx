@@ -536,11 +536,11 @@ export default function FriendRoomsPage() {
   }
 
   function handlePlayerReady(playerId: string, ready: boolean) {
-    updateActiveRoom((room) => setRoomPlayerReady(room, playerId, ready));
+    updateActiveRoom((room) => touchRoomPlayer(setRoomPlayerReady(room, playerId, ready), playerId));
   }
 
   function handlePlayerSetup(playerId: string, setup: { formation?: string; tacticalStyle?: TacticalStyle }) {
-    updateActiveRoom((room) => updateRoomPlayerSetup(room, playerId, setup));
+    updateActiveRoom((room) => touchRoomPlayer(updateRoomPlayerSetup(room, playerId, setup), playerId));
   }
 
   function handleRoomSettings(settings: Partial<Pick<FriendRoom, "name" | "visibility" | "password" | "difficulty" | "draftMode" | "simultaneousMinutes" | "turnSeconds">>) {
@@ -2978,7 +2978,7 @@ function PlayerLobbyList({
           const syncing = player.id === currentPlayerId && connectionStatus === "syncing";
           const disconnected = age > 30_000;
           const away = !disconnected && age > 12_000;
-          const status = syncing ? "Sincronizando" : disconnected ? "Desconectado" : away ? "Ausente" : player.ready ? "Pronto" : "Aguardando";
+          const status = player.ready ? "Pronto" : syncing ? "Sincronizando" : disconnected ? "Desconectado" : away ? "Ausente" : "Aguardando";
           const canKick = isHost && player.id !== currentPlayerId && (away || disconnected);
           return (
           <div key={player.id} className={cn("grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-t border-black/15 px-3 py-3", disconnected && "bg-black/5 opacity-60")}>
@@ -2994,7 +2994,7 @@ function PlayerLobbyList({
               </span>
             </span>
             <span className="grid justify-items-end gap-1">
-              <span className={cn("w-fit whitespace-nowrap border px-2.5 py-1 text-[10px] font-black", disconnected ? "border-red-700 bg-red-700 text-white" : away || syncing ? "border-black bg-[var(--warning)] text-black" : player.ready ? "border-black bg-[var(--success)] text-white" : "border-black/20 text-[var(--muted)]")}>
+              <span className={cn("w-fit whitespace-nowrap border px-2.5 py-1 text-[10px] font-black", player.ready ? "border-black bg-[var(--success)] text-white" : disconnected ? "border-red-700 bg-red-700 text-white" : away || syncing ? "border-black bg-[var(--warning)] text-black" : "border-black/20 text-[var(--muted)]")}>
                 {status}
               </span>
               {canKick && (
