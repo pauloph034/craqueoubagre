@@ -148,6 +148,7 @@ export type FriendRoom = {
   createdAt: string;
   updatedAt?: string;
   revision: number;
+  draftCycle: number;
   processedActionIds?: string[];
   lastSeenAt?: Record<string, number>;
   players: RoomPlayer[];
@@ -176,6 +177,7 @@ export type FriendRoom = {
   cardOptionsByPlayer: Record<string, RoomSecretCardId[]>;
   selectedCardByPlayer: Record<string, RoomSecretCardId>;
   cardActivationByPlayer: Record<string, RoomCardActivation>;
+  completedRoundByPlayer: Record<string, number>;
   bracket: RoomMatch[];
   bracketRound: number;
   champion?: string;
@@ -245,6 +247,7 @@ export function createFriendRoom(input: CreateRoomInput): FriendRoom {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     revision: 0,
+    draftCycle: 0,
     lastSeenAt: { [hostPlayer.id]: Date.now() },
     players: [hostPlayer],
     turnIndex: 0,
@@ -270,6 +273,7 @@ export function createFriendRoom(input: CreateRoomInput): FriendRoom {
     cardOptionsByPlayer: {},
     selectedCardByPlayer: {},
     cardActivationByPlayer: {},
+    completedRoundByPlayer: {},
     bracket: [],
     bracketRound: 0
   };
@@ -324,6 +328,7 @@ export function startRoomDraft(room: FriendRoom) {
     cardOptionsByPlayer: {},
     selectedCardByPlayer: {},
     cardActivationByPlayer: {},
+    completedRoundByPlayer: {},
     bracket: [],
     bracketRound: 0,
     champion: undefined
@@ -332,7 +337,7 @@ export function startRoomDraft(room: FriendRoom) {
 }
 
 export function autoCompleteRoomDraft(room: FriendRoom) {
-  const rng = createRng(`${room.id}-auto-draft-${room.players.length}`);
+  const rng = createRng(`${room.id}-${room.draftCycle}-auto-draft-${room.players.length}`);
   const playersWithSquads = room.players.map((player, index) => ({
     ...player,
     squad: completeSquad(player.squad, `${room.id}-${player.id}-${index}`, rng),
@@ -353,7 +358,7 @@ export function drawRoomTeam(room: FriendRoom, playerId: string) {
   // A mesma acao concorrente precisa produzir o mesmo time. Isso impede que
   // respostas repetidas da rede parecam um novo sorteio sem consumir reroll.
   const drawNumber = isReroll ? rerollsUsed + 1 : rerollsUsed;
-  const seed = `${normalized.id}-${player.id}-${player.squad.length}-${normalized.picksInTurn}-draw-${drawNumber}`;
+  const seed = `${normalized.id}-${normalized.draftCycle}-${player.id}-${player.squad.length}-${normalized.picksInTurn}-draw-${drawNumber}`;
   const draw = buildRoomDraw(seed, player);
   return normalizeRoom({
     ...normalized,
@@ -910,6 +915,7 @@ export function resetRoomToLobby(room: FriendRoom) {
   return normalizeRoom({
     ...room,
     status: "lobby",
+    draftCycle: room.draftCycle + 1,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     players: room.players.filter((player) => !player.isBot).map((player) => ({ ...normalizePlayer(player), squad: [], ready: false })),
@@ -938,6 +944,7 @@ export function resetRoomToLobby(room: FriendRoom) {
     cardOptionsByPlayer: {},
     selectedCardByPlayer: {},
     cardActivationByPlayer: {},
+    completedRoundByPlayer: {},
     bracket: [],
     bracketRound: 0,
     champion: undefined
@@ -1365,18 +1372,25 @@ export function playPlayerRoomMatch(room: FriendRoom, playerId: string) {
   const normalized = normalizeRoom(room);
   if (normalized.status !== "bracket") return normalized;
   const phase = phases[normalized.bracketRound] ?? phases[0]!;
-  const match = normalized.bracket.find((item) => item.phase === phase && item.status === "pending" && (item.homePlayerId === playerId || item.awayPlayerId === playerId));
+  const match = normalized.bracket.find((item) => item.phase === phase && (item.homePlayerId === playerId || item.awayPlayerId === playerId));
   if (!match) return normalized;
-  return resolveRoomRoundIfReady(simulateRoomMatch(normalized, match.id, `${normalized.id}-${playerId}-${match.id}`), true);
+  if (normalized.completedRoundByPlayer[playerId] === normalized.bracketRound) return normalized;
+  const completedRoundByPlayer = { ...normalized.completedRoundByPlayer };
+  completedRoundByPlayer[playerId] = normalized.bracketRound;
+  const resolvedRoom = match.status === "done"
+    ? { ...normalized, completedRoundByPlayer }
+    : simulateRoomMatch({ ...normalized, completedRoundByPlayer }, match.id, roomHumanMatchSeed(normalized, match));
+  return resolveRoomRoundIfReady(resolvedRoom, true);
 }
 
 export function previewPlayerRoomMatch(room: FriendRoom, playerId: string) {
   const normalized = normalizeRoom(room);
   if (normalized.status !== "bracket") return undefined;
   const phase = phases[normalized.bracketRound] ?? phases[0]!;
-  const match = normalized.bracket.find((item) => item.phase === phase && item.status === "pending" && (item.homePlayerId === playerId || item.awayPlayerId === playerId));
+  if (normalized.completedRoundByPlayer[playerId] === normalized.bracketRound) return undefined;
+  const match = normalized.bracket.find((item) => item.phase === phase && (item.homePlayerId === playerId || item.awayPlayerId === playerId));
   if (!match) return undefined;
-  return simulateSingleRoomMatch(match, `${normalized.id}-${playerId}-${match.id}`);
+  return match.status === "done" ? match : simulateSingleRoomMatch(match, roomHumanMatchSeed(normalized, match));
 }
 
 export function progressRoomRound(room: FriendRoom) {
@@ -1389,14 +1403,17 @@ export function currentPlayerRoomMatch(room: FriendRoom, playerId: string) {
   const normalized = normalizeRoom(room);
   if (normalized.status !== "bracket") return undefined;
   const phase = phases[normalized.bracketRound] ?? phases[0]!;
-  return normalized.bracket.find((item) => item.phase === phase && item.status === "pending" && (item.homePlayerId === playerId || item.awayPlayerId === playerId));
+  if (normalized.completedRoundByPlayer[playerId] === normalized.bracketRound) return undefined;
+  return normalized.bracket.find((item) => item.phase === phase && (item.homePlayerId === playerId || item.awayPlayerId === playerId));
 }
 
 export function hasPendingHumanRoomMatches(room: FriendRoom) {
   const normalized = normalizeRoom(room);
   if (normalized.status !== "bracket") return false;
   const phase = phases[normalized.bracketRound] ?? phases[0]!;
-  return normalized.bracket.some((match) => match.phase === phase && match.status === "pending" && (match.homePlayerId || match.awayPlayerId));
+  return normalized.bracket.some((match) => match.phase === phase && [match.homePlayerId, match.awayPlayerId]
+    .filter((id): id is string => Boolean(id))
+    .some((id) => normalized.completedRoundByPlayer[id] !== normalized.bracketRound));
 }
 
 function createInitialRoomBracket(room: FriendRoom): FriendRoom {
@@ -1411,12 +1428,12 @@ function createInitialRoomBracket(room: FriendRoom): FriendRoom {
       champion: undefined
     });
   }
-  const rng = createRng(`${room.id}-bracket-${realPlayers.map((player) => player.teamName).join("|")}`);
+  const rng = createRng(`${room.id}-${room.draftCycle}-bracket-${realPlayers.map((player) => player.teamName).join("|")}`);
   const entrants: RoomEntrant[] = uniqueNames(realPlayers.map((player) => player.teamName)).map((teamName) => {
     const player = realPlayers.find((item) => sameName(item.teamName, teamName));
     return { name: teamName, playerId: player?.id, strength: player ? roomPlayerStrength(room, player) : undefined, style: player?.tacticalStyle };
   });
-  for (const historicTeam of randomHistoricTeams(room.id)) {
+  for (const historicTeam of randomHistoricTeams(`${room.id}-${room.draftCycle}`)) {
     if (entrants.length >= maxEntrants) break;
     if (!entrants.some((entrant) => sameName(entrant.name, historicTeam.name))) entrants.push(historicTeam);
   }
@@ -1437,13 +1454,22 @@ function resolveRoomRoundIfReady(room: FriendRoom, forceBotRound = false): Frien
   const phase = phases[room.bracketRound] ?? phases[0]!;
   const currentMatches = room.bracket.filter((match) => match.phase === phase);
   if (!currentMatches.length) return room;
-  const pendingHumanMatch = currentMatches.some((match) => match.status === "pending" && (match.homePlayerId || match.awayPlayerId));
+  const completedRoundByPlayer = { ...room.completedRoundByPlayer };
+  const pendingHumanMatch = currentMatches.some((match) => {
+    const participantIds = [match.homePlayerId, match.awayPlayerId].filter((id): id is string => Boolean(id));
+    return participantIds.some((id) => completedRoundByPlayer[id] !== room.bracketRound);
+  });
   if (pendingHumanMatch) return room;
   if (!forceBotRound && currentMatches.some((match) => match.status === "pending")) return room;
 
-  let nextRoom = room;
+  let nextRoom = { ...room, completedRoundByPlayer };
   for (const match of currentMatches) {
-    if (match.status === "pending") nextRoom = simulateRoomMatch(nextRoom, match.id, `${room.id}-${match.id}-bot`);
+    if (match.status === "pending") {
+      const seed = match.homePlayerId || match.awayPlayerId
+        ? roomHumanMatchSeed(room, match)
+        : `${room.id}-${match.id}-bot`;
+      nextRoom = simulateRoomMatch(nextRoom, match.id, seed);
+    }
   }
 
   const resolvedMatches = nextRoom.bracket.filter((match) => match.phase === phase);
@@ -1465,6 +1491,10 @@ function resolveRoomRoundIfReady(room: FriendRoom, forceBotRound = false): Frien
     bracketRound: nextPhaseIndex,
     bracket: [...nextRoom.bracket, ...createRoundMatches(nextPhase, winners, nextPhaseIndex)]
   };
+}
+
+function roomHumanMatchSeed(room: FriendRoom, match: RoomMatch) {
+  return `${room.id}-${room.draftCycle}-${match.id}-human`;
 }
 
 function createRoundMatches(phase: string, entrants: RoomEntrant[], roundIndex: number) {
@@ -1639,6 +1669,7 @@ export function normalizeFriendRoom(room: FriendRoom): FriendRoom {
     createdAt: room.createdAt || new Date().toISOString(),
     updatedAt: room.updatedAt || room.createdAt || new Date().toISOString(),
     revision: Math.max(0, Number.isFinite(room.revision) ? room.revision : 0),
+    draftCycle: Math.max(0, Number.isFinite(room.draftCycle) ? room.draftCycle : 0),
     processedActionIds: Array.from(new Set((room.processedActionIds ?? []).filter((value) => typeof value === "string" && value.length > 0))).slice(-80),
     lastSeenAt: normalizePresenceMap(room.lastSeenAt, players),
     players,
@@ -1667,10 +1698,20 @@ export function normalizeFriendRoom(room: FriendRoom): FriendRoom {
     cardOptionsByPlayer: normalizeCardOptionsMap(room.cardOptionsByPlayer, players),
     selectedCardByPlayer: normalizeSelectedCardMap(room.selectedCardByPlayer, players),
     cardActivationByPlayer: normalizeCardActivationMap(room.cardActivationByPlayer, players),
+    completedRoundByPlayer: normalizeCompletedRoundMap(room.completedRoundByPlayer, players),
     bracket,
     bracketRound: invalidPostDraft ? 0 : Math.min(Math.max(room.bracketRound ?? inferredBracketRound(bracket), 0), maxRound),
     champion: invalidPostDraft ? undefined : room.champion
   };
+}
+
+function normalizeCompletedRoundMap(map: Record<string, number> | undefined, roomPlayers: RoomPlayer[]) {
+  const playerIds = new Set(roomPlayers.map((player) => player.id));
+  return Object.fromEntries(
+    Object.entries(map ?? {})
+      .filter(([playerId, round]) => playerIds.has(playerId) && Number.isInteger(round) && round >= 0)
+      .map(([playerId, round]) => [playerId, round])
+  );
 }
 
 function normalizePlayer(player: RoomPlayer): RoomPlayer {

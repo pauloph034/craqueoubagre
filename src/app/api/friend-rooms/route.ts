@@ -1,4 +1,4 @@
-import { chooseRoomLegend, normalizeFriendRoom, normalizeFriendRooms, progressRoomRound, resolveRoomPenaltyTimeout, resolveRoomSecretCardStage, shootRoomPenalty, startRoomCardStage, startRoomCoachStage, startRoomPenaltyChallenge, type FriendRoom, type RoomMatch, type RoomPlayer, type RoomStatus } from "@/lib/friend-rooms";
+import { chooseRoomLegend, normalizeFriendRoom, normalizeFriendRooms, progressRoomRound, resolveRoomPenaltyTimeout, resolveRoomSecretCardStage, shootRoomPenalty, startRoomCardStage, startRoomCoachStage, startRoomDraft, startRoomPenaltyChallenge, type FriendRoom, type RoomMatch, type RoomPlayer, type RoomStatus } from "@/lib/friend-rooms";
 import { deleteSharedFriendRoom, hasSupabaseConfig, listSharedFriendRooms, saveSharedFriendRooms } from "@/server/db";
 import { validatePublicName } from "@/server/name-policy";
 import { getCurrentUser } from "@/server/session";
@@ -90,7 +90,7 @@ function mergeRoomState(incoming: FriendRoom, current: FriendRoom) {
     incoming.status === "lobby" &&
     incoming.bracket.length === 0 &&
     incoming.players.every((player) => player.squad.length === 0) &&
-    Date.parse(incoming.createdAt) >= Date.parse(current.createdAt);
+    incoming.draftCycle > current.draftCycle;
   if (incomingReset) return normalizeFriendRoom({ ...incoming, revision: Math.max(incoming.revision ?? 0, current.revision ?? 0) + 1 });
 
   const incomingRank = statusRank(incoming.status);
@@ -104,6 +104,7 @@ function mergeRoomState(incoming: FriendRoom, current: FriendRoom) {
   const merged = normalizeFriendRoom({
     ...base,
     status,
+    draftCycle: Math.max(incoming.draftCycle, current.draftCycle),
     processedActionIds: mergeActionIds(current.processedActionIds, incoming.processedActionIds),
     lastSeenAt: { ...(current.lastSeenAt ?? {}), ...(incoming.lastSeenAt ?? {}) },
     players: mergePlayers(incoming.players, current.players),
@@ -132,6 +133,7 @@ function mergeRoomState(incoming: FriendRoom, current: FriendRoom) {
     cardOptionsByPlayer: { ...(current.cardOptionsByPlayer ?? {}), ...(incoming.cardOptionsByPlayer ?? {}) },
     selectedCardByPlayer: { ...(current.selectedCardByPlayer ?? {}), ...(incoming.selectedCardByPlayer ?? {}) },
     cardActivationByPlayer: { ...(current.cardActivationByPlayer ?? {}), ...(incoming.cardActivationByPlayer ?? {}) },
+    completedRoundByPlayer: mergeRoundCompletionMap(current.completedRoundByPlayer, incoming.completedRoundByPlayer),
     bracket: mergeMatches(incoming.bracket, current.bracket),
     bracketRound: Math.max(incoming.bracketRound ?? 0, current.bracketRound ?? 0),
     champion: incoming.champion ?? current.champion,
@@ -195,6 +197,11 @@ function mergeBooleanMap(current: Record<string, boolean> | undefined, incoming:
   return Object.fromEntries(Array.from(keys, (key) => [key, Boolean(current?.[key] || incoming?.[key])]));
 }
 
+function mergeRoundCompletionMap(current: Record<string, number> | undefined, incoming: Record<string, number> | undefined) {
+  const keys = new Set([...Object.keys(current ?? {}), ...Object.keys(incoming ?? {})]);
+  return Object.fromEntries(Array.from(keys, (key) => [key, Math.max(current?.[key] ?? -1, incoming?.[key] ?? -1)]));
+}
+
 function authorizeReviewMutation(incoming: FriendRoom, saved: FriendRoom, actorId: string) {
   const incomingActor = incoming.players.find((player) => player.id === actorId);
   const savedActor = saved.players.find((player) => player.id === actorId);
@@ -233,6 +240,7 @@ function authorizeReviewMutation(incoming: FriendRoom, saved: FriendRoom, actorI
 }
 
 function authorizeDraftMutation(incoming: FriendRoom, saved: FriendRoom, actorId: string) {
+  if (saved.status === "lobby") return authorizeLobbyMutation(incoming, saved, actorId);
   if (saved.status === "challenge") return authorizePenaltyMutation(incoming, saved, actorId);
   if (saved.status === "reviewing") return authorizeReviewMutation(incoming, saved, actorId);
   if (saved.status !== "drafting") return incoming;
@@ -292,6 +300,37 @@ function authorizeDraftMutation(incoming: FriendRoom, saved: FriendRoom, actorId
   return accepted.players.every((player) => player.squad.length >= 10) && !accepted.penaltyWinnerId
     ? startRoomPenaltyChallenge(accepted)
     : accepted;
+}
+
+function authorizeLobbyMutation(incoming: FriendRoom, saved: FriendRoom, actorId: string) {
+  const incomingActor = incoming.players.find((player) => player.id === actorId);
+  const savedActor = saved.players.find((player) => player.id === actorId);
+  if (!incomingActor || !savedActor) return keepHeartbeat(incoming, saved);
+
+  const actorIsHost = saved.hostName.trim().toLowerCase() === savedActor.userName.trim().toLowerCase();
+  const players = saved.players.map((player) => player.id === actorId
+    ? { ...player, formation: incomingActor.formation, tacticalStyle: incomingActor.tacticalStyle, ready: incomingActor.ready }
+    : player);
+  const lobby = normalizeFriendRoom({
+    ...saved,
+    ...(actorIsHost ? {
+      name: incoming.name,
+      visibility: incoming.visibility,
+      password: incoming.password,
+      difficulty: incoming.difficulty,
+      draftMode: incoming.draftMode,
+      simultaneousMinutes: incoming.simultaneousMinutes,
+      turnSeconds: incoming.turnSeconds
+    } : {}),
+    players,
+    lastSeenAt: { ...(saved.lastSeenAt ?? {}), ...(incoming.lastSeenAt ?? {}) },
+    revision: Math.max(saved.revision ?? 0, incoming.revision ?? 0) + 1,
+    updatedAt: new Date().toISOString()
+  });
+
+  if (incoming.status !== "drafting") return lobby;
+  if (!actorIsHost || !players.length || !players.every((player) => player.ready)) return lobby;
+  return startRoomDraft(lobby);
 }
 
 function authorizePenaltyMutation(incoming: FriendRoom, saved: FriendRoom, actorId: string) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { players } from "../src/data/loaders";
-import { activateRoomSecretCard, autoCompleteRoomDraft, autoPickRoomPlayer, autoPickRoomTurn, chooseRoomCoach, chooseRoomLegend, chooseRoomSecretCard, confirmRoomReview, createFriendRoom, drawRoomCoaches, drawRoomTeam, joinRoom, normalizeFriendRooms, placeRoomPlayer, playPlayerRoomMatch, previewPlayerRoomMatch, progressRoomRound, replaceRoomPick, selectRoomPlayer, setRoomPlayerReady, shootRoomPenalty, startRoomDraft, startRoomCoachStage, updateRoomPlayerSetup, type FriendRoom, type RoomDraw } from "../src/lib/friend-rooms";
+import { activateRoomSecretCard, autoCompleteRoomDraft, autoPickRoomPlayer, autoPickRoomTurn, chooseRoomCoach, chooseRoomLegend, chooseRoomSecretCard, confirmRoomReview, createFriendRoom, currentPlayerRoomMatch, drawRoomCoaches, drawRoomTeam, hasPendingHumanRoomMatches, joinRoom, normalizeFriendRooms, placeRoomPlayer, playPlayerRoomMatch, previewPlayerRoomMatch, progressRoomRound, replaceRoomPick, resetRoomToLobby, selectRoomPlayer, setRoomPlayerReady, shootRoomPenalty, startRoomDraft, startRoomCoachStage, updateRoomPlayerSetup, type FriendRoom, type RoomDraw } from "../src/lib/friend-rooms";
 
 function test(name: string, fn: () => void) {
   fn();
@@ -296,6 +296,95 @@ test("auto completar preenche participantes e mata-mata com 16 times", () => {
   assert.equal(room.status, "bracket");
   assert.equal(room.bracket.filter((match) => match.phase === "Oitavas de final").length, 8);
   assert.equal(room.bracket.length, 8);
+});
+
+test("mata-mata recupera resultado concorrente e avanca quando tres jogadores terminam", () => {
+  let room = createFriendRoom({
+    name: "Rodada concorrente",
+    hostName: "Paulo",
+    hostTeamName: "FlaSergipe",
+    visibility: "publica",
+    difficulty: "classico",
+    draftMode: "turnos",
+    simultaneousMinutes: 2,
+    turnSeconds: 30
+  });
+  room = joinRoom(room, "Ana", "Ana FC");
+  room = joinRoom(room, "Beto", "Beto FC");
+  for (const player of room.players) room = setRoomPlayerReady(room, player.id, true);
+  room = autoCompleteRoomDraft(startRoomDraft(room));
+  room = chooseCards(chooseCoaches(room));
+  assert.equal(room.status, "bracket");
+
+  for (const player of room.players) room = playPlayerRoomMatch(room, player.id);
+  assert.equal(room.bracketRound, 1);
+  assert.equal(room.bracket.filter((match) => match.phase === "Oitavas de final").every((match) => match.status === "done"), true);
+
+  const recovered = {
+    ...room,
+    bracketRound: 0,
+    bracket: room.bracket.filter((match) => match.phase === "Oitavas de final").map((match, index) =>
+      index === 0 ? { ...match, status: "pending" as const, homeGoals: undefined, awayGoals: undefined, winnerName: undefined } : match
+    )
+  };
+  const advanced = progressRoomRound(recovered);
+  assert.equal(advanced.bracketRound, 1);
+  assert.equal(advanced.bracket.filter((match) => match.phase === "Oitavas de final").every((match) => match.status === "done"), true);
+});
+
+test("confronto entre amigos exige que cada jogador acompanhe a propria simulacao", () => {
+  let room = createFriendRoom({
+    name: "Duelo humano",
+    hostName: "Paulo",
+    hostTeamName: "FlaSergipe",
+    visibility: "publica",
+    difficulty: "classico",
+    draftMode: "turnos",
+    simultaneousMinutes: 2,
+    turnSeconds: 30
+  });
+  room = joinRoom(room, "Ana", "Ana FC");
+  for (const player of room.players) room = setRoomPlayerReady(room, player.id, true);
+  room = chooseCards(chooseCoaches(autoCompleteRoomDraft(startRoomDraft(room))));
+  const [first, second] = room.players;
+  assert.ok(first && second);
+  const openingId = room.bracket[0]!.id;
+  room = {
+    ...room,
+    bracket: room.bracket.map((match, index) => index === 0
+      ? { ...match, homeName: first.teamName, awayName: second.teamName, homePlayerId: first.id, awayPlayerId: second.id }
+      : { ...match, homePlayerId: undefined, awayPlayerId: undefined })
+  };
+
+  const firstPreview = previewPlayerRoomMatch(room, first.id)!;
+  room = playPlayerRoomMatch(room, first.id);
+  assert.equal(room.bracketRound, 0);
+  assert.equal(room.bracket.find((match) => match.id === openingId)?.status, "done");
+  assert.ok(currentPlayerRoomMatch(room, second.id));
+  assert.equal(hasPendingHumanRoomMatches(room), true);
+  const secondPreview = previewPlayerRoomMatch(room, second.id)!;
+  assert.equal(secondPreview.homeGoals, firstPreview.homeGoals);
+  assert.equal(secondPreview.awayGoals, firstPreview.awayGoals);
+
+  room = playPlayerRoomMatch(room, second.id);
+  assert.equal(room.bracketRound, 1);
+  assert.equal(hasPendingHumanRoomMatches(room), true);
+});
+
+test("novo torneio da sala usa outra geracao de sorteio", () => {
+  const room = createFriendRoom({
+    name: "Nova rodada",
+    hostName: "Paulo",
+    hostTeamName: "FlaSergipe",
+    visibility: "publica",
+    difficulty: "classico",
+    draftMode: "turnos",
+    simultaneousMinutes: 2,
+    turnSeconds: 30
+  });
+  const reset = resetRoomToLobby(room);
+  assert.equal(reset.draftCycle, room.draftCycle + 1);
+  assert.deepEqual(reset.completedRoundByPlayer, {});
 });
 
 function chooseCoaches(room: FriendRoom) {
